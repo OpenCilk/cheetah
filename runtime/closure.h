@@ -36,6 +36,13 @@ enum ClosureStatus {
 #endif
 
 /*
+ * All the data needed to properly handle a thrown exception.
+ */
+struct closure_exception {
+    char *exn;
+};
+
+/*
  * the list of children is not distributed among
  * the children themselves, in order to avoid extra protocols
  * and locking.
@@ -88,6 +95,18 @@ struct Closure {
     Closure *next_ready;
     Closure *prev_ready;
 
+    // Exceptions (roughly follows the reducer protocol)
+
+    // exception propagated from our right siblings
+    struct closure_exception right_exn;
+    // exception propagated from our children
+    struct closure_exception child_exn;
+    // exception thrown from this closure
+    struct closure_exception user_exn;
+
+    char *reraise_cfa;
+    char *parent_rsp;
+
 #ifdef REDUCER_MODULE
     // cilkred_map *children_reducer_map;
     // cilkred_map *right_reducer_map;
@@ -119,6 +138,9 @@ CHEETAH_INTERNAL void Closure_checkmagic(__cilkrts_worker *const w, Closure *t);
 #define Closure_assert_alienation(w, t)
 #define Closure_checkmagic(w, t)
 #endif // CILK_DEBUG
+
+// TODO: maybe make this look more like the other closure functions.
+CHEETAH_INTERNAL void clear_closure_exception(struct closure_exception *exn);
 
 CHEETAH_INTERNAL
 void Closure_change_status(__cilkrts_worker *const w, Closure *t,

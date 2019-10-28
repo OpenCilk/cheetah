@@ -2,6 +2,7 @@
 #define _INTERAL_MALLOC_H
 
 #include <stdint.h>
+#include <stdlib.h>
 
 #include "cilk-internal.h"
 #include "debug.h"
@@ -55,6 +56,17 @@ struct cilk_im_desc {
     WHEN_CILK_DEBUG(int64_t used);
     WHEN_CILK_DEBUG(int num_malloc);
 };
+
+/* Custom implementation of aligned_alloc. */
+static inline void *cilk_aligned_alloc(size_t alignment, size_t size) {
+#if defined(_ISOC11_SOURCE)
+  return aligned_alloc(alignment, size);
+#else
+  void *ptr;
+  posix_memalign(&ptr, alignment, size);
+  return ptr;
+#endif
+}
 
 // public functions (external to source file, internal to library)
 CHEETAH_INTERNAL void cilk_internal_malloc_global_init(struct global_state *g);

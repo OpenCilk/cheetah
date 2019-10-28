@@ -9,12 +9,12 @@ ENABLE_X11 = false
 
 CTESTS   = intlist serialsum intsum multispawnsum repeatedintsum
 CXXTESTS = cppsum
-DIRTESTS = nqueens # quad_tree
+DIRTESTS = nqueens quad_tree
 TESTS    = $(CTESTS) $(CXXTESTS) $(DIRTESTS)
 WARN     = -W -Wno-mismatched-tags -Wno-unused-parameter -Werror
 OPTIONS  = $(OPT) $(ARCH) $(DBG) $(RTS_OPT) $(WARN) # -fno-omit-frame-pointer
 
-RTS_LIBS = ../runtime/libcheetah.a $(patsubst %,../runtime/%/module.a,$(MODS))
+RTS_LIBS = ../runtime/$(RTS_LIB).a $(patsubst %,../runtime/%/module.a,$(MODS))
 
 TIMING_COUNT := 1
 

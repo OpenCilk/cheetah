@@ -4,7 +4,7 @@ ABI=opencilk
 
 OPTIONS  = -g -Wall $(OPT) -ftapir=$(ABI)
 
-RTS_LIBS = ../../runtime/libcheetah.a $(patsubst %,../../runtime/%/module.a,$(MODS))
+RTS_LIBS = ../../runtime/$(RTS_LIB).a $(patsubst %,../../runtime/%/module.a,$(MODS))
 
 TIMING_COUNT := 1
 

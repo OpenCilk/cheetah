@@ -40,4 +40,6 @@
 #define DEFAULT_DEQ_DEPTH 1024
 #define DEFAULT_STACK_SIZE 0x100000 // 1 MBytes
 #define DEFAULT_FIBER_POOL_CAP 128  // initial per-worker fiber pool capacity
-#endif                              // _CONFIG_H
+
+#define MAX_CALLBACKS 32 // Maximum number of init or exit callbacks
+#endif                   // _CONFIG_H

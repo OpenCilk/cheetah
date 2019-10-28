@@ -49,8 +49,8 @@ static long env_get_int(char const *var) {
 static global_state *global_state_init(int argc, char *argv[]) {
     cilkrts_alert(ALERT_BOOT, NULL,
                   "(global_state_init) Initializing global state");
-    global_state *g = (global_state *)aligned_alloc(__alignof(global_state),
-                                                    sizeof(global_state));
+    global_state *g = (global_state *)cilk_aligned_alloc(__alignof(global_state),
+                                                         sizeof(global_state));
 
 #ifdef DEBUG
     setlinebuf(stderr);
@@ -102,8 +102,8 @@ static global_state *global_state_init(int argc, char *argv[]) {
 
     g->workers =
         (__cilkrts_worker **)calloc(active_size, sizeof(__cilkrts_worker *));
-    g->deques = (ReadyDeque *)aligned_alloc(__alignof__(ReadyDeque),
-                                            active_size * sizeof(ReadyDeque));
+    g->deques = (ReadyDeque *)cilk_aligned_alloc(__alignof__(ReadyDeque),
+                                                 active_size * sizeof(ReadyDeque));
     g->threads = (pthread_t *)calloc(active_size, sizeof(pthread_t));
     cilk_internal_malloc_global_init(g); // initialize internal malloc first
     cilk_fiber_pool_global_init(g);
@@ -134,7 +134,7 @@ static local_state *worker_local_init(global_state *g) {
 
 static void deques_init(global_state *g) {
     cilkrts_alert(ALERT_BOOT, NULL, "(deques_init) Initializing deques");
-    for (int i = 0; i < g->options.nproc; i++) {
+    for (unsigned int i = 0; i < g->options.nproc; i++) {
         g->deques[i].top = NULL;
         g->deques[i].bottom = NULL;
         g->deques[i].mutex_owner = NOBODY;
@@ -147,7 +147,7 @@ static void workers_init(global_state *g) {
     for (unsigned int i = 0; i < g->options.nproc; i++) {
         cilkrts_alert(ALERT_BOOT, NULL, "(workers_init) Initializing worker %u",
                       i);
-        __cilkrts_worker *w = (__cilkrts_worker *)aligned_alloc(
+        __cilkrts_worker *w = (__cilkrts_worker *)cilk_aligned_alloc(
             __alignof__(__cilkrts_worker), sizeof(__cilkrts_worker));
         w->self = i;
         w->g = g;
@@ -196,14 +196,19 @@ static void *scheduler_thread_proc(void *arg) {
     return 0;
 }
 
+#ifdef CPU_SETSIZE
 static void move_bit(int cpu, cpu_set_t *to, cpu_set_t *from) {
     if (CPU_ISSET(cpu, from)) {
         CPU_CLR(cpu, from);
         CPU_SET(cpu, to);
     }
 }
+#endif
 
 static void threads_init(global_state *g) {
+    /* TODO: Mac OS has a better interface allowing the application
+       to request that two threads run as far apart as possible by
+       giving them distinct "affinity tags". */
 #ifdef CPU_SETSIZE
     // Affinity setting, from cilkplus-rts
     cpu_set_t process_mask;
@@ -213,7 +218,7 @@ static void threads_init(global_state *g) {
                                     &process_mask)) {
         available_cores = CPU_COUNT(&process_mask);
     }
-#endif
+
     /* pin_strategy controls how threads are spread over cpu numbers.
        Based on very limited testing FreeBSD groups hyperthreads of a
        core together (consecutive IDs) and Linux separates them.
@@ -240,13 +245,14 @@ static void threads_init(global_state *g) {
         available_cores = 0;
         break;
     }
-
+#endif
     int n_threads = g->options.nproc;
 
     /* TODO: Apple supports thread affinity using a different interface. */
 
     cilkrts_alert(ALERT_BOOT, NULL, "(threads_init) Setting up threads");
 
+#ifdef CPU_SETSIZE
     /* Three cases: core count at least twice worker count, allocate
        groups of floor(worker count / core count) CPUs.
        Core count greater than worker count, do not bind workers to CPUs.
@@ -268,8 +274,9 @@ static void threads_init(global_state *g) {
             step_in = group_size;
         }
     }
+#endif
 
-    for (unsigned int w = 0; w < n_threads; w++) {
+    for (int w = 0; w < n_threads; w++) {
         int status = pthread_create(&g->threads[w], NULL, scheduler_thread_proc,
                                     g->workers[w]);
 
@@ -348,14 +355,14 @@ static void global_state_deinit(global_state *g) {
 
 static void deques_deinit(global_state *g) {
     cilkrts_alert(ALERT_BOOT, NULL, "(deques_deinit) Clean up deques");
-    for (int i = 0; i < g->options.nproc; i++) {
+    for (unsigned int i = 0; i < g->options.nproc; i++) {
         CILK_ASSERT_G(g->deques[i].mutex_owner == NOBODY);
         cilk_mutex_destroy(&(g->deques[i].mutex));
     }
 }
 
 static void workers_terminate(global_state *g) {
-    for (int i = 0; i < g->options.nproc; i++) {
+    for (unsigned int i = 0; i < g->options.nproc; i++) {
         __cilkrts_worker *w = g->workers[i];
         cilk_fiber_pool_per_worker_terminate(w);
         cilk_internal_malloc_per_worker_terminate(w); // internal malloc last
@@ -364,7 +371,7 @@ static void workers_terminate(global_state *g) {
 
 static void workers_deinit(global_state *g) {
     cilkrts_alert(ALERT_BOOT, NULL, "(workers_deinit) Clean up workers");
-    for (int i = 0; i < g->options.nproc; i++) {
+    for (unsigned int i = 0; i < g->options.nproc; i++) {
         __cilkrts_worker *w = g->workers[i];
         g->workers[i] = NULL;
         CILK_ASSERT(w, w->l->fiber_to_free == NULL);

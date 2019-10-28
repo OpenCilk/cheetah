@@ -13,7 +13,7 @@
  */
 typedef struct reducer_id_manager {
     pthread_mutex_t mutex; // enfore mutual exclusion on access to this desc
-    int mutex_owner;       // worker id who holds the mutex
+    worker_id mutex_owner; // worker id who holds the mutex
     hyper_id_t spa_cap;
     hyper_id_t curr_id;
 } reducer_id_manager;

@@ -1,6 +1,8 @@
 #ifndef _CILK_TYPES_H
 #define _CILK_TYPES_H
 
+#include <stdint.h>
+
 typedef uint32_t worker_id;
 typedef struct __cilkrts_worker __cilkrts_worker;
 typedef struct __cilkrts_stack_frame __cilkrts_stack_frame;

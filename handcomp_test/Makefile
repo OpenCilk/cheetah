@@ -9,10 +9,10 @@ DEFINES = $(ABI_DEF)
 TESTS   = cilksort fib mm_dac nqueens
 OPTIONS = $(OPT) $(ARCH) $(DBG) -Wall $(DEFINES) -fno-omit-frame-pointer
 # dynamic linking
-# RTS_DLIBS = -L../runtime -Wl,-rpath -Wl,../runtime -lcheetah
-# RTS_LIBS = ../runtime/libcheetah.so
+# RTS_DLIBS = -L../runtime -Wl,-rpath -Wl,../runtime -lopencilk
+# RTS_LIBS = ../runtime/$(RTS_LIB).so
 # static linking
-RTS_LIBS = ../runtime/libcheetah.a
+RTS_LIBS = ../runtime/$(RTS_LIB).a
 TIMING_COUNT := 1
 
 .PHONY: all check memcheck clean

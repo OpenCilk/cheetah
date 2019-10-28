@@ -97,7 +97,7 @@ void internal_malloc_global_check(global_state *g) {
     int64_t total_size = d->used;
     int64_t total_malloc = d->num_malloc;
 
-    for (int i = 0; i < g->options.nproc; i++) {
+    for (unsigned int i = 0; i < g->options.nproc; i++) {
         d = &(g->workers[i]->l->im_desc);
         total_size += d->used;
         total_malloc += d->num_malloc;

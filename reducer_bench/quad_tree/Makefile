@@ -1,8 +1,8 @@
 include ../../config.mk
 
-OPTIONS  = -g -Wall $(OPT) -fno-omit-frame-pointer -fcilkplus -ftapir=cilkr
+OPTIONS  = -g -Wall $(OPT) -fno-omit-frame-pointer -fopencilk
 
-RTS_LIBS = ../../runtime/libcheetah.a $(patsubst %,../../runtime/%/module.a,$(MODS))
+RTS_LIBS = ../../runtime/$(RTS_LIB).a $(patsubst %,../../runtime/%/module.a,$(MODS))
 
 # The sources we're building
 HDRS = $(wildcard *.h)

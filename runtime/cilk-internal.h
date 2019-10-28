@@ -102,30 +102,37 @@ struct __cilkrts_stack_frame {
 //===========================================================
 
 /* CILK_FRAME_STOLEN is set if the frame has ever been stolen. */
-#define CILK_FRAME_STOLEN 0x01
+#define CILK_FRAME_STOLEN 0x001
 
 /* CILK_FRAME_UNSYNCHED is set if the frame has been stolen and
    is has not yet executed _Cilk_sync. It is technically a misnomer in that a
    frame can have this flag set even if all children have returned. */
-#define CILK_FRAME_UNSYNCHED 0x02
+#define CILK_FRAME_UNSYNCHED 0x002
 
 /* Is this frame detached (spawned)? If so the runtime needs
    to undo-detach in the slow path epilogue. */
-#define CILK_FRAME_DETACHED 0x04
+#define CILK_FRAME_DETACHED 0x004
 
-/* CILK_FRAME_EXCEPTION_PROBED is set if the frame has been probed in the
-   exception handler first pass */
-#define CILK_FRAME_EXCEPTION_PROBED 0x08
+/* CILK_FRAME_EXCEPTION_PENDING is set if the frame has an exception
+   to handle after syncing. */
+#define CILK_FRAME_EXCEPTION_PENDING 0x008
 
-/* Is this frame receiving an exception after sync? */
-#define CILK_FRAME_EXCEPTING 0x10
+/* Is this frame excepting, meaning that a stolen continuation threw? */
+#define CILK_FRAME_EXCEPTING 0x010
 
 /* Is this the last (oldest) Cilk frame? */
-#define CILK_FRAME_LAST 0x80
+#define CILK_FRAME_LAST 0x080
 
 /* Is this frame in the epilogue, or more generally after the last
    sync when it can no longer do any Cilk operations? */
-#define CILK_FRAME_EXITING 0x0100
+#define CILK_FRAME_EXITING 0x100
+
+/* Is this frame handling an exception? */
+// TODO: currently only used when throwing an exception from the continuation
+//       (i.e. from the personality function). Used in scheduler.c to disable
+//       asserts that fail if trying to longjmp back to the personality
+//       function.
+#define CILK_FRAME_SYNC_READY 0x200
 
 #define GET_CILK_FRAME_VERSION(F) (((F) >> 24) & 255)
 #define CILK_FRAME_VERSION (__CILKRTS_ABI_VERSION << 24)
