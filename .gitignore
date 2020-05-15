@@ -1,0 +1,16 @@
+# Exes
+handcomp_test/*
+!handcomp_test/*.*
+
+# Emacs backups
+*~
+\#*#
+
+# Compilations
+*.o
+*.a
+
+# lib 
+*.a
+*.so
+*.so.*

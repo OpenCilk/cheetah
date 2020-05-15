@@ -1,0 +1,11 @@
+*.o
+fib
+mm_dac
+nqueens
+cilksort
+fft
+heat
+lu
+matmul_4_way_z
+strassen
+cholesky

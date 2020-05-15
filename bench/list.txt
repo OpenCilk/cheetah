@@ -1,0 +1,8 @@
+./fib --nproc 32 42
+./cholesky --nproc 32 -n 4000 -z 40000
+./cilksort --nproc 32 -n 100000000
+./heat --nproc 32 -nx 2048 -ny 2048 -nt 500
+./lu --nproc 32 -n 4096
+./matmul_4_way_z --nproc 32 -n 2048
+./nqueens --nproc 32 14
+./strassen --nproc 32 -n 4096

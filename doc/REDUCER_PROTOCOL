@@ -1,0 +1,131 @@
+Reducer protocol:
+
+Each closure should contains three reducer maps (rmap):
+lchild_rmap
+right_sib_rmap
+user_rmap 
+
+These are just place holders: 
+lchild_rmap: holding the rmap deposited by the returning closure who is the
+  left-most spawned child at the time of return.  
+right_sib_rmap: holding the rmap deposited by the right sibling closure who is
+  unlinking from the Closure tree.
+user_rmap: this is really a place holder, holding only views accumulated from
+the trace that leading up to the failed sync on the closure.
+
+This is because, whenever a worker fails to sync on a closure t, we need to
+deposit the w->user_map somewhere.  We could have done it in
+t->right_most_child->right_sib_rmap, but then the right_most_child could
+change as t's spawned children return, and we don't want to hold lock on t 
+whild doing reduction (may need to reduce user_map into 
+t->right_most_child->right_sib_rmap).  So it's just easier having a user_map
+as a place holder for this particular purpose to make things simpler. 
+
+The worker also has a rmap: 
+user_rmap, which holds the view accumulated when executing user code ---
+should be initialized with empty rmap at the beginning of a trace (upon a 
+  successful steal), and deposited at the end of a trace (before going for the
+  next steal)
+
+- Upon a successful steal, the worker should create an empty user_rmap
+- Upon a sync, it should leave its user_rmap in the closure tree if it were to
+  suspend.  The question is, where in the closure tree. 
+  Call the syncing closure t; we hold lock on t at the moment.
+  (Note that we must hold lock on a closure whenever we read its fields
+   but w->user_rmap is only accessed by the worker w)
+
+  - if t's join counter != 0 (still has spawned children), 
+    assert(t->user_rmap == NULL); // t->user_rmap is set once per sync 
+    t->user_rmap = w->user_rmap;
+    w->user_rmap = NULL
+    unlock(t);
+
+  - Otherwise, t has no outstanding spawned children, and sync must succeed
+    tmp = t->lchild_rmap; 
+    orig_lchild_rmap = t->lchild_rmap; // used for debugging purpose only
+    unlock(t)
+    tmp = tmp REDUCE_OP w->user_rmap
+    w->user_rmap = NULL;
+    lock(t)
+    assert(orig_lchild_rmap == t->lchild_rmap); 
+      // this must be true as t->join_counter == 0 (assuming join_counter
+      // is decremented after the reduction necessary for returning from 
+      // a spawned child 
+    t->lchild_rmap = tmp;
+
+    assert(t->user_rmap == NULL);
+    t->lchild_rmap = NULL;
+    assert(w->user_rmap == NULL);
+    w->user_rmap = t->lchild_rmap 
+    unlock(t) 
+    continue execution after sync with w->user_rmap
+
+- Upon a spawned child returning, say worker w returning from closure t to
+  closure parent when we first enter the Closure_return, we hold no locks
+  but t is off the deque
+
+  - for t, assert t->lchild_rmap == NULL and t->user_rmap == NULL
+    (this should be true since we should have passed a sync successfully 
+    without spawning more)
+    w->user_rmap may not be NULL
+
+    bool not_done = true;
+
+    // need a loop as multiple siblings can return while we
+    // are performing reductions
+    while(not_done) { 
+      // always lock from top to bottom
+      lock(parent)
+      lock(t)
+
+      cilk_redmap **left_ptr; // ptr to a ptr to reducer map
+      // invariant: a closure cannot unlink itself w/out lock on parent
+      // so what this points to cannot change while we have lock on parent
+
+      right = t->right_sib_rmap;
+      t->right_sib_rmap = NULL
+      if(t has left_sibling) {
+          left_ptr = &(t->left_sib->right_sib_rmap); 
+      } else {
+          left_ptr = &(parent->lchild_rmap);
+      }
+      left = *left_ptr;
+      *left_ptr = NULL; 
+
+      if(left == NULL && right == NULL) {
+        *left_ptr = w->usr_rmap; // deposite views
+        w->usr_rmap = NULL; 
+        Closure_remove_child(w, parent, t); // unlink t from the tree 
+        // we have deposited our views and unlinked; we can quit now
+        // invariant: we can only decide to quit when we see no more maps 
+        // from the right, we have deposited our own rmap, and unlink from the
+        // tree.  All these are done while holding lock on the parent. 
+        // Before, another worker could deposit more rmap into our 
+        // right_rmap slot after we decide to quit, but now this cannot 
+        // occur as the worker depositing the rmap to our right_rmap also must
+        // hold lock on the parent to do so.
+        unlock(t);
+        unlock(parent)
+        not_done = false;
+      } else {
+        unlock(t);
+        unlock(parent)
+        if(left) { w->user_rmap = left REDUCE_OP w->usr_rmap; }
+        if(right) { w->user_rmap = w->usr_rmap REDUCE_OP right; }
+      }
+    }
+
+  - Now we can provably good steal
+    lock(parent);
+    parent->join_counter--;
+    success = provably_good_steal(...);
+    if(success) {
+      assert(w->usr_rmap == NULL);
+      w->usr_rmap = parent->lchild_rmap;
+      if(parent->user_rmap) {
+        tmp = parent->usr_rmap; 
+        parent->usr_rmap = NULL;
+      }
+    }
+    unlock(parent);
+
