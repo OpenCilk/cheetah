@@ -495,7 +495,9 @@ struct legacy_reducer_downcast<reducer<op_and<Type, Align> > >
  */
  ///@{
 
-__CILKRTS_BEGIN_EXTERN_C
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /** Declares `opand` reducer type name.
  *
@@ -532,7 +534,7 @@ __CILKRTS_BEGIN_EXTERN_C
         CILK_C_INIT_REDUCER(_Typeof(obj.value),                               \
                         __CILKRTS_MKIDENT(cilk_c_reducer_opand_reduce_,tn),   \
                         __CILKRTS_MKIDENT(cilk_c_reducer_opand_identity_,tn), \
-                        __cilkrts_hyperobject_noop_destroy, v)
+                        0, v)
 
 /// @cond internal
 
@@ -605,7 +607,9 @@ CILK_C_REDUCER_OPAND_INSTANCE(unsigned long long,   ulonglong)
 
 //@endcond
 
-__CILKRTS_END_EXTERN_C
+#ifdef __cplusplus
+} /* end extern "C" */
+#endif
 
 ///@}
 

@@ -4,15 +4,11 @@
 #include "cilk-internal.h"
 #include "cilk2c.h"
 #include "fiber.h"
+#include "global.h"
 #include "init.h"
 #include "scheduler.h"
 
 extern unsigned long ZERO;
-
-extern void (*init_callback[MAX_CALLBACKS])(void);
-extern int last_init_callback;
-extern void (*exit_callback[MAX_CALLBACKS])(void);
-extern int last_exit_callback;
 
 CHEETAH_INTERNAL Closure *create_invoke_main(global_state *const g) {
 
@@ -37,13 +33,14 @@ CHEETAH_INTERNAL Closure *create_invoke_main(global_state *const g) {
     FP(sf) = new_rsp;
     PC(sf) = (void *)invoke_main;
 
-    sf->flags = CILK_FRAME_VERSION;
+    sf->flags = 0;
+    sf->magic = g->frame_magic;
     __cilkrts_set_stolen(sf);
     // FIXME
     sf->flags |= CILK_FRAME_DETACHED;
 
     t->frame = sf;
-    sf->worker = (__cilkrts_worker *)NOBODY;
+    sf->worker = (struct __cilkrts_worker *)0xbfbfbfbfbf;
     t->fiber = fiber;
     // WHEN_CILK_DEBUG(sf->magic = CILK_STACKFRAME_MAGIC);
 
@@ -84,8 +81,11 @@ CHEETAH_INTERNAL_NORETURN void invoke_main() {
     __cilkrts_worker *w = __cilkrts_get_tls_worker();
     __cilkrts_stack_frame *sf = w->current_stack_frame;
 
-    for (int i = 0; i < last_init_callback; ++i)
-        init_callback[i]();
+    for (unsigned i = 0; i < cilkrts_callbacks.last_init; ++i)
+        cilkrts_callbacks.init[i]();
+
+    /* Any attempt to register more initializers should fail. */
+    cilkrts_callbacks.after_init = true;
 
     char *rsp;
     char *nsp;
@@ -133,8 +133,11 @@ CHEETAH_INTERNAL_NORETURN void invoke_main() {
     CILK_ASSERT_G(w == __cilkrts_get_tls_worker());
     // WHEN_CILK_DEBUG(sf->magic = ~CILK_STACKFRAME_MAGIC);
 
-    for (int i = last_exit_callback - 1; i >= 0; --i)
-        exit_callback[i]();
+    for (unsigned i = cilkrts_callbacks.last_exit; i > 0;)
+        cilkrts_callbacks.exit[--i]();
+
+    /* Allow registering new init callbacks again. */
+    cilkrts_callbacks.after_init = false;
 
     atomic_store_explicit(&w->g->done, 1, memory_order_release);
 

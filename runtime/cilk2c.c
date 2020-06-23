@@ -7,18 +7,17 @@
 #include "cilk-internal.h"
 #include "cilk2c.h"
 #include "fiber.h"
+#include "global.h"
 #include "readydeque.h"
 #include "scheduler.h"
 
 extern void _Unwind_Resume(struct _Unwind_Exception *);
 extern _Unwind_Reason_Code _Unwind_RaiseException(struct _Unwind_Exception *);
 
-CHEETAH_INTERNAL int cilkg_nproc = 0;
+CHEETAH_INTERNAL unsigned cilkg_nproc = 0;
 
-CHEETAH_INTERNAL void (*init_callback[MAX_CALLBACKS])(void) = {NULL};
-CHEETAH_INTERNAL int last_init_callback = 0;
-CHEETAH_INTERNAL void (*exit_callback[MAX_CALLBACKS])(void) = {NULL};
-CHEETAH_INTERNAL int last_exit_callback = 0;
+CHEETAH_INTERNAL struct cilkrts_callbacks cilkrts_callbacks = {
+    0, 0, false, {NULL}, {NULL}};
 
 // These callback-registration methods can run before the runtime system has
 // started.
@@ -29,29 +28,37 @@ CHEETAH_INTERNAL int last_exit_callback = 0;
 // Register a callback to run at Cilk-runtime initialization.  Returns 0 on
 // successful registration, nonzero otherwise.
 int __cilkrts_atinit(void (*callback)(void)) {
-    if (last_init_callback == MAX_CALLBACKS)
+    if (cilkrts_callbacks.last_init >= MAX_CALLBACKS ||
+        cilkrts_callbacks.after_init)
         return -1;
 
-    init_callback[last_init_callback++] = callback;
+    cilkrts_callbacks.init[cilkrts_callbacks.last_init++] = callback;
     return 0;
 }
 
 // Register a callback to run at Cilk-runtime exit.  Returns 0 on successful
 // registration, nonzero otherwise.
 int __cilkrts_atexit(void (*callback)(void)) {
-    if (last_exit_callback == MAX_CALLBACKS)
+    if (cilkrts_callbacks.last_exit >= MAX_CALLBACKS)
         return -1;
 
-    exit_callback[last_exit_callback++] = callback;
+    cilkrts_callbacks.exit[cilkrts_callbacks.last_exit++] = callback;
     return 0;
 }
 
 // Internal method to get the Cilk worker ID.  Intended for debugging purposes.
 //
 // TODO: Figure out how we want to support worker-local storage.
-int __cilkrts_internal_worker_id(void) {
+unsigned __cilkrts_get_worker_number(void) {
     return __cilkrts_get_tls_worker()->self;
 }
+
+#ifdef __linux__ /* This feature requires the GNU linker */
+CHEETAH_INTERNAL
+const char get_workerwarn_msg[]
+    __attribute__((section(".gnu.warning.__cilkrts_get_worker_number"))) =
+        "__cilkrts_get_worker_number is deprecated";
+#endif
 
 // ================================================================
 // This file contains the compiler ABI, which corresponds to
@@ -65,7 +72,8 @@ void __cilkrts_enter_frame(__cilkrts_stack_frame *sf) {
     __cilkrts_worker *w = __cilkrts_get_tls_worker();
     cilkrts_alert(ALERT_CFRAME, w, "__cilkrts_enter_frame %p", sf);
 
-    sf->flags = CILK_FRAME_VERSION;
+    sf->flags = 0;
+    sf->magic = w->g->frame_magic;
     sf->call_parent = w->current_stack_frame;
     sf->worker = w;
     w->current_stack_frame = sf;
@@ -77,11 +85,11 @@ void __cilkrts_enter_frame_fast(__cilkrts_stack_frame *sf) {
     __cilkrts_worker *w = __cilkrts_get_tls_worker();
     cilkrts_alert(ALERT_CFRAME, w, "__cilkrts_enter_frame_fast %p", sf);
 
-    sf->flags = CILK_FRAME_VERSION;
+    sf->flags = 0;
+    sf->magic = w->g->frame_magic;
     sf->call_parent = w->current_stack_frame;
     sf->worker = w;
     w->current_stack_frame = sf;
-    // WHEN_CILK_DEBUG(sf->magic = CILK_STACKFRAME_MAGIC);
 }
 
 // inlined by the compiler; this implementation is only used in invoke-main.c
@@ -89,7 +97,7 @@ void __cilkrts_detach(__cilkrts_stack_frame *sf) {
     struct __cilkrts_worker *w = sf->worker;
     cilkrts_alert(ALERT_CFRAME, w, "__cilkrts_detach %p", sf);
 
-    CILK_ASSERT(w, GET_CILK_FRAME_VERSION(sf->flags) == __CILKRTS_ABI_VERSION);
+    CILK_ASSERT(w, CHECK_CILK_FRAME_MAGIC(w->g, sf));
     CILK_ASSERT(w, sf->worker == __cilkrts_get_tls_worker());
     CILK_ASSERT(w, w->current_stack_frame == sf);
 
@@ -161,6 +169,10 @@ void __cilkrts_check_exception_resume(__cilkrts_stack_frame *sf) {
     return;
 }
 
+// Called by generated exception-handling code, specifically, at the beginning
+// of each landingpad in a spawning function.  Ensures that the stack pointer
+// points at the fiber and call-stack frame containing sf before any catch
+// handlers in that frame execute.
 void __cilkrts_cleanup_fiber(__cilkrts_stack_frame *sf, int32_t sel) {
 
     if (sel == 0)
@@ -170,6 +182,14 @@ void __cilkrts_cleanup_fiber(__cilkrts_stack_frame *sf, int32_t sel) {
     __cilkrts_worker *w = sf->worker;
     deque_lock_self(w);
     Closure *t = deque_peek_bottom(w, w->self);
+
+    // If t->parent_rsp is non-null, then the Cilk personality function executed
+    // __cilkrts_sync(sf), which implies that sf is at the top of the deque.
+    // Because we're executing a non-cleanup landingpad, execution is continuing
+    // within this function frame, rather than unwinding further to a parent
+    // frame, which would belong to a distinct closure.  Hence, if we reach this
+    // point, set the stack pointer in sf to t->parent_rsp if t->parent_rsp is
+    // non-null.
 
     if (NULL == t->parent_rsp) {
         deque_unlock_self(w);
@@ -187,20 +207,16 @@ void __cilkrts_cleanup_fiber(__cilkrts_stack_frame *sf, int32_t sel) {
 void __cilkrts_sync(__cilkrts_stack_frame *sf) {
 
     __cilkrts_worker *w = sf->worker;
-    cilkrts_alert(ALERT_SYNC, w, "__cilkrts_sync syncing frame %p", sf);
 
     CILK_ASSERT(w, sf->worker == __cilkrts_get_tls_worker());
-    CILK_ASSERT(w, GET_CILK_FRAME_VERSION(sf->flags) == __CILKRTS_ABI_VERSION);
+    CILK_ASSERT(w, CHECK_CILK_FRAME_MAGIC(w->g, sf));
     CILK_ASSERT(w, sf == w->current_stack_frame);
 
     if (Cilk_sync(w, sf) == SYNC_READY) {
-        cilkrts_alert(ALERT_SYNC, w, "__cilkrts_sync synced frame %p!", sf);
         // The Cilk_sync restores the original rsp stored in sf->ctx
         // if this frame is ready to sync.
         sysdep_longjmp_to_sf(sf);
     } else {
-        cilkrts_alert(ALERT_SYNC, w, "__cilkrts_sync waiting to sync frame %p!",
-                      sf);
         longjmp_to_runtime(w);
     }
 }
@@ -210,7 +226,7 @@ void __cilkrts_pop_frame(__cilkrts_stack_frame *sf) {
     __cilkrts_worker *w = sf->worker;
     cilkrts_alert(ALERT_CFRAME, w, "__cilkrts_pop_frame %p", sf);
 
-    CILK_ASSERT(w, GET_CILK_FRAME_VERSION(sf->flags) == __CILKRTS_ABI_VERSION);
+    CILK_ASSERT(w, CHECK_CILK_FRAME_MAGIC(w->g, sf));
     CILK_ASSERT(w, sf->worker == __cilkrts_get_tls_worker());
     /* The inlined version in the Tapir compiler uses release
        semantics for the store to call_parent, but relaxed
@@ -226,7 +242,7 @@ void __cilkrts_pause_frame(__cilkrts_stack_frame *sf, char *exn) {
     __cilkrts_worker *w = sf->worker;
     cilkrts_alert(ALERT_CFRAME, w, "__cilkrts_pause_frame %p", sf);
 
-    CILK_ASSERT(w, GET_CILK_FRAME_VERSION(sf->flags) == __CILKRTS_ABI_VERSION);
+    CILK_ASSERT(w, CHECK_CILK_FRAME_MAGIC(w->g, sf));
     CILK_ASSERT(w, sf->worker == __cilkrts_get_tls_worker());
 
     CILK_ASSERT(w, sf->flags & CILK_FRAME_DETACHED);
@@ -255,7 +271,7 @@ void __cilkrts_leave_frame(__cilkrts_stack_frame *sf) {
     __cilkrts_worker *w = sf->worker;
     cilkrts_alert(ALERT_CFRAME, w, "__cilkrts_leave_frame %p", sf);
 
-    CILK_ASSERT(w, GET_CILK_FRAME_VERSION(sf->flags) == __CILKRTS_ABI_VERSION);
+    CILK_ASSERT(w, CHECK_CILK_FRAME_MAGIC(w->g, sf));
     CILK_ASSERT(w, sf->worker == __cilkrts_get_tls_worker());
     // WHEN_CILK_DEBUG(sf->magic = ~CILK_STACKFRAME_MAGIC);
 
@@ -290,11 +306,9 @@ void __cilkrts_leave_frame(__cilkrts_stack_frame *sf) {
             // leaving a full frame; need to get the full frame of its call
             // parent back onto the deque
             Cilk_set_return(w);
-            CILK_ASSERT(w,
-                        GET_CILK_FRAME_VERSION(w->current_stack_frame->flags) ==
-                            __CILKRTS_ABI_VERSION);
+            CILK_ASSERT(w, CHECK_CILK_FRAME_MAGIC(w->g, sf));
         }
     }
 }
 
-int __cilkrts_get_nworkers(void) { return cilkg_nproc; }
+unsigned __cilkrts_get_nworkers(void) { return cilkg_nproc; }

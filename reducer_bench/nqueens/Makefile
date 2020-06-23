@@ -4,8 +4,6 @@ ABI=opencilk
 
 OPTIONS  = -g -Wall $(OPT) -ftapir=$(ABI)
 
-RTS_LIBS = ../../runtime/$(RTS_LIB).a $(patsubst %,../../runtime/%/module.a,$(MODS))
-
 TIMING_COUNT := 1
 
 CFLAGS := -std=gnu99 -ftapir -Wall 
@@ -14,17 +12,19 @@ ifneq ($(DEBUG),1)
 	OPTIONS += -DNDEBUG
 endif
 
-LDFLAGS := -lrt -lm -lcilkrts 
+LDFLAGS := -lrt -lm -lcilkrts
+
+RTS_LIBS =
 
 .PHONY: all check clean
 
 all: nqueens_int nqueens
 
 nqueens_int: nqueens_int.o ktiming.o
-	$(CC) $^ -o $@ $(RTS_LIBS) -lrt -lpthread -lm
+	$(CC) $^ -o $@ $(RTS_OPT) $(RTS_LIBS) -lrt -lpthread -lm
 
 nqueens: board.o nqueens.o ktiming.o
-	$(CC) $^ -o $@ $(RTS_LIBS) -lrt -lpthread -lm
+	$(CC) $^ -o $@ $(RTS_OPT) $(RTS_LIBS) -lrt -lpthread -lm
 
 #	$(CC) -o queens board.o queens.o $(LDFLAGS)
 

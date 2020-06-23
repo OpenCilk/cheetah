@@ -4,9 +4,6 @@
 #include "../runtime/cilk2c.h"
 #include "ktiming.h"
 
-#ifdef OPENCILK_ABI
-#define __cilkrts_leave_frame(SF) __opencilk_leave_frame(SF)
-#endif
 
 #ifndef TIMING_COUNT 
 #define TIMING_COUNT 1 

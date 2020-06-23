@@ -2,6 +2,7 @@ set(CHEETAH_LIB_CMAKEFILES_DIR "${CMAKE_CURRENT_BINARY_DIR}${CMAKE_FILES_DIRECTO
 
 # Get sources
 set(CHEETAH_SOURCES
+  c_reducers.c
   cilk2c.c
   cilkred_map.c
   closure.c
@@ -9,6 +10,7 @@ set(CHEETAH_SOURCES
   debug.c
   fiber.c
   fiber-pool.c
+  global.c
   init.c
   internal-malloc.c
   invoke-main.c
@@ -41,14 +43,14 @@ endif()
 
 add_flags_if_supported(-g3)
 add_flags_if_supported(-mavx)
+add_flags_if_supported(-march=sandybridge)
 add_flags_if_supported(-fPIC)
 if (CHEETAH_HAS_FOMIT_FRAME_POINTER_FLAG)
   set_source_files_properties(invoke-main.c PROPERTIES COMPILE_FLAGS -fno-omit-frame-pointer)
 endif()
 
 # Add definitions for cheetah build
-list(APPEND CHEETAH_COMPILE_DEFS OPENCILK_ABI)
-list(APPEND CHEETAH_COMPILE_DEFS REDUCER_MODULE)
+list(APPEND CHEETAH_COMPILE_DEFS OPENCILK_LIBRARY)
 
 # Set optimization levels for Debug and Release builds
 set(CHEETAH_DEBUG_OPTIONS -Og)

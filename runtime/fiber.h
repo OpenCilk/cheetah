@@ -22,20 +22,22 @@
 
 // Statistics on active fibers that were allocated from this pool,
 struct fiber_pool_stats {
-    int in_use;     // number of fibers allocated - freed from / into the pool
-    int max_in_use; // high watermark for in_use
-    int max_free;   // high watermark for number of free fibers in the pool
+    unsigned int
+        in_use; // number of fibers allocated - freed from / into the pool
+    unsigned int max_in_use; // high watermark for in_use
+    unsigned int
+        max_free; // high watermark for number of free fibers in the pool
 };
 
 struct cilk_fiber_pool {
     cilk_mutex *lock;               // Mutual exclusion for pool operations
-    int64_t stack_size;             // Size of stacks for fibers in this pool.
+    size_t stack_size;              // Size of stacks for fibers in this pool.
     struct cilk_fiber_pool *parent; // Parent pool.
                                     // If this pool is empty, get from parent
     // Describes inactive fibers stored in the pool.
     struct cilk_fiber **fibers; // Array of max_size fiber pointers
-    int capacity;               // Limit on number of fibers in pool
-    int size;                   // Number of fibers currently in the pool
+    unsigned int capacity;      // Limit on number of fibers in pool
+    unsigned int size;          // Number of fibers currently in the pool
     worker_id mutex_owner;
     WHEN_FIBER_STATS(struct fiber_pool_stats stats);
 };

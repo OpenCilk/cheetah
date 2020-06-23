@@ -331,7 +331,9 @@ struct op_mul : public monoid_with_view< op_mul_view<Type> > {};
  */
  ///@{
 
-__CILKRTS_BEGIN_EXTERN_C
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /** Declares `opmul` reducer type name.
  *
@@ -368,7 +370,7 @@ __CILKRTS_BEGIN_EXTERN_C
         CILK_C_INIT_REDUCER(_Typeof(obj.value),                               \
                         __CILKRTS_MKIDENT(cilk_c_reducer_opmul_reduce_,tn),   \
                         __CILKRTS_MKIDENT(cilk_c_reducer_opmul_identity_,tn), \
-                        __cilkrts_hyperobject_noop_destroy, v)
+                        0, v)
 
 /// @cond internal
 
@@ -444,7 +446,9 @@ CILK_C_REDUCER_OPMUL_INSTANCE(long double,          longdouble)
 
 //@endcond
 
-__CILKRTS_END_EXTERN_C
+#ifdef __cplusplus
+} /* end extern "C" */
+#endif
 
 ///@}
 

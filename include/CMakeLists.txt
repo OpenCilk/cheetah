@@ -1,10 +1,7 @@
 set(cilk_header_files
   cilk/cilk.h
   cilk/cilk_api.h
-  cilk/cilk_api_linux.h
   cilk/cilk_stub.h
-  cilk/cilk_undocumented.h
-  cilk/common.h
   cilk/holder.h
   cilk/hyperobject_base.h
   cilk/metaprogramming.h

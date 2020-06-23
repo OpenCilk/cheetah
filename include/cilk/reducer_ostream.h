@@ -489,27 +489,6 @@ public:
     reducer_ostream*       operator->()       { return this; }
     reducer_ostream const* operator->() const { return this; }
     //@}
-
-    /** @name Upcast
-     *  @details In Intel Cilk Plus library 0.9, reducers were always cache-aligned.
-     *  In library  1.0, reducer cache alignment is optional. By default,
-     *  reducers are unaligned (i.e., just naturally aligned), but legacy
-     *  wrappers inherit from cache-aligned reducers for binary compatibility.
-     *
-     *  This means that a wrapper will automatically be upcast to its aligned
-     *  reducer base class. The following conversion operators provide
-     *  pseudo-upcasts to the corresponding unaligned reducer class.
-     */
-    //@{
-    operator reducer<op_ostream>& ()
-    {
-        return *reinterpret_cast< reducer<op_ostream>* >(this);
-    }
-    operator const reducer<op_ostream>& () const
-    {
-        return *reinterpret_cast< const reducer<op_ostream>* >(this);
-    }
-    //@}
 };
 
 } // namespace cilk

@@ -13,7 +13,7 @@
 CILK_C_DECLARE_REDUCER(IntList)
 my_int_list_reducer =
     CILK_C_INIT_REDUCER(IntList, reduce_IntList, identity_IntList,
-                        __cilkrts_hyperobject_noop_destroy, {0});
+                        0 /* no destructor */, {0});
 // Initial value omitted //
 
 void ilist_dac(int lo, int hi, int base) {

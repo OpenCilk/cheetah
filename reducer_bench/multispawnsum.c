@@ -13,7 +13,7 @@ void reduce_intsum(void *reducer, void *left, void *right) {
 
 CILK_C_DECLARE_REDUCER(int)
 my_int_sum_reducer = CILK_C_INIT_REDUCER(int, reduce_intsum, identity_intsum,
-                                         __cilkrts_hyperobject_noop_destroy, 0);
+                                         0 /* no destructor */, 0);
 
 void compute_sum(int limit) {
     for (int i = 0; i < limit; i++) {

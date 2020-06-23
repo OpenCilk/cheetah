@@ -1,6 +1,7 @@
 #ifndef _READYDEQUE_H
 #define _READYDEQUE_H
 
+#include "closure.h"
 #include "rts-config.h"
 
 // Forward declaration
@@ -8,8 +9,6 @@ typedef struct ReadyDeque ReadyDeque;
 
 // Includes
 #include "cilk-internal.h"
-#include "closure.h"
-#include "debug.h"
 #include "mutex.h"
 
 // Actual declaration
@@ -20,51 +19,13 @@ struct ReadyDeque {
 } __attribute__((aligned(CILK_CACHE_LINE)));
 
 // assert that pn's deque be locked by ourselves
-static inline void deque_assert_ownership(__cilkrts_worker *const w,
-                                          worker_id pn) {
-    CILK_ASSERT(w, w->g->deques[pn].mutex_owner == w->self);
-}
-
-static inline void deque_lock_self(__cilkrts_worker *const w) {
-    struct local_state *l = w->l;
-    worker_id id = w->self;
-    global_state *g = w->g;
-    l->lock_wait = true;
-    cilk_mutex_lock(&g->deques[id].mutex);
-    l->lock_wait = false;
-    g->deques[id].mutex_owner = id;
-}
-
-static inline void deque_unlock_self(__cilkrts_worker *const w) {
-    worker_id id = w->self;
-    global_state *g = w->g;
-    g->deques[id].mutex_owner = NOBODY;
-    cilk_mutex_unlock(&g->deques[id].mutex);
-}
-
-static inline int deque_trylock(__cilkrts_worker *const w, worker_id pn) {
-    global_state *g = w->g;
-    int ret = cilk_mutex_try(&g->deques[pn].mutex);
-    if (ret) {
-        g->deques[pn].mutex_owner = w->self;
-    }
-    return ret;
-}
-
-static inline void deque_lock(__cilkrts_worker *const w, worker_id pn) {
-    global_state *g = w->g;
-    struct local_state *l = w->l;
-    l->lock_wait = true;
-    cilk_mutex_lock(&g->deques[pn].mutex);
-    l->lock_wait = false;
-    g->deques[pn].mutex_owner = w->self;
-}
-
-static inline void deque_unlock(__cilkrts_worker *const w, worker_id pn) {
-    global_state *g = w->g;
-    g->deques[pn].mutex_owner = NOBODY;
-    cilk_mutex_unlock(&w->g->deques[pn].mutex);
-}
+CHEETAH_INTERNAL void deque_assert_ownership(__cilkrts_worker *const w,
+                                             worker_id pn);
+CHEETAH_INTERNAL void deque_lock_self(__cilkrts_worker *const w);
+CHEETAH_INTERNAL void deque_unlock_self(__cilkrts_worker *const w);
+CHEETAH_INTERNAL int deque_trylock(__cilkrts_worker *const w, worker_id pn);
+CHEETAH_INTERNAL void deque_lock(__cilkrts_worker *const w, worker_id pn);
+CHEETAH_INTERNAL void deque_unlock(__cilkrts_worker *const w, worker_id pn);
 
 /*
  * functions that add/remove elements from the top/bottom of deques

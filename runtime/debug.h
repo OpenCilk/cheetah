@@ -10,11 +10,10 @@ struct global_state;
 struct __cilkrts_worker;
 
 #define CILK_CHECK(g, cond, complain)                                          \
-    if (!cond)                                                                 \
-    cilk_die_internal(g, complain)
+    ((cond) ? (void)0 : cilk_die_internal(g, complain))
 
 #ifndef ALERT_LVL
-#define ALERT_LVL 0x33e
+#define ALERT_LVL 0
 #endif
 #define ALERT_NONE 0x0
 #define ALERT_FIBER 0x1
@@ -27,6 +26,7 @@ struct __cilkrts_worker;
 #define ALERT_CFRAME 0x80
 #define ALERT_REDUCE 0x100
 #define ALERT_START 0x200
+#define ALERT_REDUCE_ID 0x400
 
 extern CHEETAH_INTERNAL unsigned int alert_level;
 

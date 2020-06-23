@@ -1,15 +1,13 @@
 #include "debug.h"
 #include "cilk-internal.h"
+#include "global.h"
 
 #include <assert.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 
-#ifndef ALERT_DEFAULT
-#define ALERT_DEFAULT 0
-#endif
-CHEETAH_INTERNAL unsigned int alert_level = ALERT_DEFAULT;
+CHEETAH_INTERNAL unsigned int alert_level = ALERT_LVL;
 
 const char *const __cilkrts_assertion_failed =
     "%s:%d: cilk assertion failed: %s\n";

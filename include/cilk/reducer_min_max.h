@@ -2,11 +2,11 @@
  *
  *  Copyright (C) 2009-2018, Intel Corporation
  *  All rights reserved.
- *  
+ *
  *  Redistribution and use in source and binary forms, with or without
  *  modification, are permitted provided that the following conditions
  *  are met:
- *  
+ *
  *    * Redistributions of source code must retain the above copyright
  *      notice, this list of conditions and the following disclaimer.
  *    * Redistributions in binary form must reproduce the above copyright
@@ -16,7 +16,7 @@
  *    * Neither the name of Intel Corporation nor the names of its
  *      contributors may be used to endorse or promote products derived
  *      from this software without specific prior written permission.
- *  
+ *
  *  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
  *  "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
  *  LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
@@ -29,9 +29,9 @@
  *  LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY
  *  WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  *  POSSIBILITY OF SUCH DAMAGE.
- *  
+ *
  *  *********************************************************************
- *  
+ *
  *  PLEASE NOTE: This file is a downstream copy of a file maintained in
  *  a repository at cilkplus.org. Changes made to this file that are not
  *  submitted through the contribution process detailed at
@@ -40,7 +40,7 @@
  *  GNU compiler collection or posted to the git repository at
  *  https://bitbucket.org/intelcilkruntime/intel-cilk-runtime are
  *  not tracked.
- *  
+ *
  *  We welcome your contributions to this open source project. Thank you
  *  for your assistance in helping us improve Cilk Plus.
  */
@@ -71,9 +71,9 @@
  *
  *  @ingroup Reducers
  *
- *  You should be familiar with @ref pagereducers "Intel(R) Cilk(TM) Plus reducers",
- *  described in file `reducers.md`, and particularly with @ref reducers_using,
- *  before trying to use the information in this file.
+ *  You should be familiar with @ref pagereducers "Intel(R) Cilk(TM) Plus
+ * reducers", described in file `reducers.md`, and particularly with @ref
+ * reducers_using, before trying to use the information in this file.
  *
  *  @section redminmax_usage Usage Examples
  *
@@ -203,7 +203,8 @@
  *      reducer(move_in(std::pair<Index, Type>& variable))
  *      reducer(const std::pair<Index, Type>& pair, const Compare& compare)
  *      reducer(const Index& index, const Type& value, const Compare& compare)
- *      reducer(move_in(std::pair<Index, Type>& variable), const Compare& compare)
+ *      reducer(move_in(std::pair<Index, Type>& variable), const Compare&
+ * compare)
  *
  *  See the explanation of the following two constructors in
  *  @ref redminmax_index_vector.
@@ -249,7 +250,8 @@
  *  real value, them `reducer->is_set()` will return `true` and
  *  `reducer.get_value()` will return the value.
  *
- *  @subsubsection redminmax_index_vector Special Issues with Min/Max Index Reducers
+ *  @subsubsection redminmax_index_vector Special Issues with Min/Max Index
+ * Reducers
  *
  *  The index portion of the computed index/value pair will be wrong in the
  *  following special case:
@@ -361,15 +363,15 @@
  *
  *  Most Intel Cilk Plus library reducers provide binary compatibility between
  *  `reducer_KIND` reducers compiled with Intel Cilk Plus library version 0.9
- *  (distributed with Intel® C++ Composer XE version 13.0 and earlier) and the 
+ *  (distributed with Intel® C++ Composer XE version 13.0 and earlier) and the
  *  ame reducers compiled with Intel Cilk Plus library version 1.0 and later.
  *
  *  Because of implementation changes that were needed to allow vectorization
  *  of loops containing min/max reducers, this binary compatibility is _not_
- *  generally available for min/max reducers, either between Intel Cilk Plus library
- *  versions 0.9 and 1.0, or between versions 1.0 and 1.1. (Code compiled with
- *  different versions can be linked together safely, but min/max reducers in
- *  different library versions are in different namespaces, so reducer objects
+ *  generally available for min/max reducers, either between Intel Cilk Plus
+ * library versions 0.9 and 1.0, or between versions 1.0 and 1.1. (Code compiled
+ * with different versions can be linked together safely, but min/max reducers
+ * in different library versions are in different namespaces, so reducer objects
  *  cannot be shared between them.)
  *
  *  If this is an inconvenience, the simplest solution is just to recompile any
@@ -498,8 +500,8 @@ namespace cilk_lib_1_1 {
 namespace min_max_internal {
 
 using ::cilk::internal::binary_functor;
-using ::cilk::internal::typed_indirect_binary_function;
 using ::cilk::internal::class_is_empty;
+using ::cilk::internal::typed_indirect_binary_function;
 
 /** @defgroup ReducersMinMaxIsSet The "is_set optimization"
  *
@@ -562,10 +564,7 @@ using ::cilk::internal::class_is_empty;
  *
  *  @ingroup ReducersMinMaxIsSet
  */
-template <  typename Type,
-            typename Compare >
-struct do_is_set_optimization
-{
+template <typename Type, typename Compare> struct do_is_set_optimization {
     /// `True` if the is_set optimization should be applied to min/max reducers
     /// with this value type and comparator; `false` otherwise.
     static const bool value = false;
@@ -573,15 +572,12 @@ struct do_is_set_optimization
 
 #ifndef CILK_LIBRARY_0_9_REDUCER_MINMAX
 /// @cond
-template <typename Type>
-struct do_is_set_optimization<Type, std::less<Type> >
-{
+template <typename Type> struct do_is_set_optimization<Type, std::less<Type>> {
     /// True in the special case where optimization is possible.
     static const bool value = std::numeric_limits<Type>::is_specialized;
 };
 /// @endcond
 #endif
-
 
 /** Gets the identity value when using the ReducersMinMaxIsSet
  *  "is_set optimization".
@@ -606,47 +602,48 @@ struct do_is_set_optimization<Type, std::less<Type> >
  *  @ingroup ReducersMinMaxIsSet
  *  @see @ref view_content
  */
-template <  typename    Type,
-            typename    Compare,
-            bool        ForMax,
-            bool        = std::numeric_limits<Type>::is_specialized,
-            bool        = std::numeric_limits<Type>::has_infinity >
+template <typename Type, typename Compare, bool ForMax,
+          bool = std::numeric_limits<Type>::is_specialized,
+          bool = std::numeric_limits<Type>::has_infinity>
 struct identity_value {
     /// Assign the identity value to the reference parameter.
-    static void set_identity(Type&) {}
+    static void set_identity(Type &) {}
 };
 
 /// @cond
 template <typename Type>
 struct identity_value<Type, std::less<Type>, true, true, true> {
     /// Floating max identity is negative infinity.
-    static void set_identity(Type& id)
-    { id = -std::numeric_limits<Type>::infinity(); }
+    static void set_identity(Type &id) {
+        id = -std::numeric_limits<Type>::infinity();
+    }
 };
 
 template <typename Type>
 struct identity_value<Type, std::less<Type>, true, true, false> {
     /// Integer max identity is minimum value of type.
-    static void set_identity(Type& id)
-    { id = std::numeric_limits<Type>::min(); }
+    static void set_identity(Type &id) {
+        id = std::numeric_limits<Type>::min();
+    }
 };
 
 template <typename Type>
 struct identity_value<Type, std::less<Type>, false, true, true> {
     /// Floating min identity is positive infinity.
-    static void set_identity(Type& id)
-    { id = std::numeric_limits<Type>::infinity(); }
+    static void set_identity(Type &id) {
+        id = std::numeric_limits<Type>::infinity();
+    }
 };
 
 template <typename Type>
 struct identity_value<Type, std::less<Type>, false, true, false> {
     /// Integer min identity is maximum value of type.
-    static void set_identity(Type& id)
-    { id = std::numeric_limits<Type>::max(); }
+    static void set_identity(Type &id) {
+        id = std::numeric_limits<Type>::max();
+    }
 };
 
 /// @endcond
-
 
 /** Adapter class to reverse the arguments of a predicate.
  *
@@ -682,16 +679,17 @@ template <typename Predicate,
           typename Argument = typename Predicate::first_argument_type>
 class reverse_predicate : private binary_functor<Predicate>::type {
     typedef typename binary_functor<Predicate>::type base;
-public:
+
+  public:
     /// Default constructor
     reverse_predicate() : base() {}
     /// Constructor with predicate object
-    reverse_predicate(const Predicate& p) : base(p) {}
+    reverse_predicate(const Predicate &p) : base(p) {}
     /// The reversed predicate operation
-    bool operator()(const Argument& x, const Argument& y) const
-        { return base::operator()(y, x); }
+    bool operator()(const Argument &x, const Argument &y) const {
+        return base::operator()(y, x);
+    }
 };
-
 
 /** Class to represent the comparator for a min/max view class.
  *
@@ -703,8 +701,8 @@ public:
  *      in the monoid, and just call it from the views.
  *  2.  In ReducersMinMaxBinComp "binary compatibility mode", views for
  *      reducers with a stateless comparator must have the same content as in
- *      Intel Cilk Plus library 0.9 - that is, they must contain only `value` and
- *      `is_set` data members.
+ *      Intel Cilk Plus library 0.9 - that is, they must contain only `value`
+ * and `is_set` data members.
  *
  *  To achieve the first objective, we use the
  *  @ref internal::typed_indirect_binary_function class defined in
@@ -731,22 +729,21 @@ public:
  *  @ingroup ReducersMinMax
  */
 template <typename Type, typename Compare>
-class comparator_base : private typed_indirect_binary_function<Compare, Type, Type, bool>
-{
+class comparator_base
+    : private typed_indirect_binary_function<Compare, Type, Type, bool> {
     typedef typed_indirect_binary_function<Compare, Type, Type, bool> base;
-protected:
-    comparator_base(const Compare* f) : base(f) {}  ///< Constructor.
+
+  protected:
+    comparator_base(const Compare *f) : base(f) {} ///< Constructor.
 
     /// Comparison function.
-    bool compare(const Type& a, const Type& b) const
-    {
+    bool compare(const Type &a, const Type &b) const {
         return base::operator()(a, b);
     }
 
     /// Get the comparator pointer.
-    const Compare* compare_pointer() const { return base::pointer(); }
+    const Compare *compare_pointer() const { return base::pointer(); }
 };
-
 
 /** @defgroup ReducersMinMaxViewContent Content classes for min/max views
  *
@@ -819,18 +816,15 @@ protected:
  *  @ingroup ReducersMinMaxViewContent
  *  @ingroup ReducersMinMax
  */
-template < typename Type
-         , typename Compare
-         , bool     ForMax
-         , bool     = do_is_set_optimization<Type, Compare>::value
-         >
+template <typename Type, typename Compare, bool ForMax,
+          bool = do_is_set_optimization<Type, Compare>::value>
 class view_content {
-protected:
-/// @cond
-    Type    m_value;
-    bool    m_is_set;
-/// @endcond
-public:
+  protected:
+    /// @cond
+    Type m_value;
+    bool m_is_set;
+    /// @endcond
+  public:
     /// The value type of the view.
     typedef Type value_type;
 
@@ -842,45 +836,38 @@ public:
     view_content() : m_value(), m_is_set(false) {}
 
     /// Construct with a defined value.
-    view_content(const value_type& value) : m_value(value), m_is_set(true) {}
+    view_content(const value_type &value) : m_value(value), m_is_set(true) {}
 
     /// Gets the value.
     value_type value() const { return m_value; }
 
     /// Sets the value.
-    void set_value(const value_type& value)
-    {
-        m_value = value;
-    }
+    void set_value(const value_type &value) { m_value = value; }
 
     /// Sets the is_set flag.
-    void set_is_set()
-    {
-        m_is_set = true;
-    }
+    void set_is_set() { m_is_set = true; }
 
     /// Sets the index part of the value (which is meaningless for non-index
-    ///reducers, but required for view_base).
-    void set_default_index(const value_type&) {}
+    /// reducers, but required for view_base).
+    void set_default_index(const value_type &) {}
 
     /// Gets the comparison value (which, for view_content, is the same as the
     /// value).
-    const comp_value_type& comp_value() const { return m_value; }
+    const comp_value_type &comp_value() const { return m_value; }
 
     /// Given an arbitrary value, gets the corresponding comparison value
     /// (which, for view_content, is the same as the value).
-    static const comp_value_type& comp_value(const value_type& value)
-    {
+    static const comp_value_type &comp_value(const value_type &value) {
         return value;
     }
 
     /// Gets a const reference to value part of the value (which is the same as
     /// the value for view_content).
-    const Type& get_reference() const { return m_value; }
+    const Type &get_reference() const { return m_value; }
 
     /// Gets a const reference to the index part of the value (which is
     /// meaningless for non-index reducers, but required for view_base.
-    const Type& get_index_reference() const { return m_value; }
+    const Type &get_index_reference() const { return m_value; }
 
     /// Tests if the value is defined.
     bool is_set() const { return m_is_set; }
@@ -894,29 +881,26 @@ public:
 /*  This is the specialization of the view_content class for cases where
  *  the is_set optimization is applicable).
  */
-template < typename Type
-         , typename Compare
-         , bool     ForMax
-         >
-class view_content<Type, Compare, ForMax, true> :
-    public view_content<Type, Compare, ForMax, false>
-{
+template <typename Type, typename Compare, bool ForMax>
+class view_content<Type, Compare, ForMax, true>
+    : public view_content<Type, Compare, ForMax, false> {
     typedef view_content<Type, Compare, ForMax, false> base;
     typedef identity_value<Type, Compare, ForMax> Identity;
 
-public:
-    typedef typename base::value_type value_type;;
-    typedef typename base::comp_value_type comp_value_type;;
+  public:
+    typedef typename base::value_type value_type;
+    ;
+    typedef typename base::comp_value_type comp_value_type;
+    ;
 
     view_content() : base() { Identity::set_identity(this->m_value); }
 
-    view_content(const value_type& value) : base(value) {}
+    view_content(const value_type &value) : base(value) {}
 
     bool has_value() const { return true; }
 };
 
 /// @endcond
-
 
 /** Content class for op_min_index_view and op_max_index_view.
  *
@@ -940,20 +924,16 @@ public:
  *  @ingroup ReducersMinMaxViewContent
  *  @ingroup ReducersMinMax
  */
-template < typename Index
-         , typename Type
-         , typename Compare
-         , bool     ForMax
-         , bool     = do_is_set_optimization<Type, Compare>::value
-         >
+template <typename Index, typename Type, typename Compare, bool ForMax,
+          bool = do_is_set_optimization<Type, Compare>::value>
 class index_view_content {
-protected:
-/// @cond
-    Index   m_index;
-    Type    m_value;
-    bool    m_is_set;
-/// @endcond
-public:
+  protected:
+    /// @cond
+    Index m_index;
+    Type m_value;
+    bool m_is_set;
+    /// @endcond
+  public:
     /// The value type of the view (which is an <index, value> pair for
     /// index_view_content).
     typedef std::pair<Index, Type> value_type;
@@ -966,54 +946,48 @@ public:
     index_view_content() : m_index(), m_value(), m_is_set(false) {}
 
     /// Construct with an index/value pair.
-    index_view_content(const value_type& value) :
-        m_index(value.first), m_value(value.second), m_is_set(true) {}
+    index_view_content(const value_type &value)
+        : m_index(value.first), m_value(value.second), m_is_set(true) {}
 
     /// Construct with an index and a value.
-    index_view_content(const Index& index, const Type& value) :
-        m_index(index), m_value(value), m_is_set(true) {}
+    index_view_content(const Index &index, const Type &value)
+        : m_index(index), m_value(value), m_is_set(true) {}
 
     /// Construct with just an index.
-    index_view_content(const Index& index) :
-        m_index(index), m_value(), m_is_set(false) {}
+    index_view_content(const Index &index)
+        : m_index(index), m_value(), m_is_set(false) {}
 
     /// Gets the value.
     value_type value() const { return value_type(m_index, m_value); }
 
     /// Sets the value.
-    void set_value(const value_type& value)
-    {
+    void set_value(const value_type &value) {
         m_index = value.first;
         m_value = value.second;
     }
 
     /// Sets the is_set flag.
-    void set_is_set()
-    {
-        m_is_set = true;
-    }
+    void set_is_set() { m_is_set = true; }
 
     /// Sets the (initial) index, without marking the view as set.
-    void set_default_index(const Index& index)
-    {
-        m_index = index;
-    }
+    void set_default_index(const Index &index) { m_index = index; }
 
     /// Gets the comparison value (which, for index_view_content, is the value
     /// component of the index/value pair).
-    const comp_value_type& comp_value() const { return m_value; }
+    const comp_value_type &comp_value() const { return m_value; }
 
     /// Given an arbitrary value (i.e., index/value pair), gets the
     /// corresponding comparison value (which, for index_view_content, is the
     /// value component of the index/value pair).
-    static const comp_value_type& comp_value(const value_type& value)
-        { return value.second; }
+    static const comp_value_type &comp_value(const value_type &value) {
+        return value.second;
+    }
 
     /// Gets a const reference to the value part of the value.
-    const Type& get_reference() const { return m_value; }
+    const Type &get_reference() const { return m_value; }
 
     /// Gets a const reference to the index part of the value.
-    const Index& get_index_reference() const { return m_index; }
+    const Index &get_index_reference() const { return m_index; }
 
     /// Tests if the value is defined.
     bool is_set() const { return m_is_set; }
@@ -1022,34 +996,31 @@ public:
     bool has_value() const { return is_set(); }
 };
 
-
 /// @cond
 
 /*  This is the specialization of the index_view_content class for cases where
  *  the is_set optimization is applicable).
  */
-template < typename Index
-         , typename Type
-         , typename Compare
-         , bool     ForMax
-         >
-class index_view_content<Index, Type, Compare, ForMax, true> :
-    public index_view_content<Index, Type, Compare, ForMax, false>
-{
+template <typename Index, typename Type, typename Compare, bool ForMax>
+class index_view_content<Index, Type, Compare, ForMax, true>
+    : public index_view_content<Index, Type, Compare, ForMax, false> {
     typedef index_view_content<Index, Type, Compare, ForMax, false> base;
     typedef identity_value<Type, Compare, ForMax> Identity;
-public:
-    typedef typename base::value_type value_type;;
-    typedef typename base::comp_value_type comp_value_type;;
+
+  public:
+    typedef typename base::value_type value_type;
+    ;
+    typedef typename base::comp_value_type comp_value_type;
+    ;
 
     index_view_content() : base() { Identity::set_identity(this->m_value); }
 
-    index_view_content(const value_type& value) : base(value) {}
+    index_view_content(const value_type &value) : base(value) {}
 
-    index_view_content(const Index& index, const Type& value) :
-        base(index, value) {}
+    index_view_content(const Index &index, const Type &value)
+        : base(index, value) {}
 
-    index_view_content(const Index& index) : base() {
+    index_view_content(const Index &index) : base() {
         Identity::set_identity(this->m_value);
         this->m_index = index;
     }
@@ -1060,17 +1031,15 @@ public:
 
 /// @endcond
 
-
 template <typename View> class rhs_proxy;
 
 /** Creates an rhs_proxy.
  */
 template <typename View>
-inline rhs_proxy<View>
-make_proxy(const typename View::value_type& value, const View& view);
+inline rhs_proxy<View> make_proxy(const typename View::value_type &value,
+                                  const View &view);
 
 template <typename Content, typename Less, typename Compare> class view_base;
-
 
 /** Class to represent the right-hand side of
  *  `*reducer = {min|max}_of(*reducer, value)`.
@@ -1094,61 +1063,53 @@ template <typename Content, typename Less, typename Compare> class view_base;
  *
  *  @ingroup ReducersMinMax
  */
-template <typename View>
-class rhs_proxy {
-    typedef typename View::less_type                less_type;
-    typedef typename View::compare_type             compare_type;
-    typedef typename View::value_type               value_type;
-    typedef typename View::content_type             content_type;
-    typedef typename content_type::comp_value_type  comp_value_type;
+template <typename View> class rhs_proxy {
+    typedef typename View::less_type less_type;
+    typedef typename View::compare_type compare_type;
+    typedef typename View::value_type value_type;
+    typedef typename View::content_type content_type;
+    typedef typename content_type::comp_value_type comp_value_type;
 
     friend class view_base<content_type, less_type, compare_type>;
-    friend rhs_proxy make_proxy<View>(
-        const typename View::value_type& value,
-        const View& view);
+    friend rhs_proxy make_proxy<View>(const typename View::value_type &value,
+                                      const View &view);
 
-    typed_indirect_binary_function<
-        compare_type, comp_value_type, comp_value_type, bool>
-                                        m_comp;
-    const View*                         m_view;
-    value_type                          m_value;
+    typed_indirect_binary_function<compare_type, comp_value_type,
+                                   comp_value_type, bool>
+        m_comp;
+    const View *m_view;
+    value_type m_value;
 
-    rhs_proxy& operator=(const rhs_proxy&); // Disable assignment operator
-    rhs_proxy();                            // Disable default constructor
+    rhs_proxy &operator=(const rhs_proxy &); // Disable assignment operator
+    rhs_proxy();                             // Disable default constructor
 
     // Constructor (called from view_base::make_proxy).
-    rhs_proxy(const View* view,
-              const value_type& value,
-              const compare_type* compare) :
-        m_view(view), m_value(value), m_comp(compare) {}
+    rhs_proxy(const View *view, const value_type &value,
+              const compare_type *compare)
+        : m_view(view), m_value(value), m_comp(compare) {}
 
     // Checks matching view, then return value (called from view_base::assign).
-    value_type value(const typename View::base* view) const
-    {
+    value_type value(const typename View::base *view) const {
         __CILKRTS_ASSERT(view == m_view);
         return m_value;
     }
 
-public:
-
+  public:
     /** Supports max_of(max_of(view, value), value) and the like.
      */
-    rhs_proxy calc(const value_type& x) const
-    {
-        return rhs_proxy(
-            m_view,
-            m_comp( content_type::comp_value(m_value),
-                    content_type::comp_value(x)
-                  ) ? x : m_value,
-            m_comp.pointer());
+    rhs_proxy calc(const value_type &x) const {
+        return rhs_proxy(m_view,
+                         m_comp(content_type::comp_value(m_value),
+                                content_type::comp_value(x))
+                             ? x
+                             : m_value,
+                         m_comp.pointer());
     }
 };
 
-
 template <typename View>
-inline rhs_proxy<View>
-make_proxy(const typename View::value_type& value, const View& view)
-{
+inline rhs_proxy<View> make_proxy(const typename View::value_type &value,
+                                  const View &view) {
     return rhs_proxy<View>(&view, value, view.compare_pointer());
 }
 
@@ -1195,50 +1156,47 @@ class view_base :
     // comparator_base comes first to ensure that it will get empty base class
     // treatment
     private comparator_base<typename Content::comp_value_type, Compare>,
-    private Content
-{
+    private Content {
     typedef comparator_base<typename Content::comp_value_type, Compare> base;
     using base::compare;
-    using Content::value;
-    using Content::set_value;
+    using Content::comp_value;
     using Content::has_value;
     using Content::set_is_set;
-    using Content::comp_value;
+    using Content::set_value;
+    using Content::value;
     typedef Content content_type;
 
     template <typename View> friend class rhs_proxy;
     template <typename View>
-    friend rhs_proxy<View> make_proxy(const typename View::value_type& value, const View& view);
+    friend rhs_proxy<View> make_proxy(const typename View::value_type &value,
+                                      const View &view);
 
-public:
-
+  public:
     /** @name Monoid support.
      */
     //@{
 
     /** Value type. Required by @ref monoid_with_view.
      */
-    typedef typename Content::value_type    value_type;
+    typedef typename Content::value_type value_type;
 
     /** The type of the comparator specified by the user, that defines the
      *  ordering on @a Type. Required by min_max::monoid_base.
      */
-    typedef Less                            less_type;
+    typedef Less less_type;
 
     /** The type of the comparator actually used by the view. Required by
      *  min_max::monoid_base. (This is the same as the @ref less_type for a
      *  max reducer, or `reverse_predicate<less_type>` for a min reducer.)
      */
-    typedef Compare                         compare_type;
+    typedef Compare compare_type;
 
     /** Reduces two views. Required by @ref monoid_with_view.
      */
-    void reduce(view_base* other)
-    {
-        if (    other->is_set() &&
-                (   !this->is_set() ||
-                    compare(this->comp_value(), other->comp_value()) ) )
-        {
+    void reduce(view_base *other) {
+        if (other->is_set() &&
+            (!this->is_set() ||
+             compare(this->comp_value(), other->comp_value()))) {
             this->set_value(other->value());
             this->set_is_set();
         }
@@ -1248,39 +1206,41 @@ public:
 
     /** Default constructor. Initializes to identity value.
      */
-    explicit view_base(const compare_type* compare) :
-        base(compare), Content() {}
+    explicit view_base(const compare_type *compare)
+        : base(compare), Content() {}
 
     /** Value constructor.
      */
     template <typename T1>
-    view_base(const T1& x1, const compare_type* compare) :
-        base(compare), Content(x1) {}
+    view_base(const T1 &x1, const compare_type *compare)
+        : base(compare), Content(x1) {}
 
     /** Value constructor.
      */
     template <typename T1, typename T2>
-    view_base(const T1& x1, const T2& x2, const compare_type* compare) :
-        base(compare), Content(x1, x2) {}
-
+    view_base(const T1 &x1, const T2 &x2, const compare_type *compare)
+        : base(compare), Content(x1, x2) {}
 
     /** Move-in constructor.
      */
-    explicit view_base(move_in_wrapper<value_type> w, const compare_type* compare) :
-        base(compare), Content(w.value()) {}
+    explicit view_base(move_in_wrapper<value_type> w,
+                       const compare_type *compare)
+        : base(compare), Content(w.value()) {}
 
     /** @name Reducer support.
      */
     //@{
 
-    void                view_move_in(value_type& v)
-                        { set_value(v); set_is_set();}
-    void                view_move_out(value_type& v)
-                        { v = value(); }
-    void                view_set_value(const value_type& v)
-                        { set_value(v); set_is_set(); }
-    value_type          view_get_value() const
-                        { return value(); }
+    void view_move_in(value_type &v) {
+        set_value(v);
+        set_is_set();
+    }
+    void view_move_out(value_type &v) { v = value(); }
+    void view_set_value(const value_type &v) {
+        set_value(v);
+        set_is_set();
+    }
+    value_type view_get_value() const { return value(); }
     //                  view_get_reference()                NOT SUPPORTED
 
     //@}
@@ -1305,13 +1265,12 @@ public:
      */
     using Content::get_index_reference;
 
-protected:
-
+  protected:
     /** Updates the min/max value.
      */
-    void calc(const value_type& x)
-    {
-        if (!has_value() || compare(comp_value(), comp_value(x))) set_value(x);
+    void calc(const value_type &x) {
+        if (!has_value() || compare(comp_value(), comp_value(x)))
+            set_value(x);
         set_is_set();
     }
 
@@ -1320,14 +1279,10 @@ protected:
      *
      *  @see rhs_proxy
      */
-    template <typename View>
-    void assign(const rhs_proxy<View>& rhs)
-    {
+    template <typename View> void assign(const rhs_proxy<View> &rhs) {
         calc(rhs.value(this));
     }
-
 };
-
 
 /** Base class for min and max monoid classes.
  *
@@ -1351,17 +1306,15 @@ protected:
  *  @ingroup ReducersMinMax
  */
 template <typename View, bool Align = false>
-class monoid_base : public monoid_with_view<View, Align>
-{
-    typedef typename View::compare_type   compare_type;
-    typedef typename View::less_type      less_type;
+class monoid_base : public monoid_with_view<View, Align> {
+    typedef typename View::compare_type compare_type;
+    typedef typename View::less_type less_type;
 
-    const compare_type                    m_compare;
+    const compare_type m_compare;
 
-    const compare_type* compare_pointer() const { return &m_compare; }
+    const compare_type *compare_pointer() const { return &m_compare; }
 
-public:
-
+  public:
     /** Default constructor uses default comparator.
      */
     monoid_base() : m_compare() {}
@@ -1370,7 +1323,7 @@ public:
      *
      *  @param  compare The comparator to use.
      */
-    monoid_base(const compare_type& compare) : m_compare(compare) {}
+    monoid_base(const compare_type &compare) : m_compare(compare) {}
 
     /** Creates an identity view.
      *
@@ -1379,7 +1332,7 @@ public:
      *  @param v    The address of the uninitialized memory in which the view
      *  will be constructed.
      */
-    void identity(View *v) const { ::new((void*) v) View(compare_pointer()); }
+    void identity(View *v) const { ::new ((void *)v) View(compare_pointer()); }
 
     /** @name construct functions
      *
@@ -1389,57 +1342,51 @@ public:
     //@{
 
     template <typename Monoid>
-    static void construct(Monoid* monoid, View* view)
-    {
-        provisional_guard<Monoid> mg( new((void*) monoid) Monoid );
-        mg.confirm_if( new((void*) view) View(monoid->compare_pointer()) );
+    static void construct(Monoid *monoid, View *view) {
+        provisional_guard<Monoid> mg(new ((void *)monoid) Monoid);
+        mg.confirm_if(new ((void *)view) View(monoid->compare_pointer()));
     }
 
     template <typename Monoid, typename T1>
-    static void construct(Monoid* monoid, View* view, const T1& x1)
-    {
-        provisional_guard<Monoid> mg( new((void*) monoid) Monoid );
-        mg.confirm_if( new((void*) view) View(x1, monoid->compare_pointer()) ); 
+    static void construct(Monoid *monoid, View *view, const T1 &x1) {
+        provisional_guard<Monoid> mg(new ((void *)monoid) Monoid);
+        mg.confirm_if(new ((void *)view) View(x1, monoid->compare_pointer()));
     }
 
     template <typename Monoid, typename T1, typename T2>
-    static void construct(Monoid* monoid, View* view,
-                          const T1& x1, const T2& x2)
-    {
-        provisional_guard<Monoid> mg( new((void*) monoid) Monoid );
-        mg.confirm_if( new((void*) view) View(x1, x2,
-                                              monoid->compare_pointer()) ); 
+    static void construct(Monoid *monoid, View *view, const T1 &x1,
+                          const T2 &x2) {
+        provisional_guard<Monoid> mg(new ((void *)monoid) Monoid);
+        mg.confirm_if(new ((void *)view)
+                          View(x1, x2, monoid->compare_pointer()));
     }
 
     template <typename Monoid>
-    static void construct(Monoid* monoid, View* view, const less_type& compare)
-    {
-        provisional_guard<Monoid> mg( new((void*) monoid) Monoid(compare) );
-        mg.confirm_if( new((void*) view) View(monoid->compare_pointer()) ); 
+    static void construct(Monoid *monoid, View *view,
+                          const less_type &compare) {
+        provisional_guard<Monoid> mg(new ((void *)monoid) Monoid(compare));
+        mg.confirm_if(new ((void *)view) View(monoid->compare_pointer()));
     }
 
     template <typename Monoid, typename T1>
-    static void construct(Monoid* monoid, View* view, const T1& x1,
-                          const less_type& compare)
-    {
-        provisional_guard<Monoid> mg( new((void*) monoid) Monoid(compare) );
-        mg.confirm_if( new((void*) view) View(x1, monoid->compare_pointer()) ); 
+    static void construct(Monoid *monoid, View *view, const T1 &x1,
+                          const less_type &compare) {
+        provisional_guard<Monoid> mg(new ((void *)monoid) Monoid(compare));
+        mg.confirm_if(new ((void *)view) View(x1, monoid->compare_pointer()));
     }
 
     template <typename Monoid, typename T1, typename T2>
-    static void construct(Monoid* monoid, View* view,
-                          const T1& x1, const T2& x2, const less_type& compare)
-    {
-        provisional_guard<Monoid> mg( new((void*) monoid) Monoid(compare) );
-        mg.confirm_if( new((void*) view) View(x1, x2,
-                                              monoid->compare_pointer()) ); 
+    static void construct(Monoid *monoid, View *view, const T1 &x1,
+                          const T2 &x2, const less_type &compare) {
+        provisional_guard<Monoid> mg(new ((void *)monoid) Monoid(compare));
+        mg.confirm_if(new ((void *)view)
+                          View(x1, x2, monoid->compare_pointer()));
     }
 
     //@}
 };
 
-} //namespace min_max_internal
-
+} // namespace min_max_internal
 
 /** @defgroup ReducersMinMaxMaxValue Maximum reducers (value only)
  *
@@ -1479,20 +1426,16 @@ public:
  */
 template <typename Type, typename Compare>
 class op_max_view : public min_max_internal::view_base<
-    min_max_internal::view_content<Type, Compare, true>,
-    Compare,
-    Compare>
-{
+                        min_max_internal::view_content<Type, Compare, true>,
+                        Compare, Compare> {
     typedef min_max_internal::view_base<
-        min_max_internal::view_content<Type, Compare, true>,
-        Compare,
-        Compare> base;
-    using base::calc;
+        min_max_internal::view_content<Type, Compare, true>, Compare, Compare>
+        base;
     using base::assign;
+    using base::calc;
     friend class min_max_internal::rhs_proxy<op_max_view>;
 
-public:
-
+  public:
     /** @name Constructors.
      *
      *  All op_max_view constructors simply pass their arguments on to the
@@ -1500,11 +1443,10 @@ public:
      */
     //@{
 
-    template <typename T1>
-    op_max_view(const T1& x1) : base(x1) {}
+    template <typename T1> op_max_view(const T1 &x1) : base(x1) {}
 
     template <typename T1, typename T2>
-    op_max_view(const T1& x1, const T2& x2) : base(x1, x2) {}
+    op_max_view(const T1 &x1, const T2 &x2) : base(x1, x2) {}
 
     //@}
 
@@ -1524,7 +1466,10 @@ public:
      *  @return     A reference to the view. (Allows chaining
      *              `view.comp_max(a).comp_max(b)…`.)
      */
-    op_max_view& calc_max(const Type& x) { calc(x); return *this; }
+    op_max_view &calc_max(const Type &x) {
+        calc(x);
+        return *this;
+    }
 
     /** Assigns the result of a `max_of(view, value)` expression to the view.
      *
@@ -1535,12 +1480,14 @@ public:
      *
      *  @see min_max_internal::view_base::rhs_proxy
      */
-    op_max_view& operator=(const min_max_internal::rhs_proxy<op_max_view>& rhs)
-        { assign(rhs); return *this; }
+    op_max_view &
+    operator=(const min_max_internal::rhs_proxy<op_max_view> &rhs) {
+        assign(rhs);
+        return *this;
+    }
 
     //@}
 };
-
 
 /** Computes the maximum of the value in an op_max_view and another value.
  *
@@ -1553,17 +1500,15 @@ public:
  *  @see min_max_internal::rhs_proxy
  */
 template <typename Type, typename Compare>
-inline min_max_internal::rhs_proxy< op_max_view<Type, Compare> >
-max_of(const op_max_view<Type, Compare>& view, const Type& value)
-{
+inline min_max_internal::rhs_proxy<op_max_view<Type, Compare>>
+max_of(const op_max_view<Type, Compare> &view, const Type &value) {
     return min_max_internal::make_proxy(value, view);
 }
 
 /// @copydoc max_of(const op_max_view<Type, Compare>&, const Type&)
 template <typename Type, typename Compare>
-inline min_max_internal::rhs_proxy< op_max_view<Type, Compare> >
-max_of(const Type& value, const op_max_view<Type, Compare>& view)
-{
+inline min_max_internal::rhs_proxy<op_max_view<Type, Compare>>
+max_of(const Type &value, const op_max_view<Type, Compare> &view) {
     return min_max_internal::make_proxy(value, view);
 }
 
@@ -1580,22 +1525,20 @@ max_of(const Type& value, const op_max_view<Type, Compare>& view)
  *  @see min_max_internal::rhs_proxy
  */
 template <typename Type, typename Compare>
-inline min_max_internal::rhs_proxy< op_max_view<Type, Compare> >
-max_of(const min_max_internal::rhs_proxy< op_max_view<Type, Compare> >& proxy,
-       const Type& value)
-{
+inline min_max_internal::rhs_proxy<op_max_view<Type, Compare>>
+max_of(const min_max_internal::rhs_proxy<op_max_view<Type, Compare>> &proxy,
+       const Type &value) {
     return proxy.calc(value);
 }
 
-/// @copydoc max_of(const min_max_internal::rhs_proxy< op_max_view<Type, Compare> >&, const Type&)
+/// @copydoc max_of(const min_max_internal::rhs_proxy< op_max_view<Type,
+/// Compare> >&, const Type&)
 template <typename Type, typename Compare>
-inline min_max_internal::rhs_proxy< op_max_view<Type, Compare> >
-max_of(const Type& value,
-       const min_max_internal::rhs_proxy< op_max_view<Type, Compare> >& proxy)
-{
+inline min_max_internal::rhs_proxy<op_max_view<Type, Compare>>
+max_of(const Type &value,
+       const min_max_internal::rhs_proxy<op_max_view<Type, Compare>> &proxy) {
     return proxy.calc(value);
 }
-
 
 /** Monoid class for maximum reductions. Instantiate the cilk::reducer template
  *  class with an op_max monoid to create a maximum reducer class. For example,
@@ -1606,21 +1549,20 @@ max_of(const Type& value,
  *  @see ReducersMinMax
  *  @see op_max_view
  */
-template <typename Type, typename Compare=std::less<Type>, bool Align = false>
-class op_max :
-    public min_max_internal::monoid_base<op_max_view<Type, Compare>, Align>
-{
+template <typename Type, typename Compare = std::less<Type>, bool Align = false>
+class op_max
+    : public min_max_internal::monoid_base<op_max_view<Type, Compare>, Align> {
     typedef min_max_internal::monoid_base<op_max_view<Type, Compare>, Align>
-            base;
-public:
+        base;
+
+  public:
     /// Construct with default comparator.
     op_max() {}
     /// Construct with specified comparator.
-    op_max(const Compare& compare) : base(compare) {}
+    op_max(const Compare &compare) : base(compare) {}
 };
 
 //@}
-
 
 /** @defgroup ReducersMinMaxMinValue Minimum reducers (value only)
  *
@@ -1659,20 +1601,19 @@ public:
  *  @see op_min
  */
 template <typename Type, typename Compare>
-class op_min_view : public min_max_internal::view_base<
-    min_max_internal::view_content<Type, Compare, false>,
-    Compare,
-    min_max_internal::reverse_predicate<Compare, Type> >
-{
+class op_min_view
+    : public min_max_internal::view_base<
+          min_max_internal::view_content<Type, Compare, false>, Compare,
+          min_max_internal::reverse_predicate<Compare, Type>> {
     typedef min_max_internal::view_base<
-        min_max_internal::view_content<Type, Compare, false>,
-        Compare,
-        min_max_internal::reverse_predicate<Compare, Type> > base;
-    using base::calc;
+        min_max_internal::view_content<Type, Compare, false>, Compare,
+        min_max_internal::reverse_predicate<Compare, Type>>
+        base;
     using base::assign;
+    using base::calc;
     friend class min_max_internal::rhs_proxy<op_min_view>;
 
-public:
+  public:
     /** @name Constructors.
      *
      *  All op_min_view constructors simply pass their arguments on to the
@@ -1680,11 +1621,10 @@ public:
      */
     //@{
 
-    template <typename T1>
-    op_min_view(const T1& x1) : base(x1) {}
+    template <typename T1> op_min_view(const T1 &x1) : base(x1) {}
 
     template <typename T1, typename T2>
-    op_min_view(const T1& x1, const T2& x2) : base(x1, x2) {}
+    op_min_view(const T1 &x1, const T2 &x2) : base(x1, x2) {}
 
     //@}
 
@@ -1704,7 +1644,10 @@ public:
      *  @return     A reference to the view. (Allows chaining
      *              `view.comp_min(a).comp_min(b)…`.)
      */
-    op_min_view& calc_min(const Type& x) { calc(x); return *this; }
+    op_min_view &calc_min(const Type &x) {
+        calc(x);
+        return *this;
+    }
 
     /** Assigns the result of a `min_of(view, value)` expression to the view.
      *
@@ -1715,10 +1658,12 @@ public:
      *
      *  @see min_max_internal::view_base::rhs_proxy
      */
-    op_min_view& operator=(const min_max_internal::rhs_proxy<op_min_view>& rhs)
-        { assign(rhs); return *this; }
+    op_min_view &
+    operator=(const min_max_internal::rhs_proxy<op_min_view> &rhs) {
+        assign(rhs);
+        return *this;
+    }
 };
-
 
 /** Computes the minimum of the value in a view and another value.
  *
@@ -1731,17 +1676,15 @@ public:
  *  @see min_max_internal::view_base::rhs_proxy
  */
 template <typename Type, typename Compare>
-inline min_max_internal::rhs_proxy< op_min_view<Type, Compare> >
-min_of(const op_min_view<Type, Compare>& view, const Type& value)
-{
+inline min_max_internal::rhs_proxy<op_min_view<Type, Compare>>
+min_of(const op_min_view<Type, Compare> &view, const Type &value) {
     return min_max_internal::make_proxy(value, view);
 }
 
 /// @copydoc min_of(const op_min_view<Type, Compare>&, const Type&)
 template <typename Type, typename Compare>
-inline min_max_internal::rhs_proxy< op_min_view<Type, Compare> >
-min_of(const Type& value, const op_min_view<Type, Compare>& view)
-{
+inline min_max_internal::rhs_proxy<op_min_view<Type, Compare>>
+min_of(const Type &value, const op_min_view<Type, Compare> &view) {
     return min_max_internal::make_proxy(value, view);
 }
 
@@ -1758,22 +1701,20 @@ min_of(const Type& value, const op_min_view<Type, Compare>& view)
  *  @see min_max_internal::rhs_proxy
  */
 template <typename Type, typename Compare>
-inline min_max_internal::rhs_proxy< op_min_view<Type, Compare> >
-min_of(const min_max_internal::rhs_proxy< op_min_view<Type, Compare> >& proxy,
-       const Type& value)
-{
+inline min_max_internal::rhs_proxy<op_min_view<Type, Compare>>
+min_of(const min_max_internal::rhs_proxy<op_min_view<Type, Compare>> &proxy,
+       const Type &value) {
     return proxy.calc(value);
 }
 
-/// @copydoc min_of(const min_max_internal::rhs_proxy< op_min_view<Type, Compare> >&, const Type&)
+/// @copydoc min_of(const min_max_internal::rhs_proxy< op_min_view<Type,
+/// Compare> >&, const Type&)
 template <typename Type, typename Compare>
-inline min_max_internal::rhs_proxy< op_min_view<Type, Compare> >
-min_of(const Type& value,
-       const min_max_internal::rhs_proxy< op_min_view<Type, Compare> >& proxy)
-{
+inline min_max_internal::rhs_proxy<op_min_view<Type, Compare>>
+min_of(const Type &value,
+       const min_max_internal::rhs_proxy<op_min_view<Type, Compare>> &proxy) {
     return proxy.calc(value);
 }
-
 
 /** Monoid class for minimum reductions. Instantiate the cilk::reducer template
  *  class with an op_min monoid to create a minimum reducer class. For example,
@@ -1784,18 +1725,20 @@ min_of(const Type& value,
  *  @see ReducersMinMax
  *  @see op_min_view
  */
-template <typename Type, typename Compare=std::less<Type>, bool Align = false>
-class op_min : public min_max_internal::monoid_base<op_min_view<Type, Compare>, Align> {
-    typedef min_max_internal::monoid_base<op_min_view<Type, Compare>, Align> base;
-public:
+template <typename Type, typename Compare = std::less<Type>, bool Align = false>
+class op_min
+    : public min_max_internal::monoid_base<op_min_view<Type, Compare>, Align> {
+    typedef min_max_internal::monoid_base<op_min_view<Type, Compare>, Align>
+        base;
+
+  public:
     /// Construct with default comparator.
     op_min() {}
     /// Construct with specified comparator.
-    op_min(const Compare& compare) : base(compare) {}
+    op_min(const Compare &compare) : base(compare) {}
 };
 
 //@}
-
 
 /** @defgroup ReducersMinMaxMaxIndex Maximum reducers (value and index)
  *
@@ -1855,21 +1798,20 @@ public:
  *  @see op_max_index
  */
 template <typename Index, typename Type, typename Compare>
-class op_max_index_view : public min_max_internal::view_base<
-    min_max_internal::index_view_content<Index, Type, Compare, true>,
-    Compare,
-    Compare>
-{
+class op_max_index_view
+    : public min_max_internal::view_base<
+          min_max_internal::index_view_content<Index, Type, Compare, true>,
+          Compare, Compare> {
     typedef min_max_internal::view_base<
         min_max_internal::index_view_content<Index, Type, Compare, true>,
-        Compare,
-        Compare> base;
-    using base::calc;
+        Compare, Compare>
+        base;
     using base::assign;
+    using base::calc;
     typedef std::pair<Index, Type> pair_type;
     friend class min_max_internal::rhs_proxy<op_max_index_view>;
 
-public:
+  public:
     /** @name Constructors.
      *
      *  All op_max_index_view constructors simply pass their arguments on to the
@@ -1880,19 +1822,20 @@ public:
 
     op_max_index_view() : base() {}
 
-    template <typename T1>
-    op_max_index_view(const T1& x1) : base(x1) {}
+    template <typename T1> op_max_index_view(const T1 &x1) : base(x1) {}
 
     template <typename T1, typename T2>
-    op_max_index_view(const T1& x1, const T2& x2) : base(x1, x2) {}
+    op_max_index_view(const T1 &x1, const T2 &x2) : base(x1, x2) {}
 
     template <typename T1, typename T2, typename T3>
-    op_max_index_view(const T1& x1, const T2& x2, const T3& x3) : base(x1, x2, x3) {}
+    op_max_index_view(const T1 &x1, const T2 &x2, const T3 &x3)
+        : base(x1, x2, x3) {}
 
-    op_max_index_view(const Index& i, const Type& v) : base(pair_type(i, v)) {}
+    op_max_index_view(const Index &i, const Type &v) : base(pair_type(i, v)) {}
 
-    op_max_index_view(const Index& i, const Type& v, const typename base::compare_type* c) :
-        base(pair_type(i, v), c) {}
+    op_max_index_view(const Index &i, const Type &v,
+                      const typename base::compare_type *c)
+        : base(pair_type(i, v), c) {}
 
     //@}
 
@@ -1910,8 +1853,10 @@ public:
      *  @return     A reference to the view. (Allows
      *              `view.comp_max(i, a).comp_max(j, b)…`.)
      */
-    op_max_index_view& calc_max(const Index& i, const Type& x)
-        { calc(pair_type(i, x)); return *this; }
+    op_max_index_view &calc_max(const Index &i, const Type &x) {
+        calc(pair_type(i, x));
+        return *this;
+    }
 
     /** Maximizes with an index/value pair.
      *
@@ -1927,8 +1872,10 @@ public:
      *  @return         A reference to the view. (Allows
      *                  `view.comp_max(p1).comp_max(p2)…`.)
      */
-    op_max_index_view& calc_max(const pair_type& pair)
-        { calc(pair); return *this; }
+    op_max_index_view &calc_max(const pair_type &pair) {
+        calc(pair);
+        return *this;
+    }
 
     /** Assigns the result of a `max_of(view, index, value)` expression to the
      *  view.
@@ -1940,10 +1887,12 @@ public:
      *
      *  @see min_max_internal::view_base::rhs_proxy
      */
-    op_max_index_view& operator=(const min_max_internal::rhs_proxy<op_max_index_view>& rhs)
-        { assign(rhs); return *this; }
+    op_max_index_view &
+    operator=(const min_max_internal::rhs_proxy<op_max_index_view> &rhs) {
+        assign(rhs);
+        return *this;
+    }
 };
-
 
 /** Computes the maximum of the value in a view and another value.
  *
@@ -1956,37 +1905,38 @@ public:
  *  @see min_max_internal::rhs_proxy
  */
 template <typename Index, typename Type, typename Compare>
-inline min_max_internal::rhs_proxy< op_max_index_view<Index, Type, Compare> >
-max_of(const op_max_index_view<Index, Type, Compare>& view,
-       const Index& index, const Type& value)
-{
-    return min_max_internal::make_proxy(std::pair<Index, Type>(index, value), view);
+inline min_max_internal::rhs_proxy<op_max_index_view<Index, Type, Compare>>
+max_of(const op_max_index_view<Index, Type, Compare> &view, const Index &index,
+       const Type &value) {
+    return min_max_internal::make_proxy(std::pair<Index, Type>(index, value),
+                                        view);
 }
 
-/// @copydoc max_of(const op_max_index_view<Index, Type, Compare>&, const Index&, const Type&)
+/// @copydoc max_of(const op_max_index_view<Index, Type, Compare>&, const
+/// Index&, const Type&)
 template <typename Index, typename Type, typename Compare>
-inline min_max_internal::rhs_proxy< op_max_index_view<Index, Type, Compare> >
-max_of(const Index& index, const Type& value,
-       const op_max_index_view<Index, Type, Compare>& view)
-{
-    return min_max_internal::make_proxy(std::pair<Index, Type>(index, value), view);
+inline min_max_internal::rhs_proxy<op_max_index_view<Index, Type, Compare>>
+max_of(const Index &index, const Type &value,
+       const op_max_index_view<Index, Type, Compare> &view) {
+    return min_max_internal::make_proxy(std::pair<Index, Type>(index, value),
+                                        view);
 }
 
-/// @copydoc max_of(const op_max_index_view<Index, Type, Compare>&, const Index&, const Type&)
+/// @copydoc max_of(const op_max_index_view<Index, Type, Compare>&, const
+/// Index&, const Type&)
 template <typename Index, typename Type, typename Compare>
-inline min_max_internal::rhs_proxy< op_max_index_view<Index, Type, Compare> >
-max_of(const op_max_index_view<Index, Type, Compare>& view,
-       const std::pair<Index, Type>& pair)
-{
+inline min_max_internal::rhs_proxy<op_max_index_view<Index, Type, Compare>>
+max_of(const op_max_index_view<Index, Type, Compare> &view,
+       const std::pair<Index, Type> &pair) {
     return min_max_internal::make_proxy(pair, view);
 }
 
-/// @copydoc max_of(const op_max_index_view<Index, Type, Compare>&, const Index&, const Type&)
+/// @copydoc max_of(const op_max_index_view<Index, Type, Compare>&, const
+/// Index&, const Type&)
 template <typename Index, typename Type, typename Compare>
-inline min_max_internal::rhs_proxy< op_max_index_view<Index, Type, Compare> >
-max_of(const std::pair<Index, Type>& pair,
-       const op_max_index_view<Index, Type, Compare>& view)
-{
+inline min_max_internal::rhs_proxy<op_max_index_view<Index, Type, Compare>>
+max_of(const std::pair<Index, Type> &pair,
+       const op_max_index_view<Index, Type, Compare> &view) {
     return min_max_internal::make_proxy(pair, view);
 }
 
@@ -2003,40 +1953,46 @@ max_of(const std::pair<Index, Type>& pair,
  *  @see min_max_internal::rhs_proxy
  */
 template <typename Index, typename Type, typename Compare>
-inline min_max_internal::rhs_proxy< op_max_index_view<Index, Type, Compare> >
-max_of(const min_max_internal::rhs_proxy< op_max_index_view<Index, Type, Compare> >& proxy,
-       const Index& index, const Type& value)
-{
+inline min_max_internal::rhs_proxy<op_max_index_view<Index, Type, Compare>>
+max_of(
+    const min_max_internal::rhs_proxy<op_max_index_view<Index, Type, Compare>>
+        &proxy,
+    const Index &index, const Type &value) {
     return proxy.calc(std::pair<Index, Type>(index, value));
 }
 
-/// @copydoc max_of(const min_max_internal::rhs_proxy< op_max_index_view<Index, Type, Compare> >&, const Index&, const Type&)
+/// @copydoc max_of(const min_max_internal::rhs_proxy< op_max_index_view<Index,
+/// Type, Compare> >&, const Index&, const Type&)
 template <typename Index, typename Type, typename Compare>
-inline min_max_internal::rhs_proxy< op_max_index_view<Index, Type, Compare> >
-max_of(const Index& index, const Type& value,
-       const min_max_internal::rhs_proxy< op_max_index_view<Index, Type, Compare> >& proxy)
-{
+inline min_max_internal::rhs_proxy<op_max_index_view<Index, Type, Compare>>
+max_of(
+    const Index &index, const Type &value,
+    const min_max_internal::rhs_proxy<op_max_index_view<Index, Type, Compare>>
+        &proxy) {
     return proxy.calc(std::pair<Index, Type>(index, value));
 }
 
-/// @copydoc max_of(const min_max_internal::rhs_proxy< op_max_index_view<Index, Type, Compare> >&, const Index&, const Type&)
+/// @copydoc max_of(const min_max_internal::rhs_proxy< op_max_index_view<Index,
+/// Type, Compare> >&, const Index&, const Type&)
 template <typename Index, typename Type, typename Compare>
-inline min_max_internal::rhs_proxy< op_max_index_view<Index, Type, Compare> >
-max_of(const min_max_internal::rhs_proxy< op_max_index_view<Index, Type, Compare> >& proxy,
-       const std::pair<Index, Type>& pair)
-{
+inline min_max_internal::rhs_proxy<op_max_index_view<Index, Type, Compare>>
+max_of(
+    const min_max_internal::rhs_proxy<op_max_index_view<Index, Type, Compare>>
+        &proxy,
+    const std::pair<Index, Type> &pair) {
     return proxy.calc(pair);
 }
 
-/// @copydoc max_of(const min_max_internal::rhs_proxy< op_max_index_view<Index, Type, Compare> >&, const Index&, const Type&)
+/// @copydoc max_of(const min_max_internal::rhs_proxy< op_max_index_view<Index,
+/// Type, Compare> >&, const Index&, const Type&)
 template <typename Index, typename Type, typename Compare>
-inline min_max_internal::rhs_proxy< op_max_index_view<Index, Type, Compare> >
-max_of(const std::pair<Index, Type>& pair,
-       const min_max_internal::rhs_proxy< op_max_index_view<Index, Type, Compare> >& proxy)
-{
+inline min_max_internal::rhs_proxy<op_max_index_view<Index, Type, Compare>>
+max_of(
+    const std::pair<Index, Type> &pair,
+    const min_max_internal::rhs_proxy<op_max_index_view<Index, Type, Compare>>
+        &proxy) {
     return proxy.calc(pair);
 }
-
 
 /** Monoid class for maximum reductions with index. Instantiate the
  *  cilk::reducer template class with an op_max_index monoid to create a
@@ -2048,25 +2004,22 @@ max_of(const std::pair<Index, Type>& pair,
  *  @see ReducersMinMax
  *  @see op_max_index_view
  */
-template < typename Index
-         , typename Type
-         , typename Compare=std::less<Type>
-         , bool     Align = false
-         >
-class op_max_index : public min_max_internal::monoid_base<op_max_index_view<Index, Type, Compare>, Align>
-{
+template <typename Index, typename Type, typename Compare = std::less<Type>,
+          bool Align = false>
+class op_max_index : public min_max_internal::monoid_base<
+                         op_max_index_view<Index, Type, Compare>, Align> {
     typedef min_max_internal::monoid_base<
-        op_max_index_view<Index, Type, Compare>, Align> base;
-public:
+        op_max_index_view<Index, Type, Compare>, Align>
+        base;
+
+  public:
     /// Construct with default comparator.
     op_max_index() {}
     /// Construct with specified comparator.
-    op_max_index(const Compare& compare) : base(compare) {}
+    op_max_index(const Compare &compare) : base(compare) {}
 };
 
 //@}
-
-
 
 /** @defgroup ReducersMinMaxMinIndex Minimum reducers (value and index)
  *
@@ -2126,21 +2079,20 @@ public:
  *  @see op_min_index
  */
 template <typename Index, typename Type, typename Compare>
-class op_min_index_view : public min_max_internal::view_base<
-    min_max_internal::index_view_content<Index, Type, Compare, false>,
-    Compare,
-    min_max_internal::reverse_predicate<Compare, Type> >
-{
+class op_min_index_view
+    : public min_max_internal::view_base<
+          min_max_internal::index_view_content<Index, Type, Compare, false>,
+          Compare, min_max_internal::reverse_predicate<Compare, Type>> {
     typedef min_max_internal::view_base<
         min_max_internal::index_view_content<Index, Type, Compare, false>,
-        Compare,
-        min_max_internal::reverse_predicate<Compare, Type> > base;
-    using base::calc;
+        Compare, min_max_internal::reverse_predicate<Compare, Type>>
+        base;
     using base::assign;
+    using base::calc;
     typedef std::pair<Index, Type> pair_type;
     friend class min_max_internal::rhs_proxy<op_min_index_view>;
 
-public:
+  public:
     /** @name Constructors.
      *
      *  All op_min_index_view constructors simply pass their arguments on to the
@@ -2151,19 +2103,20 @@ public:
 
     op_min_index_view() : base() {}
 
-    template <typename T1>
-    op_min_index_view(const T1& x1) : base(x1) {}
+    template <typename T1> op_min_index_view(const T1 &x1) : base(x1) {}
 
     template <typename T1, typename T2>
-    op_min_index_view(const T1& x1, const T2& x2) : base(x1, x2) {}
+    op_min_index_view(const T1 &x1, const T2 &x2) : base(x1, x2) {}
 
     template <typename T1, typename T2, typename T3>
-    op_min_index_view(const T1& x1, const T2& x2, const T3& x3) : base(x1, x2, x3) {}
+    op_min_index_view(const T1 &x1, const T2 &x2, const T3 &x3)
+        : base(x1, x2, x3) {}
 
-    op_min_index_view(const Index& i, const Type& v) : base(pair_type(i, v)) {}
+    op_min_index_view(const Index &i, const Type &v) : base(pair_type(i, v)) {}
 
-    op_min_index_view(const Index& i, const Type& v, const typename base::compare_type* c) :
-        base(pair_type(i, v), c) {}
+    op_min_index_view(const Index &i, const Type &v,
+                      const typename base::compare_type *c)
+        : base(pair_type(i, v), c) {}
 
     //@}
 
@@ -2181,8 +2134,10 @@ public:
      *  @return     A reference to the view. (Allows
      *              `view.comp_min(i, a).comp_min(j, b)…`.)
      */
-    op_min_index_view& calc_min(const Index& i, const Type& x)
-        { calc(pair_type(i, x)); return *this; }
+    op_min_index_view &calc_min(const Index &i, const Type &x) {
+        calc(pair_type(i, x));
+        return *this;
+    }
 
     /** Maximizes with an index/value pair.
      *
@@ -2198,8 +2153,10 @@ public:
      *  @return         A reference to the view. (Allows
      *                  `view.comp_min(p1).comp_min(p2)…`.)
      */
-    op_min_index_view& calc_min(const pair_type& pair)
-        { calc(pair); return *this; }
+    op_min_index_view &calc_min(const pair_type &pair) {
+        calc(pair);
+        return *this;
+    }
 
     /** Assigns the result of a `min_of(view, index, value)` expression to the
      *  view.
@@ -2211,10 +2168,12 @@ public:
      *
      *  @see min_max_internal::view_base::rhs_proxy
      */
-    op_min_index_view& operator=(const min_max_internal::rhs_proxy<op_min_index_view>& rhs)
-        { assign(rhs); return *this; }
+    op_min_index_view &
+    operator=(const min_max_internal::rhs_proxy<op_min_index_view> &rhs) {
+        assign(rhs);
+        return *this;
+    }
 };
-
 
 /** Computes the minimum of the value in a view and another value.
  *
@@ -2227,37 +2186,38 @@ public:
  *  @see min_max_internal::min_min_view_base::rhs_proxy
  */
 template <typename Index, typename Type, typename Compare>
-inline min_max_internal::rhs_proxy< op_min_index_view<Index, Type, Compare> >
-min_of(const op_min_index_view<Index, Type, Compare>& view,
-       const Index& index, const Type& value)
-{
-    return min_max_internal::make_proxy(std::pair<Index, Type>(index, value), view);
+inline min_max_internal::rhs_proxy<op_min_index_view<Index, Type, Compare>>
+min_of(const op_min_index_view<Index, Type, Compare> &view, const Index &index,
+       const Type &value) {
+    return min_max_internal::make_proxy(std::pair<Index, Type>(index, value),
+                                        view);
 }
 
-/// @copydoc min_of(const op_min_index_view<Index, Type, Compare>&, const Index&, const Type&)
+/// @copydoc min_of(const op_min_index_view<Index, Type, Compare>&, const
+/// Index&, const Type&)
 template <typename Index, typename Type, typename Compare>
-inline min_max_internal::rhs_proxy< op_min_index_view<Index, Type, Compare> >
-min_of(const Index& index, const Type& value,
-       const op_min_index_view<Index, Type, Compare>& view)
-{
-    return min_max_internal::make_proxy(std::pair<Index, Type>(index, value), view);
+inline min_max_internal::rhs_proxy<op_min_index_view<Index, Type, Compare>>
+min_of(const Index &index, const Type &value,
+       const op_min_index_view<Index, Type, Compare> &view) {
+    return min_max_internal::make_proxy(std::pair<Index, Type>(index, value),
+                                        view);
 }
 
-/// @copydoc min_of(const op_min_index_view<Index, Type, Compare>&, const Index&, const Type&)
+/// @copydoc min_of(const op_min_index_view<Index, Type, Compare>&, const
+/// Index&, const Type&)
 template <typename Index, typename Type, typename Compare>
-inline min_max_internal::rhs_proxy< op_min_index_view<Index, Type, Compare> >
-min_of(const op_min_index_view<Index, Type, Compare>& view,
-       const std::pair<Index, Type>& pair)
-{
+inline min_max_internal::rhs_proxy<op_min_index_view<Index, Type, Compare>>
+min_of(const op_min_index_view<Index, Type, Compare> &view,
+       const std::pair<Index, Type> &pair) {
     return min_max_internal::make_proxy(pair, view);
 }
 
-/// @copydoc min_of(const op_min_index_view<Index, Type, Compare>&, const Index&, const Type&)
+/// @copydoc min_of(const op_min_index_view<Index, Type, Compare>&, const
+/// Index&, const Type&)
 template <typename Index, typename Type, typename Compare>
-inline min_max_internal::rhs_proxy< op_min_index_view<Index, Type, Compare> >
-min_of(const std::pair<Index, Type>& pair,
-       const op_min_index_view<Index, Type, Compare>& view)
-{
+inline min_max_internal::rhs_proxy<op_min_index_view<Index, Type, Compare>>
+min_of(const std::pair<Index, Type> &pair,
+       const op_min_index_view<Index, Type, Compare> &view) {
     return min_max_internal::make_proxy(pair, view);
 }
 
@@ -2274,40 +2234,46 @@ min_of(const std::pair<Index, Type>& pair,
  *  @see min_max_internal::min_min_view_base::rhs_proxy
  */
 template <typename Index, typename Type, typename Compare>
-inline min_max_internal::rhs_proxy< op_min_index_view<Index, Type, Compare> >
-min_of(const min_max_internal::rhs_proxy< op_min_index_view<Index, Type, Compare> >& proxy,
-       const Index& index, const Type& value)
-{
+inline min_max_internal::rhs_proxy<op_min_index_view<Index, Type, Compare>>
+min_of(
+    const min_max_internal::rhs_proxy<op_min_index_view<Index, Type, Compare>>
+        &proxy,
+    const Index &index, const Type &value) {
     return proxy.calc(std::pair<Index, Type>(index, value));
 }
 
-/// @copydoc min_of(const min_max_internal::rhs_proxy< op_min_index_view<Index, Type, Compare> >&, const Index&, const Type&)
+/// @copydoc min_of(const min_max_internal::rhs_proxy< op_min_index_view<Index,
+/// Type, Compare> >&, const Index&, const Type&)
 template <typename Index, typename Type, typename Compare>
-inline min_max_internal::rhs_proxy< op_min_index_view<Index, Type, Compare> >
-min_of(const Index& index, const Type& value,
-       const min_max_internal::rhs_proxy< op_min_index_view<Index, Type, Compare> >& proxy)
-{
+inline min_max_internal::rhs_proxy<op_min_index_view<Index, Type, Compare>>
+min_of(
+    const Index &index, const Type &value,
+    const min_max_internal::rhs_proxy<op_min_index_view<Index, Type, Compare>>
+        &proxy) {
     return proxy.calc(std::pair<Index, Type>(index, value));
 }
 
-/// @copydoc min_of(const min_max_internal::rhs_proxy< op_min_index_view<Index, Type, Compare> >&, const Index&, const Type&)
+/// @copydoc min_of(const min_max_internal::rhs_proxy< op_min_index_view<Index,
+/// Type, Compare> >&, const Index&, const Type&)
 template <typename Index, typename Type, typename Compare>
-inline min_max_internal::rhs_proxy< op_min_index_view<Index, Type, Compare> >
-min_of(const min_max_internal::rhs_proxy< op_min_index_view<Index, Type, Compare> >& proxy,
-       const std::pair<Index, Type>& pair)
-{
+inline min_max_internal::rhs_proxy<op_min_index_view<Index, Type, Compare>>
+min_of(
+    const min_max_internal::rhs_proxy<op_min_index_view<Index, Type, Compare>>
+        &proxy,
+    const std::pair<Index, Type> &pair) {
     return proxy.calc(pair);
 }
 
-/// @copydoc min_of(const min_max_internal::rhs_proxy< op_min_index_view<Index, Type, Compare> >&, const Index&, const Type&)
+/// @copydoc min_of(const min_max_internal::rhs_proxy< op_min_index_view<Index,
+/// Type, Compare> >&, const Index&, const Type&)
 template <typename Index, typename Type, typename Compare>
-inline min_max_internal::rhs_proxy< op_min_index_view<Index, Type, Compare> >
-min_of(const std::pair<Index, Type>& pair,
-       const min_max_internal::rhs_proxy< op_min_index_view<Index, Type, Compare> >& proxy)
-{
+inline min_max_internal::rhs_proxy<op_min_index_view<Index, Type, Compare>>
+min_of(
+    const std::pair<Index, Type> &pair,
+    const min_max_internal::rhs_proxy<op_min_index_view<Index, Type, Compare>>
+        &proxy) {
     return proxy.calc(pair);
 }
-
 
 /** Monoid class for minimum reductions with index. Instantiate the
  *  cilk::reducer template class with an op_min_index monoid to create a
@@ -2319,24 +2285,22 @@ min_of(const std::pair<Index, Type>& pair,
  *  @see ReducersMinMax
  *  @see op_min_index_view
  */
-template < typename Index
-         , typename Type
-         , typename Compare=std::less<Type>
-         , bool     Align = false
-         >
-class op_min_index : public min_max_internal::monoid_base<op_min_index_view<Index, Type, Compare>, Align>
-{
+template <typename Index, typename Type, typename Compare = std::less<Type>,
+          bool Align = false>
+class op_min_index : public min_max_internal::monoid_base<
+                         op_min_index_view<Index, Type, Compare>, Align> {
     typedef min_max_internal::monoid_base<
-        op_min_index_view<Index, Type, Compare>, Align> base;
-public:
+        op_min_index_view<Index, Type, Compare>, Align>
+        base;
+
+  public:
     /// Construct with default comparator.
     op_min_index() {}
     /// Construct with specified comparator.
-    op_min_index(const Compare& compare) : base(compare) {}
+    op_min_index(const Compare &compare) : base(compare) {}
 };
 
 //@}
-
 
 /** Deprecated maximum reducer wrapper class.
  *
@@ -2371,31 +2335,30 @@ public:
  *  @see ReducersMinMax
  *  @ingroup ReducersMinMaxMaxValue
  */
-template <typename Type, typename Compare=std::less<Type> >
-class reducer_max : public reducer< op_max<Type, Compare, true> >
-{
+template <typename Type, typename Compare = std::less<Type>>
+class reducer_max : public reducer<op_max<Type, Compare, true>> {
     __CILKRTS_STATIC_ASSERT(
         ::cilk::internal::class_is_empty<
-            typename ::cilk::internal::binary_functor<Compare>::type >::value,
+            typename ::cilk::internal::binary_functor<Compare>::type>::value,
         "cilk::reducer_max<Type, Compare> only works with "
         "an empty Compare class");
-    typedef reducer< op_max<Type, Compare, true> > base;
-public:
+    typedef reducer<op_max<Type, Compare, true>> base;
 
+  public:
     /// Type of data in a reducer_max.
-    typedef Type                            basic_value_type;
+    typedef Type basic_value_type;
 
     /// The view type for the reducer.
-    typedef typename base::view_type        view_type;
+    typedef typename base::view_type view_type;
 
     /// The view type for the reducer.
-    typedef typename base::view_type        View;
+    typedef typename base::view_type View;
 
     /// The monoid type for the reducer.
-    typedef typename base::monoid_type      monoid_type;
+    typedef typename base::monoid_type monoid_type;
 
     /// The monoid type for the reducer.
-    typedef typename base::monoid_type      Monoid;
+    typedef typename base::monoid_type Monoid;
 
     /// The view's rhs proxy type.
     typedef min_max_internal::rhs_proxy<View> rhs_proxy;
@@ -2411,16 +2374,16 @@ public:
     reducer_max() : base() {}
 
     /// Constructs the wrapper with a specified initial value.
-    explicit reducer_max(const Type& initial_value) : base(initial_value) {}
+    explicit reducer_max(const Type &initial_value) : base(initial_value) {}
 
     /// Constructs the wrapper in its identity state with a specified
     /// comparator.
-    explicit reducer_max(const Compare& comp) : base(comp) {}
+    explicit reducer_max(const Compare &comp) : base(comp) {}
 
     /// Constructs the wrapper with a specified initial value and a specified
     /// comparator.
-    reducer_max(const Type& initial_value, const Compare& comp)
-    :   base(initial_value, comp) {}
+    reducer_max(const Type &initial_value, const Compare &comp)
+        : base(initial_value, comp) {}
 
     //@}
 
@@ -2433,12 +2396,17 @@ public:
     bool is_set() const { return view().is_set(); }
 
     /// @copydoc op_max_view::calc_max(const Type&)
-    reducer_max& calc_max(const Type& x)
-        { view().calc_max(x); return *this; }
+    reducer_max &calc_max(const Type &x) {
+        view().calc_max(x);
+        return *this;
+    }
 
-    /// @copydoc op_max_view::operator=(const min_max_internal::rhs_proxy<op_max_view>&)
-    reducer_max& operator=(const rhs_proxy& rhs)
-        { view() = rhs; return *this; }
+    /// @copydoc op_max_view::operator=(const
+    /// min_max_internal::rhs_proxy<op_max_view>&)
+    reducer_max &operator=(const rhs_proxy &rhs) {
+        view() = rhs;
+        return *this;
+    }
 
     //@}
 
@@ -2446,7 +2414,7 @@ public:
      *
      *  @returns    A const reference to the value within the current view.
      */
-    const Type& get_reference() const { return view().get_reference(); }
+    const Type &get_reference() const { return view().get_reference(); }
 
     /// @name Dereference
     /** Dereferencing a wrapper is a no-op. It simply returns the wrapper.
@@ -2465,36 +2433,35 @@ public:
      *                           // calls the corresponding view function
      */
     //@{
-    reducer_max&       operator*()       { return *this; }
-    reducer_max const& operator*() const { return *this; }
+    reducer_max &operator*() { return *this; }
+    reducer_max const &operator*() const { return *this; }
 
-    reducer_max*       operator->()       { return this; }
-    reducer_max const* operator->() const { return this; }
+    reducer_max *operator->() { return this; }
+    reducer_max const *operator->() const { return this; }
     //@}
 
     /** @name Upcast
-     *  @details In Intel Cilk Plus library 0.9, reducers were always cache-aligned.
-     *  In library 1.0, reducer cache alignment is optional. By default,
-     *  reducers are unaligned (i.e., just naturally aligned), but legacy
-     *  wrappers inherit from cache-aligned reducers for binary compatibility.
+     *  @details In Intel Cilk Plus library 0.9, reducers were always
+     * cache-aligned. In library 1.0, reducer cache alignment is optional. By
+     * default, reducers are unaligned (i.e., just naturally aligned), but
+     * legacy wrappers inherit from cache-aligned reducers for binary
+     * compatibility.
      *
      *  This means that a wrapper will automatically be upcast to its aligned
      *  reducer base class. The following conversion operators provide
      *  pseudo-upcasts to the corresponding unaligned reducer class.
      */
     //@{
-    operator reducer< op_max<Type, Compare, false> >& ()
-    {
-        return *reinterpret_cast< reducer< op_max<Type, Compare, false> >* >(this);
+    operator reducer<op_max<Type, Compare, false>> &() {
+        return *reinterpret_cast<reducer<op_max<Type, Compare, false>> *>(this);
     }
 
-    operator const reducer< op_max<Type, Compare, false> >& () const
-    {
-        return *reinterpret_cast< const reducer< op_max<Type, Compare, false> >* >(this);
+    operator const reducer<op_max<Type, Compare, false>> &() const {
+        return *reinterpret_cast<const reducer<op_max<Type, Compare, false>> *>(
+            this);
     }
     //@}
 };
-
 
 /// @cond internal
 // The legacy definition of max_of(reducer_max, value) has different
@@ -2520,23 +2487,21 @@ const max_of_1_0_t max_of_1_0 = {};
  *  @ingroup ReducersMinMaxMaxValue
  */
 template <typename Type, typename Compare>
-inline min_max_internal::rhs_proxy< op_max_view<Type, Compare> >
-max_of(const reducer_max<Type, Compare>& r, const Type& value,
-        const max_of_1_0_t& = max_of_1_0)
-{
+inline min_max_internal::rhs_proxy<op_max_view<Type, Compare>>
+max_of(const reducer_max<Type, Compare> &r, const Type &value,
+       const max_of_1_0_t & = max_of_1_0) {
     return min_max_internal::make_proxy(value, r.view());
 }
 
-/// @copydoc max_of(const reducer_max<Type, Compare>&, const Type&, const max_of_1_0_t&)
+/// @copydoc max_of(const reducer_max<Type, Compare>&, const Type&, const
+/// max_of_1_0_t&)
 /// @ingroup ReducersMinMaxMaxValue
 template <typename Type, typename Compare>
-inline min_max_internal::rhs_proxy< op_max_view<Type, Compare> >
-max_of(const Type& value, const reducer_max<Type, Compare>& r,
-        const max_of_1_0_t& = max_of_1_0)
-{
+inline min_max_internal::rhs_proxy<op_max_view<Type, Compare>>
+max_of(const Type &value, const reducer_max<Type, Compare> &r,
+       const max_of_1_0_t & = max_of_1_0) {
     return min_max_internal::make_proxy(value, r.view());
 }
-
 
 /** Deprecated minimum reducer wrapper class.
  *
@@ -2571,31 +2536,30 @@ max_of(const Type& value, const reducer_max<Type, Compare>& r,
  *  @see ReducersMinMax
  *  @ingroup ReducersMinMaxMinValue
  */
-template <typename Type, typename Compare=std::less<Type> >
-class reducer_min : public reducer< op_min<Type, Compare, true> >
-{
+template <typename Type, typename Compare = std::less<Type>>
+class reducer_min : public reducer<op_min<Type, Compare, true>> {
     __CILKRTS_STATIC_ASSERT(
         ::cilk::internal::class_is_empty<
-            typename ::cilk::internal::binary_functor<Compare>::type >::value,
+            typename ::cilk::internal::binary_functor<Compare>::type>::value,
         "cilk::reducer_min<Type, Compare> only works with "
         "an empty Compare class");
-    typedef reducer< op_min<Type, Compare, true> > base;
-public:
+    typedef reducer<op_min<Type, Compare, true>> base;
 
+  public:
     /// Type of data in a reducer_min.
-    typedef Type                            basic_value_type;
+    typedef Type basic_value_type;
 
     /// The view type for the reducer.
-    typedef typename base::view_type        view_type;
+    typedef typename base::view_type view_type;
 
     /// The view type for the reducer.
-    typedef typename base::view_type        View;
+    typedef typename base::view_type View;
 
     /// The monoid type for the reducer.
-    typedef typename base::monoid_type      monoid_type;
+    typedef typename base::monoid_type monoid_type;
 
     /// The monoid type for the reducer.
-    typedef typename base::monoid_type      Monoid;
+    typedef typename base::monoid_type Monoid;
 
     /// The view's rhs proxy type.
     typedef min_max_internal::rhs_proxy<View> rhs_proxy;
@@ -2611,16 +2575,16 @@ public:
     reducer_min() : base() {}
 
     /// Constructs the wrapper with a specified initial value.
-    explicit reducer_min(const Type& initial_value) : base(initial_value) {}
+    explicit reducer_min(const Type &initial_value) : base(initial_value) {}
 
     /// Constructs the wrapper in its identity state with a specified
     /// comparator.
-    explicit reducer_min(const Compare& comp) : base(comp) {}
+    explicit reducer_min(const Compare &comp) : base(comp) {}
 
     /// Constructs the wrapper with a specified initial value and a specified
     /// comparator.
-    reducer_min(const Type& initial_value, const Compare& comp)
-    :   base(initial_value, comp) {}
+    reducer_min(const Type &initial_value, const Compare &comp)
+        : base(initial_value, comp) {}
 
     //@}
 
@@ -2633,12 +2597,17 @@ public:
     bool is_set() const { return view().is_set(); }
 
     /// @copydoc op_min_view::calc_min(const Type&)
-    reducer_min& calc_min(const Type& x)
-        { view().calc_min(x); return *this; }
+    reducer_min &calc_min(const Type &x) {
+        view().calc_min(x);
+        return *this;
+    }
 
-    /// @copydoc op_min_view::operator=(const min_max_internal::rhs_proxy<op_min_view>&)
-    reducer_min& operator=(const rhs_proxy& rhs)
-        { view() = rhs; return *this; }
+    /// @copydoc op_min_view::operator=(const
+    /// min_max_internal::rhs_proxy<op_min_view>&)
+    reducer_min &operator=(const rhs_proxy &rhs) {
+        view() = rhs;
+        return *this;
+    }
 
     //@}
 
@@ -2646,7 +2615,7 @@ public:
      *
      *  @returns    A const reference to the value within the current view.
      */
-    const Type& get_reference() const { return view().get_reference(); }
+    const Type &get_reference() const { return view().get_reference(); }
 
     /// @name Dereference
     /** Dereferencing a wrapper is a no-op. It simply returns the wrapper.
@@ -2665,36 +2634,35 @@ public:
      *                           // calls the corresponding view function
      */
     //@{
-    reducer_min&       operator*()       { return *this; }
-    reducer_min const& operator*() const { return *this; }
+    reducer_min &operator*() { return *this; }
+    reducer_min const &operator*() const { return *this; }
 
-    reducer_min*       operator->()       { return this; }
-    reducer_min const* operator->() const { return this; }
+    reducer_min *operator->() { return this; }
+    reducer_min const *operator->() const { return this; }
     //@}
 
     /** @name Upcast
-     *  @details In Intel Cilk Plus library 0.9, reducers were always cache-aligned.
-     *  In library 1.0, reducer cache alignment is optional. By default,
-     *  reducers are unaligned (i.e., just naturally aligned), but legacy
-     *  wrappers inherit from cache-aligned reducers for binary compatibility.
+     *  @details In Intel Cilk Plus library 0.9, reducers were always
+     * cache-aligned. In library 1.0, reducer cache alignment is optional. By
+     * default, reducers are unaligned (i.e., just naturally aligned), but
+     * legacy wrappers inherit from cache-aligned reducers for binary
+     * compatibility.
      *
      *  This means that a wrapper will automatically be upcast to its aligned
      *  reducer base class. The following conversion operators provide
      *  pseudo-upcasts to the corresponding unaligned reducer class.
      */
     //@{
-    operator reducer< op_min<Type, Compare, false> >& ()
-    {
-        return *reinterpret_cast< reducer< op_min<Type, Compare, false> >* >(this);
+    operator reducer<op_min<Type, Compare, false>> &() {
+        return *reinterpret_cast<reducer<op_min<Type, Compare, false>> *>(this);
     }
 
-    operator const reducer< op_min<Type, Compare, false> >& () const
-    {
-        return *reinterpret_cast< const reducer< op_min<Type, Compare, false> >* >(this);
+    operator const reducer<op_min<Type, Compare, false>> &() const {
+        return *reinterpret_cast<const reducer<op_min<Type, Compare, false>> *>(
+            this);
     }
     //@}
 };
-
 
 /** Computes the minimum of a reducer and a value.
  *
@@ -2709,22 +2677,19 @@ struct min_of_1_0_t {};
 const min_of_1_0_t min_of_1_0 = {};
 
 template <typename Type, typename Compare>
-inline min_max_internal::rhs_proxy< op_min_view<Type, Compare> >
-min_of(const reducer_min<Type, Compare>& r, const Type& value,
-        const min_of_1_0_t& = min_of_1_0)
-{
+inline min_max_internal::rhs_proxy<op_min_view<Type, Compare>>
+min_of(const reducer_min<Type, Compare> &r, const Type &value,
+       const min_of_1_0_t & = min_of_1_0) {
     return min_max_internal::make_proxy(value, r.view());
 }
 
 template <typename Type, typename Compare>
-inline min_max_internal::rhs_proxy< op_min_view<Type, Compare> >
-min_of(const Type& value, const reducer_min<Type, Compare>& r,
-        const min_of_1_0_t& = min_of_1_0)
-{
+inline min_max_internal::rhs_proxy<op_min_view<Type, Compare>>
+min_of(const Type &value, const reducer_min<Type, Compare> &r,
+       const min_of_1_0_t & = min_of_1_0) {
     return min_max_internal::make_proxy(value, r.view());
 }
 //@}
-
 
 /** Deprecated maximum with index reducer wrapper class.
  *
@@ -2760,35 +2725,31 @@ min_of(const Type& value, const reducer_min<Type, Compare>& r,
  *  @see ReducersMinMax
  *  @ingroup ReducersMinMaxMaxIndex
  */
-template < typename Index
-         , typename Type
-         , typename Compare = std::less<Type>
-         >
-class reducer_max_index :
-    public reducer< op_max_index<Index, Type, Compare, true> >
-{
+template <typename Index, typename Type, typename Compare = std::less<Type>>
+class reducer_max_index
+    : public reducer<op_max_index<Index, Type, Compare, true>> {
     __CILKRTS_STATIC_ASSERT(
         ::cilk::internal::class_is_empty<
-            typename ::cilk::internal::binary_functor<Compare>::type >::value,
+            typename ::cilk::internal::binary_functor<Compare>::type>::value,
         "cilk::reducer_max_index<Type, Compare> only works with "
         "an empty Compare class");
-    typedef reducer< op_max_index<Index, Type, Compare, true> > base;
-public:
+    typedef reducer<op_max_index<Index, Type, Compare, true>> base;
 
+  public:
     /// Type of data in a reducer_max_index.
-    typedef Type                            basic_value_type;
+    typedef Type basic_value_type;
 
     /// The view type for the reducer.
-    typedef typename base::view_type        view_type;
+    typedef typename base::view_type view_type;
 
     /// The view type for the reducer.
-    typedef typename base::view_type        View;
+    typedef typename base::view_type View;
 
     /// The monoid type for the reducer.
-    typedef typename base::monoid_type      monoid_type;
+    typedef typename base::monoid_type monoid_type;
 
     /// The monoid type for the reducer.
-    typedef typename base::monoid_type      Monoid;
+    typedef typename base::monoid_type Monoid;
 
     /// The view's rhs proxy type.
     typedef min_max_internal::rhs_proxy<View> rhs_proxy;
@@ -2803,19 +2764,17 @@ public:
     reducer_max_index() : base() {}
 
     /// Construct with a specified initial index and value.
-    reducer_max_index(const Index& initial_index,
-                      const Type& initial_value)
-    : base(initial_index, initial_value) {}
+    reducer_max_index(const Index &initial_index, const Type &initial_value)
+        : base(initial_index, initial_value) {}
 
     /// Constructs the wrapper with a specified comparator.
-    explicit reducer_max_index(const Compare& comp) : base(comp) {}
+    explicit reducer_max_index(const Compare &comp) : base(comp) {}
 
     /// Constructs the wrapper with a specified initial index, value,
     /// and comparator.
-    reducer_max_index(const Index& initial_index,
-                      const Type& initial_value,
-                      const Compare& comp)
-    : base(initial_index, initial_value, comp) {}
+    reducer_max_index(const Index &initial_index, const Type &initial_value,
+                      const Compare &comp)
+        : base(initial_index, initial_value, comp) {}
 
     //@}
 
@@ -2824,24 +2783,23 @@ public:
     //@{
 
     /// Sets the index and value of this object.
-    void set_value(const Index& index, const Type& value)
-        { base::set_value(std::make_pair(index, value)); }
+    void set_value(const Index &index, const Type &value) {
+        base::set_value(std::make_pair(index, value));
+    }
 
     /// Returns the maximum value.
-    const Type& get_value() const
-        { return view().get_reference(); }
+    const Type &get_value() const { return view().get_reference(); }
 
     /// Returns the maximum index.
-    const Index& get_index() const
-        { return view().get_index_reference(); }
+    const Index &get_index() const { return view().get_index_reference(); }
 
     /// Returns a const reference to value data member in the view.
-    const Type& get_reference() const
-        { return view().get_reference(); }
+    const Type &get_reference() const { return view().get_reference(); }
 
     /// Returns a const reference to index data member in the view.
-    const Index& get_index_reference() const
-        { return view().get_index_reference(); }
+    const Index &get_index_reference() const {
+        return view().get_index_reference();
+    }
 
     //@}
 
@@ -2854,12 +2812,17 @@ public:
     bool is_set() const { return view().is_set(); }
 
     /// @copydoc op_max_index_view::calc_max(const Index&, const Type&)
-    reducer_max_index& calc_max(const Index& i, const Type& x)
-        { view().calc_max(i, x); return *this; }
+    reducer_max_index &calc_max(const Index &i, const Type &x) {
+        view().calc_max(i, x);
+        return *this;
+    }
 
-    /// @copydoc op_max_view::operator=(const min_max_internal::rhs_proxy<op_max_view>&)
-    reducer_max_index& operator=(const rhs_proxy& rhs)
-        { view() = rhs; return *this; }
+    /// @copydoc op_max_view::operator=(const
+    /// min_max_internal::rhs_proxy<op_max_view>&)
+    reducer_max_index &operator=(const rhs_proxy &rhs) {
+        view() = rhs;
+        return *this;
+    }
 
     //@}
 
@@ -2880,37 +2843,37 @@ public:
      *                           // calls the corresponding view function
      */
     //@{
-    reducer_max_index&       operator*()       { return *this; }
-    reducer_max_index const& operator*() const { return *this; }
+    reducer_max_index &operator*() { return *this; }
+    reducer_max_index const &operator*() const { return *this; }
 
-    reducer_max_index*       operator->()       { return this; }
-    reducer_max_index const* operator->() const { return this; }
+    reducer_max_index *operator->() { return this; }
+    reducer_max_index const *operator->() const { return this; }
     //@}
 
     /** @name Upcast
-     *  @details In Intel Cilk Plus library 0.9, reducers were always cache-aligned.
-     *  In library 1.0, reducer cache alignment is optional. By default,
-     *  reducers are unaligned (i.e., just naturally aligned), but legacy
-     *  wrappers inherit from cache-aligned reducers for binary compatibility.
+     *  @details In Intel Cilk Plus library 0.9, reducers were always
+     * cache-aligned. In library 1.0, reducer cache alignment is optional. By
+     * default, reducers are unaligned (i.e., just naturally aligned), but
+     * legacy wrappers inherit from cache-aligned reducers for binary
+     * compatibility.
      *
      *  This means that a wrapper will automatically be upcast to its aligned
      *  reducer base class. The following conversion operators provide
      *  pseudo-upcasts to the corresponding unaligned reducer class.
      */
     //@{
-    operator reducer< op_max_index<Index, Type, Compare, false> >& ()
-    {
-        return *reinterpret_cast< reducer< op_max_index<Index, Type, Compare, false> >* >(this);
+    operator reducer<op_max_index<Index, Type, Compare, false>> &() {
+        return *reinterpret_cast<
+            reducer<op_max_index<Index, Type, Compare, false>> *>(this);
     }
 
-    operator const reducer< op_max_index<Index, Type, Compare, false> >& () const
-    {
-        return *reinterpret_cast< const reducer< op_max_index<Index, Type, Compare, false> >* >(this);
+    operator const reducer<op_max_index<Index, Type, Compare, false>> &()
+        const {
+        return *reinterpret_cast<
+            const reducer<op_max_index<Index, Type, Compare, false>> *>(this);
     }
     //@}
-
 };
-
 
 /** Deprecated minimum with index reducer wrapper class.
  *
@@ -2946,35 +2909,31 @@ public:
  *  @see ReducersMinMax
  *  @ingroup ReducersMinMaxMinIndex
  */
-template < typename Index
-         , typename Type
-         , typename Compare = std::less<Type>
-         >
-class reducer_min_index :
-    public reducer< op_min_index<Index, Type, Compare, true> >
-{
+template <typename Index, typename Type, typename Compare = std::less<Type>>
+class reducer_min_index
+    : public reducer<op_min_index<Index, Type, Compare, true>> {
     __CILKRTS_STATIC_ASSERT(
         ::cilk::internal::class_is_empty<
-            typename ::cilk::internal::binary_functor<Compare>::type >::value,
+            typename ::cilk::internal::binary_functor<Compare>::type>::value,
         "cilk::reducer_min_index<Type, Compare> only works with "
         "an empty Compare class");
-    typedef reducer< op_min_index<Index, Type, Compare, true> > base;
-public:
+    typedef reducer<op_min_index<Index, Type, Compare, true>> base;
 
+  public:
     /// Type of data in a reducer_min_index.
-    typedef Type                            basic_value_type;
+    typedef Type basic_value_type;
 
     /// The view type for the reducer.
-    typedef typename base::view_type        view_type;
+    typedef typename base::view_type view_type;
 
     /// The view type for the reducer.
-    typedef typename base::view_type        View;
+    typedef typename base::view_type View;
 
     /// The monoid type for the reducer.
-    typedef typename base::monoid_type      monoid_type;
+    typedef typename base::monoid_type monoid_type;
 
     /// The monoid type for the reducer.
-    typedef typename base::monoid_type      Monoid;
+    typedef typename base::monoid_type Monoid;
 
     /// The view's rhs proxy type.
     typedef min_max_internal::rhs_proxy<View> rhs_proxy;
@@ -2989,19 +2948,17 @@ public:
     reducer_min_index() : base() {}
 
     /// Construct with a specified initial index and value.
-    reducer_min_index(const Index& initial_index,
-                      const Type& initial_value)
-    : base(initial_index, initial_value) {}
+    reducer_min_index(const Index &initial_index, const Type &initial_value)
+        : base(initial_index, initial_value) {}
 
     /// Constructs the wrapper with a specified comparator.
-    explicit reducer_min_index(const Compare& comp) : base(comp) {}
+    explicit reducer_min_index(const Compare &comp) : base(comp) {}
 
     /// Constructs the wrapper with a specified initial index, value,
     /// and comparator.
-    reducer_min_index(const Index& initial_index,
-                      const Type& initial_value,
-                      const Compare& comp)
-    : base(initial_index, initial_value, comp) {}
+    reducer_min_index(const Index &initial_index, const Type &initial_value,
+                      const Compare &comp)
+        : base(initial_index, initial_value, comp) {}
 
     //@}
 
@@ -3010,24 +2967,23 @@ public:
     //@{
 
     /// Sets the index and value of this object.
-    void set_value(const Index& index, const Type& value)
-        { base::set_value(std::make_pair(index, value)); }
+    void set_value(const Index &index, const Type &value) {
+        base::set_value(std::make_pair(index, value));
+    }
 
     /// Returns the minimum value.
-    const Type& get_value() const
-        { return view().get_reference(); }
+    const Type &get_value() const { return view().get_reference(); }
 
     /// Returns the minimum index.
-    const Index& get_index() const
-        { return view().get_index_reference(); }
+    const Index &get_index() const { return view().get_index_reference(); }
 
     /// Returns a const reference to value data member in the view.
-    const Type& get_reference() const
-        { return view().get_reference(); }
+    const Type &get_reference() const { return view().get_reference(); }
 
     /// Returns a const reference to index data member in the view.
-    const Index& get_index_reference() const
-        { return view().get_index_reference(); }
+    const Index &get_index_reference() const {
+        return view().get_index_reference();
+    }
 
     //@}
 
@@ -3040,12 +2996,17 @@ public:
     bool is_set() const { return view().is_set(); }
 
     /// @copydoc op_min_index_view::calc_min(const Index&, const Type&)
-    reducer_min_index& calc_min(const Index& i, const Type& x)
-        { view().calc_min(i, x); return *this; }
+    reducer_min_index &calc_min(const Index &i, const Type &x) {
+        view().calc_min(i, x);
+        return *this;
+    }
 
-    /// @copydoc op_min_view::operator=(const min_max_internal::rhs_proxy<op_min_view>&)
-    reducer_min_index& operator=(const rhs_proxy& rhs)
-        { view() = rhs; return *this; }
+    /// @copydoc op_min_view::operator=(const
+    /// min_max_internal::rhs_proxy<op_min_view>&)
+    reducer_min_index &operator=(const rhs_proxy &rhs) {
+        view() = rhs;
+        return *this;
+    }
 
     //@}
 
@@ -3066,43 +3027,42 @@ public:
      *                           // calls the corresponding view function
      */
     //@{
-    reducer_min_index&       operator*()       { return *this; }
-    reducer_min_index const& operator*() const { return *this; }
+    reducer_min_index &operator*() { return *this; }
+    reducer_min_index const &operator*() const { return *this; }
 
-    reducer_min_index*       operator->()       { return this; }
-    reducer_min_index const* operator->() const { return this; }
+    reducer_min_index *operator->() { return this; }
+    reducer_min_index const *operator->() const { return this; }
     //@}
 
     /** @name Upcast
-     *  @details In Intel Cilk Plus library 0.9, reducers were always cache-aligned.
-     *  In library 1.0, reducer cache alignment is optional. By default,
-     *  reducers are unaligned (i.e., just naturally aligned), but legacy
-     *  wrappers inherit from cache-aligned reducers for binary compatibility.
+     *  @details In Intel Cilk Plus library 0.9, reducers were always
+     * cache-aligned. In library 1.0, reducer cache alignment is optional. By
+     * default, reducers are unaligned (i.e., just naturally aligned), but
+     * legacy wrappers inherit from cache-aligned reducers for binary
+     * compatibility.
      *
      *  This means that a wrapper will automatically be upcast to its aligned
      *  reducer base class. The following conversion operators provide
      *  pseudo-upcasts to the corresponding unaligned reducer class.
      */
     //@{
-    operator reducer< op_min_index<Index, Type, Compare, false> >& ()
-    {
-        return *reinterpret_cast< reducer< op_min_index<Index, Type, Compare, false> >* >(this);
+    operator reducer<op_min_index<Index, Type, Compare, false>> &() {
+        return *reinterpret_cast<
+            reducer<op_min_index<Index, Type, Compare, false>> *>(this);
     }
 
-    operator const reducer< op_min_index<Index, Type, Compare, false> >& () const
-    {
-        return *reinterpret_cast< const reducer< op_min_index<Index, Type, Compare, false> >* >(this);
+    operator const reducer<op_min_index<Index, Type, Compare, false>> &()
+        const {
+        return *reinterpret_cast<
+            const reducer<op_min_index<Index, Type, Compare, false>> *>(this);
     }
     //@}
-
 };
-
 
 #ifndef CILK_LIBRARY_0_9_REDUCER_MINMAX
 } // namespace cilk_lib_1_1
 using namespace cilk_lib_1_1;
 #endif
-
 
 /// @cond internal
 /** Metafunction specialization for reducer conversion.
@@ -3115,26 +3075,24 @@ using namespace cilk_lib_1_1;
  *  an upcast, which is provided for free by the language.)
  */
 template <typename Type, typename Compare, bool Align>
-struct legacy_reducer_downcast< reducer< op_max<Type, Compare, Align> > >
-{
+struct legacy_reducer_downcast<reducer<op_max<Type, Compare, Align>>> {
     typedef reducer_max<Type> type;
 };
 
 template <typename Type, typename Compare, bool Align>
-struct legacy_reducer_downcast< reducer< op_min<Type, Compare, Align> > >
-{
+struct legacy_reducer_downcast<reducer<op_min<Type, Compare, Align>>> {
     typedef reducer_min<Type> type;
 };
 
 template <typename Index, typename Type, typename Compare, bool Align>
-struct legacy_reducer_downcast< reducer< op_max_index<Index, Type, Compare, Align> > >
-{
+struct legacy_reducer_downcast<
+    reducer<op_max_index<Index, Type, Compare, Align>>> {
     typedef reducer_max_index<Index, Type> type;
 };
 
 template <typename Index, typename Type, typename Compare, bool Align>
-struct legacy_reducer_downcast< reducer< op_min_index<Index, Type, Compare, Align> > >
-{
+struct legacy_reducer_downcast<
+    reducer<op_min_index<Index, Type, Compare, Align>>> {
     typedef reducer_min_index<Index, Type> type;
 };
 /// @endcond
@@ -3143,16 +3101,14 @@ struct legacy_reducer_downcast< reducer< op_min_index<Index, Type, Compare, Alig
 
 #endif // __cplusplus
 
-
 /** @name C language reducer macros
  *
- *  These macros are used to declare and work with numeric minimum and maximum reducers in C
- *  code.
+ *  These macros are used to declare and work with numeric minimum and maximum
+ * reducers in C code.
  *
  *  @see @ref page_reducers_in_c
  */
- //@{
-
+//@{
 
 #ifdef CILK_C_DEFINE_REDUCERS
 
@@ -3161,21 +3117,21 @@ struct legacy_reducer_downcast< reducer< op_min_index<Index, Type, Compare, Alig
 
 /* Wchar_t min/max constants */
 #if defined(_MSC_VER) || defined(__ANDROID__)
-#   include <wchar.h>
+#include <wchar.h>
 #else
-#   include <stdint.h>
+#include <stdint.h>
 #endif
 
 /* Floating-point min/max constants */
 #include <math.h>
 #ifndef HUGE_VALF
-    static const unsigned int __huge_valf[] = {0x7f800000};
-#   define HUGE_VALF (*((const float *)__huge_valf))
+static const unsigned int __huge_valf[] = {0x7f800000};
+#define HUGE_VALF (*((const float *)__huge_valf))
 #endif
 
 #ifndef HUGE_VALL
-    static const unsigned int __huge_vall[] = {0, 0, 0x00007f80, 0};
-#   define HUGE_VALL (*((const long double *)__huge_vall))
+static const unsigned int __huge_vall[] = {0, 0, 0x00007f80, 0};
+#define HUGE_VALL (*((const long double *)__huge_vall))
 #endif
 
 #endif
@@ -3185,35 +3141,34 @@ struct legacy_reducer_downcast< reducer< op_min_index<Index, Type, Compare, Alig
  *  This macro expands into the identifier which is the name of the max reducer
  *  type for a specified numeric type.
  *
- *  @param  tn  The @ref reducers_c_type_names "numeric type name" specifying the type of the
- *              reducer.
+ *  @param  tn  The @ref reducers_c_type_names "numeric type name" specifying
+ * the type of the reducer.
  *
  *  @see @ref reducers_c_predefined
  */
-#define CILK_C_REDUCER_MAX_TYPE(tn)                                         \
-    __CILKRTS_MKIDENT(cilk_c_reducer_max_,tn)
+#define CILK_C_REDUCER_MAX_TYPE(tn) __CILKRTS_MKIDENT(cilk_c_reducer_max_, tn)
 
 /** Declares a max reducer object.
  *
- *  This macro expands into a declaration of a max reducer object for a specified numeric
- *  type. For example:
+ *  This macro expands into a declaration of a max reducer object for a
+ * specified numeric type. For example:
  *
  *      CILK_C_REDUCER_MAX(my_reducer, double, -DBL_MAX);
  *
  *  @param  obj The variable name to be used for the declared reducer object.
- *  @param  tn  The @ref reducers_c_type_names "numeric type name" specifying the type of the
- *              reducer.
- *  @param  v   The initial value for the reducer. (A value which can be assigned to the
- *              numeric type represented by @a tn.)
+ *  @param  tn  The @ref reducers_c_type_names "numeric type name" specifying
+ * the type of the reducer.
+ *  @param  v   The initial value for the reducer. (A value which can be
+ * assigned to the numeric type represented by @a tn.)
  *
  *  @see @ref reducers_c_predefined
  */
-#define CILK_C_REDUCER_MAX(obj,tn,v)                                        \
-    CILK_C_REDUCER_MAX_TYPE(tn) obj =                                       \
-        CILK_C_INIT_REDUCER(_Typeof(obj.value),                             \
-                        __CILKRTS_MKIDENT(cilk_c_reducer_max_reduce_,tn),   \
-                        __CILKRTS_MKIDENT(cilk_c_reducer_max_identity_,tn), \
-                        __cilkrts_hyperobject_noop_destroy, v)
+#define CILK_C_REDUCER_MAX(obj, tn, v)                                         \
+    CILK_C_REDUCER_MAX_TYPE(tn)                                                \
+    obj = CILK_C_INIT_REDUCER(                                                 \
+        _Typeof(obj.value), __CILKRTS_MKIDENT(cilk_c_reducer_max_reduce_, tn), \
+        __CILKRTS_MKIDENT(cilk_c_reducer_max_identity_, tn),                   \
+        0, v)
 
 /** Maximizes with a value.
  *
@@ -3226,120 +3181,131 @@ struct legacy_reducer_downcast< reducer< op_min_index<Index, Type, Compare, Alig
  *  @param reducer  The reducer whose contained value is to be updated.
  *  @param v        The value that it is to be maximized with.
  */
-#define CILK_C_REDUCER_MAX_CALC(reducer, v) do {                            \
-    _Typeof((reducer).value)* view = &(REDUCER_VIEW(reducer));              \
-    _Typeof(v) __value = (v);                                               \
-    if (*view < __value) {                                                  \
-        *view = __value;                                                    \
-    } } while (0)
+#define CILK_C_REDUCER_MAX_CALC(reducer, v)                                    \
+    do {                                                                       \
+        _Typeof((reducer).value) *view = &(REDUCER_VIEW(reducer));             \
+        _Typeof(v) __value = (v);                                              \
+        if (*view < __value) {                                                 \
+            *view = __value;                                                   \
+        }                                                                      \
+    } while (0)
 
 /// @cond internal
 
 /** Declares the max reducer functions for a numeric type.
  *
- *  This macro expands into external function declarations for functions which implement
- *  the reducer functionality for the max reducer type for a specified numeric type.
+ *  This macro expands into external function declarations for functions which
+ * implement the reducer functionality for the max reducer type for a specified
+ * numeric type.
  *
  *  @param  t   The value type of the reducer.
- *  @param  tn  The value "type name" identifier, used to construct the reducer type name,
- *              function names, etc.
+ *  @param  tn  The value "type name" identifier, used to construct the reducer
+ * type name, function names, etc.
  */
-#define CILK_C_REDUCER_MAX_DECLARATION(t,tn,id)                             \
-    typedef CILK_C_DECLARE_REDUCER(t) CILK_C_REDUCER_MAX_TYPE(tn);       \
-    __CILKRTS_DECLARE_REDUCER_REDUCE(cilk_c_reducer_max,tn,l,r);         \
-    __CILKRTS_DECLARE_REDUCER_IDENTITY(cilk_c_reducer_max,tn);
+#define CILK_C_REDUCER_MAX_DECLARATION(t, tn, id)                              \
+    typedef CILK_C_DECLARE_REDUCER(t) CILK_C_REDUCER_MAX_TYPE(tn);             \
+    __CILKRTS_DECLARE_REDUCER_REDUCE(cilk_c_reducer_max, tn, l, r);            \
+    __CILKRTS_DECLARE_REDUCER_IDENTITY(cilk_c_reducer_max, tn);
 
 /** Defines the max reducer functions for a numeric type.
  *
- *  This macro expands into function definitions for functions which implement the
- *  reducer functionality for the max reducer type for a specified numeric type.
+ *  This macro expands into function definitions for functions which implement
+ * the reducer functionality for the max reducer type for a specified numeric
+ * type.
  *
  *  @param  t   The value type of the reducer.
- *  @param  tn  The value "type name" identifier, used to construct the reducer type name,
- *              function names, etc.
+ *  @param  tn  The value "type name" identifier, used to construct the reducer
+ * type name, function names, etc.
  */
-#define CILK_C_REDUCER_MAX_DEFINITION(t,tn,id)                           \
-    typedef CILK_C_DECLARE_REDUCER(t) CILK_C_REDUCER_MAX_TYPE(tn);       \
-    __CILKRTS_DECLARE_REDUCER_REDUCE(cilk_c_reducer_max,tn,l,r)          \
-        { if (*(t*)l < *(t*)r) *(t*)l = *(t*)r; }                        \
-    __CILKRTS_DECLARE_REDUCER_IDENTITY(cilk_c_reducer_max,tn)            \
-        { *(t*)v = id; }
+#define CILK_C_REDUCER_MAX_DEFINITION(t, tn, id)                               \
+    typedef CILK_C_DECLARE_REDUCER(t) CILK_C_REDUCER_MAX_TYPE(tn);             \
+    __CILKRTS_DECLARE_REDUCER_REDUCE(cilk_c_reducer_max, tn, l, r) {           \
+        if (*(t *)l < *(t *)r)                                                 \
+            *(t *)l = *(t *)r;                                                 \
+    }                                                                          \
+    __CILKRTS_DECLARE_REDUCER_IDENTITY(cilk_c_reducer_max, tn) { *(t *)v = id; }
 
 //@{
 /** @def CILK_C_REDUCER_MAX_INSTANCE
  *  @brief Declare or define implementation functions for a reducer type.
  *
- *  In the runtime source file c_reducers.c, the macro `CILK_C_DEFINE_REDUCERS` will be defined, and
- *  this macro will generate reducer implementation functions. Everywhere else, `CILK_C_DEFINE_REDUCERS`
- *  will be undefined, and this macro will expand into external declarations for the functions.
+ *  In the runtime source file c_reducers.c, the macro `CILK_C_DEFINE_REDUCERS`
+ * will be defined, and this macro will generate reducer implementation
+ * functions. Everywhere else, `CILK_C_DEFINE_REDUCERS` will be undefined, and
+ * this macro will expand into external declarations for the functions.
  */
 #ifdef CILK_C_DEFINE_REDUCERS
-#   define CILK_C_REDUCER_MAX_INSTANCE(t,tn,id)  \
-        CILK_C_REDUCER_MAX_DEFINITION(t,tn,id)
+#define CILK_C_REDUCER_MAX_INSTANCE(t, tn, id)                                 \
+    CILK_C_REDUCER_MAX_DEFINITION(t, tn, id)
 #else
-#   define CILK_C_REDUCER_MAX_INSTANCE(t,tn,id)  \
-        CILK_C_REDUCER_MAX_DECLARATION(t,tn,id)
+#define CILK_C_REDUCER_MAX_INSTANCE(t, tn, id)                                 \
+    CILK_C_REDUCER_MAX_DECLARATION(t, tn, id)
 #endif
 //@}
 
 /*  Declare or define an instance of the reducer type and its functions for each
  *  numeric type.
  */
-__CILKRTS_BEGIN_EXTERN_C
-CILK_C_REDUCER_MAX_INSTANCE(char,               char,       CHAR_MIN)
-CILK_C_REDUCER_MAX_INSTANCE(unsigned char,      uchar,      0)
-CILK_C_REDUCER_MAX_INSTANCE(signed char,        schar,      SCHAR_MIN)
-CILK_C_REDUCER_MAX_INSTANCE(wchar_t,            wchar_t,    WCHAR_MIN)
-CILK_C_REDUCER_MAX_INSTANCE(short,              short,      SHRT_MIN)
-CILK_C_REDUCER_MAX_INSTANCE(unsigned short,     ushort,     0)
-CILK_C_REDUCER_MAX_INSTANCE(int,                int,        INT_MIN)
-CILK_C_REDUCER_MAX_INSTANCE(unsigned int,       uint,       0)
-CILK_C_REDUCER_MAX_INSTANCE(unsigned int,       unsigned,   0) // alternate name
-CILK_C_REDUCER_MAX_INSTANCE(long,               long,       LONG_MIN)
-CILK_C_REDUCER_MAX_INSTANCE(unsigned long,      ulong,      0)
-CILK_C_REDUCER_MAX_INSTANCE(long long,          longlong,   LLONG_MIN)
-CILK_C_REDUCER_MAX_INSTANCE(unsigned long long, ulonglong,  0)
-CILK_C_REDUCER_MAX_INSTANCE(float,              float,      -HUGE_VALF)
-CILK_C_REDUCER_MAX_INSTANCE(double,             double,     -HUGE_VAL)
-CILK_C_REDUCER_MAX_INSTANCE(long double,        longdouble, -HUGE_VALL)
-__CILKRTS_END_EXTERN_C
+#ifdef __cplusplus
+extern "C" {
+#endif
+CILK_C_REDUCER_MAX_INSTANCE(char, char, CHAR_MIN)
+CILK_C_REDUCER_MAX_INSTANCE(unsigned char, uchar, 0)
+CILK_C_REDUCER_MAX_INSTANCE(signed char, schar, SCHAR_MIN)
+CILK_C_REDUCER_MAX_INSTANCE(wchar_t, wchar_t, WCHAR_MIN)
+CILK_C_REDUCER_MAX_INSTANCE(short, short, SHRT_MIN)
+CILK_C_REDUCER_MAX_INSTANCE(unsigned short, ushort, 0)
+CILK_C_REDUCER_MAX_INSTANCE(int, int, INT_MIN)
+CILK_C_REDUCER_MAX_INSTANCE(unsigned int, uint, 0)
+CILK_C_REDUCER_MAX_INSTANCE(unsigned int, unsigned, 0) // alternate name
+CILK_C_REDUCER_MAX_INSTANCE(long, long, LONG_MIN)
+CILK_C_REDUCER_MAX_INSTANCE(unsigned long, ulong, 0)
+CILK_C_REDUCER_MAX_INSTANCE(long long, longlong, LLONG_MIN)
+CILK_C_REDUCER_MAX_INSTANCE(unsigned long long, ulonglong, 0)
+CILK_C_REDUCER_MAX_INSTANCE(float, float, -HUGE_VALF)
+CILK_C_REDUCER_MAX_INSTANCE(double, double, -HUGE_VAL)
+CILK_C_REDUCER_MAX_INSTANCE(long double, longdouble, -HUGE_VALL)
+#ifdef __cplusplus
+} /* end extern "C" */
+#endif
 
 /// @endcond
 
 /** Max_index reducer type name.
  *
- *  This macro expands into the identifier which is the name of the max_index reducer
- *  type for a specified numeric type.
+ *  This macro expands into the identifier which is the name of the max_index
+ * reducer type for a specified numeric type.
  *
- *  @param  tn  The @ref reducers_c_type_names "numeric type name" specifying the type of the
- *              reducer.
+ *  @param  tn  The @ref reducers_c_type_names "numeric type name" specifying
+ * the type of the reducer.
  *
  *  @see @ref reducers_c_predefined
  */
-#define CILK_C_REDUCER_MAX_INDEX_TYPE(tn)                                         \
-    __CILKRTS_MKIDENT(cilk_c_reducer_max_index_,tn)
+#define CILK_C_REDUCER_MAX_INDEX_TYPE(tn)                                      \
+    __CILKRTS_MKIDENT(cilk_c_reducer_max_index_, tn)
 
 /** Declares an op_max_index reducer object.
  *
- *  This macro expands into a declaration of a max_index reducer object for a specified
- *  numeric type. For example:
+ *  This macro expands into a declaration of a max_index reducer object for a
+ * specified numeric type. For example:
  *
  *      CILK_C_REDUCER_MAX_INDEX(my_reducer, double, -DBL_MAX_INDEX);
  *
  *  @param  obj The variable name to be used for the declared reducer object.
- *  @param  tn  The @ref reducers_c_type_names "numeric type name" specifying the type of the
- *              reducer.
- *  @param  v   The initial value for the reducer. (A value which can be assigned to the
- *              numeric type represented by @a tn.)
+ *  @param  tn  The @ref reducers_c_type_names "numeric type name" specifying
+ * the type of the reducer.
+ *  @param  v   The initial value for the reducer. (A value which can be
+ * assigned to the numeric type represented by @a tn.)
  *
  *  @see @ref reducers_c_predefined
  */
-#define CILK_C_REDUCER_MAX_INDEX(obj,tn,v)                                        \
-    CILK_C_REDUCER_MAX_INDEX_TYPE(tn) obj =                                       \
-        CILK_C_INIT_REDUCER(_Typeof(obj.value),                             \
-                        __CILKRTS_MKIDENT(cilk_c_reducer_max_index_reduce_,tn),   \
-                        __CILKRTS_MKIDENT(cilk_c_reducer_max_index_identity_,tn), \
-                        __cilkrts_hyperobject_noop_destroy, {0, v})
+#define CILK_C_REDUCER_MAX_INDEX(obj, tn, v)                                   \
+    CILK_C_REDUCER_MAX_INDEX_TYPE(tn)                                          \
+    obj = CILK_C_INIT_REDUCER(                                                 \
+        _Typeof(obj.value),                                                    \
+        __CILKRTS_MKIDENT(cilk_c_reducer_max_index_reduce_, tn),               \
+        __CILKRTS_MKIDENT(cilk_c_reducer_max_index_identity_, tn),             \
+        0, {0, v})
 
 /** Maximizes with a value.
  *
@@ -3349,20 +3315,23 @@ __CILKRTS_END_EXTERN_C
  *
  *      REDUCER_VIEW(reducer) = max_index(REDUCER_VIEW(reducer), v)
  *
- *  If the value of the reducer is changed to @a v, then the index of the reducer is
- *  changed to @a i.
+ *  If the value of the reducer is changed to @a v, then the index of the
+ * reducer is changed to @a i.
  *
- *  @param reducer  The reducer whose contained value and index are to be updated.
+ *  @param reducer  The reducer whose contained value and index are to be
+ * updated.
  *  @param i        The index associated with the new value.
  *  @param v        The value that it is to be maximized with.
  */
-#define CILK_C_REDUCER_MAX_INDEX_CALC(reducer, i, v) do {                   \
-    _Typeof((reducer).value)* view = &(REDUCER_VIEW(reducer));              \
-    _Typeof(v) __value = (v);                                               \
-    if (view->value < __value) {                                            \
-        view->index = (i);                                                  \
-        view->value = __value;                                              \
-    } } while (0)
+#define CILK_C_REDUCER_MAX_INDEX_CALC(reducer, i, v)                           \
+    do {                                                                       \
+        _Typeof((reducer).value) *view = &(REDUCER_VIEW(reducer));             \
+        _Typeof(v) __value = (v);                                              \
+        if (view->value < __value) {                                           \
+            view->index = (i);                                                 \
+            view->value = __value;                                             \
+        }                                                                      \
+    } while (0)
 
 /// @cond internal
 
@@ -3372,89 +3341,99 @@ __CILKRTS_END_EXTERN_C
  *  maximum value for the reducer and the index that was associated with
  *  that value in the sequence of input values.
  */
-#define CILK_C_REDUCER_MAX_INDEX_VIEW(t,tn)                                  \
-    typedef struct {                                                         \
-        __STDNS ptrdiff_t index;                                             \
-        t                 value;                                             \
-    } __CILKRTS_MKIDENT(cilk_c_reducer_max_index_view_,tn)
+#define CILK_C_REDUCER_MAX_INDEX_VIEW(t, tn)                                   \
+    typedef struct {                                                           \
+        ptrdiff_t index;                                                       \
+        t value;                                                               \
+    } __CILKRTS_MKIDENT(cilk_c_reducer_max_index_view_, tn)
 
 /** Declares the max_index reducer functions for a numeric type.
  *
- *  This macro expands into external function declarations for functions which implement
- *  the reducer functionality for the max_index reducer type for a specified numeric type.
+ *  This macro expands into external function declarations for functions which
+ * implement the reducer functionality for the max_index reducer type for a
+ * specified numeric type.
  *
  *  @param  t   The value type of the reducer.
- *  @param  tn  The value "type name" identifier, used to construct the reducer type name,
- *              function names, etc.
+ *  @param  tn  The value "type name" identifier, used to construct the reducer
+ * type name, function names, etc.
  */
-#define CILK_C_REDUCER_MAX_INDEX_DECLARATION(t,tn,id)                       \
-    CILK_C_REDUCER_MAX_INDEX_VIEW(t,tn);                                    \
-    typedef CILK_C_DECLARE_REDUCER(                                         \
-        __CILKRTS_MKIDENT(cilk_c_reducer_max_index_view_,tn))               \
-            CILK_C_REDUCER_MAX_INDEX_TYPE(tn);                              \
-    __CILKRTS_DECLARE_REDUCER_REDUCE(cilk_c_reducer_max_index,tn,l,r);      \
-    __CILKRTS_DECLARE_REDUCER_IDENTITY(cilk_c_reducer_max_index,tn);
+#define CILK_C_REDUCER_MAX_INDEX_DECLARATION(t, tn, id)                        \
+    CILK_C_REDUCER_MAX_INDEX_VIEW(t, tn);                                      \
+    typedef CILK_C_DECLARE_REDUCER(                                            \
+        __CILKRTS_MKIDENT(cilk_c_reducer_max_index_view_, tn))                 \
+        CILK_C_REDUCER_MAX_INDEX_TYPE(tn);                                     \
+    __CILKRTS_DECLARE_REDUCER_REDUCE(cilk_c_reducer_max_index, tn, l, r);      \
+    __CILKRTS_DECLARE_REDUCER_IDENTITY(cilk_c_reducer_max_index, tn);
 
 /** Defines the max_index reducer functions for a numeric type.
  *
- *  This macro expands into function definitions for functions which implement the
- *  reducer functionality for the max_index reducer type for a specified numeric type.
+ *  This macro expands into function definitions for functions which implement
+ * the reducer functionality for the max_index reducer type for a specified
+ * numeric type.
  *
  *  @param  t   The value type of the reducer.
- *  @param  tn  The value "type name" identifier, used to construct the reducer type name,
- *              function names, etc.
+ *  @param  tn  The value "type name" identifier, used to construct the reducer
+ * type name, function names, etc.
  */
-#define CILK_C_REDUCER_MAX_INDEX_DEFINITION(t,tn,id)                           \
-    CILK_C_REDUCER_MAX_INDEX_VIEW(t,tn);                                    \
-    typedef CILK_C_DECLARE_REDUCER(                                         \
-        __CILKRTS_MKIDENT(cilk_c_reducer_max_index_view_,tn))               \
-            CILK_C_REDUCER_MAX_INDEX_TYPE(tn);                              \
-    __CILKRTS_DECLARE_REDUCER_REDUCE(cilk_c_reducer_max_index,tn,l,r)          \
-        { typedef __CILKRTS_MKIDENT(cilk_c_reducer_max_index_view_,tn) view_t; \
-          if (((view_t*)l)->value < ((view_t*)r)->value)                       \
-              *(view_t*)l = *(view_t*)r; }                                     \
-    __CILKRTS_DECLARE_REDUCER_IDENTITY(cilk_c_reducer_max_index,tn)            \
-        { typedef __CILKRTS_MKIDENT(cilk_c_reducer_max_index_view_,tn) view_t; \
-          ((view_t*)v)->index = 0; ((view_t*)v)->value = id; }
+#define CILK_C_REDUCER_MAX_INDEX_DEFINITION(t, tn, id)                         \
+    CILK_C_REDUCER_MAX_INDEX_VIEW(t, tn);                                      \
+    typedef CILK_C_DECLARE_REDUCER(                                            \
+        __CILKRTS_MKIDENT(cilk_c_reducer_max_index_view_, tn))                 \
+        CILK_C_REDUCER_MAX_INDEX_TYPE(tn);                                     \
+    __CILKRTS_DECLARE_REDUCER_REDUCE(cilk_c_reducer_max_index, tn, l, r) {     \
+        typedef __CILKRTS_MKIDENT(cilk_c_reducer_max_index_view_, tn) view_t;  \
+        if (((view_t *)l)->value < ((view_t *)r)->value)                       \
+            *(view_t *)l = *(view_t *)r;                                       \
+    }                                                                          \
+    __CILKRTS_DECLARE_REDUCER_IDENTITY(cilk_c_reducer_max_index, tn) {         \
+        typedef __CILKRTS_MKIDENT(cilk_c_reducer_max_index_view_, tn) view_t;  \
+        ((view_t *)v)->index = 0;                                              \
+        ((view_t *)v)->value = id;                                             \
+    }
 
 //@{
 /** @def CILK_C_REDUCER_MAX_INDEX_INSTANCE
  *  @brief Declare or define implementation functions for a reducer type.
  *
- *  In the runtime source file c_reducers.c, the macro `CILK_C_DEFINE_REDUCERS` will be defined, and
- *  this macro will generate reducer implementation functions. Everywhere else, `CILK_C_DEFINE_REDUCERS`
- *  will be undefined, and this macro will expand into external declarations for the functions.
+ *  In the runtime source file c_reducers.c, the macro `CILK_C_DEFINE_REDUCERS`
+ * will be defined, and this macro will generate reducer implementation
+ * functions. Everywhere else, `CILK_C_DEFINE_REDUCERS` will be undefined, and
+ * this macro will expand into external declarations for the functions.
  */
 #ifdef CILK_C_DEFINE_REDUCERS
-#   define CILK_C_REDUCER_MAX_INDEX_INSTANCE(t,tn,id)  \
-        CILK_C_REDUCER_MAX_INDEX_DEFINITION(t,tn,id)
+#define CILK_C_REDUCER_MAX_INDEX_INSTANCE(t, tn, id)                           \
+    CILK_C_REDUCER_MAX_INDEX_DEFINITION(t, tn, id)
 #else
-#   define CILK_C_REDUCER_MAX_INDEX_INSTANCE(t,tn,id)  \
-        CILK_C_REDUCER_MAX_INDEX_DECLARATION(t,tn,id)
+#define CILK_C_REDUCER_MAX_INDEX_INSTANCE(t, tn, id)                           \
+    CILK_C_REDUCER_MAX_INDEX_DECLARATION(t, tn, id)
 #endif
 //@}
 
-/*  Declares or defines an instance of the reducer type and its functions for each
- *  numeric type.
+/*  Declares or defines an instance of the reducer type and its functions for
+ * each numeric type.
  */
-__CILKRTS_BEGIN_EXTERN_C
-CILK_C_REDUCER_MAX_INDEX_INSTANCE(char,               char,       CHAR_MIN)
-CILK_C_REDUCER_MAX_INDEX_INSTANCE(unsigned char,      uchar,      0)
-CILK_C_REDUCER_MAX_INDEX_INSTANCE(signed char,        schar,      SCHAR_MIN)
-CILK_C_REDUCER_MAX_INDEX_INSTANCE(wchar_t,            wchar_t,    WCHAR_MIN)
-CILK_C_REDUCER_MAX_INDEX_INSTANCE(short,              short,      SHRT_MIN)
-CILK_C_REDUCER_MAX_INDEX_INSTANCE(unsigned short,     ushort,     0)
-CILK_C_REDUCER_MAX_INDEX_INSTANCE(int,                int,        INT_MIN)
-CILK_C_REDUCER_MAX_INDEX_INSTANCE(unsigned int,       uint,       0)
-CILK_C_REDUCER_MAX_INDEX_INSTANCE(unsigned int,       unsigned,   0) // alternate name
-CILK_C_REDUCER_MAX_INDEX_INSTANCE(long,               long,       LONG_MIN)
-CILK_C_REDUCER_MAX_INDEX_INSTANCE(unsigned long,      ulong,      0)
-CILK_C_REDUCER_MAX_INDEX_INSTANCE(long long,          longlong,   LLONG_MIN)
-CILK_C_REDUCER_MAX_INDEX_INSTANCE(unsigned long long, ulonglong,  0)
-CILK_C_REDUCER_MAX_INDEX_INSTANCE(float,              float,      -HUGE_VALF)
-CILK_C_REDUCER_MAX_INDEX_INSTANCE(double,             double,     -HUGE_VAL)
-CILK_C_REDUCER_MAX_INDEX_INSTANCE(long double,        longdouble, -HUGE_VALL)
-__CILKRTS_END_EXTERN_C
+#ifdef __cplusplus
+extern "C" {
+#endif
+CILK_C_REDUCER_MAX_INDEX_INSTANCE(char, char, CHAR_MIN)
+CILK_C_REDUCER_MAX_INDEX_INSTANCE(unsigned char, uchar, 0)
+CILK_C_REDUCER_MAX_INDEX_INSTANCE(signed char, schar, SCHAR_MIN)
+CILK_C_REDUCER_MAX_INDEX_INSTANCE(wchar_t, wchar_t, WCHAR_MIN)
+CILK_C_REDUCER_MAX_INDEX_INSTANCE(short, short, SHRT_MIN)
+CILK_C_REDUCER_MAX_INDEX_INSTANCE(unsigned short, ushort, 0)
+CILK_C_REDUCER_MAX_INDEX_INSTANCE(int, int, INT_MIN)
+CILK_C_REDUCER_MAX_INDEX_INSTANCE(unsigned int, uint, 0)
+CILK_C_REDUCER_MAX_INDEX_INSTANCE(unsigned int, unsigned, 0) // alternate name
+CILK_C_REDUCER_MAX_INDEX_INSTANCE(long, long, LONG_MIN)
+CILK_C_REDUCER_MAX_INDEX_INSTANCE(unsigned long, ulong, 0)
+CILK_C_REDUCER_MAX_INDEX_INSTANCE(long long, longlong, LLONG_MIN)
+CILK_C_REDUCER_MAX_INDEX_INSTANCE(unsigned long long, ulonglong, 0)
+CILK_C_REDUCER_MAX_INDEX_INSTANCE(float, float, -HUGE_VALF)
+CILK_C_REDUCER_MAX_INDEX_INSTANCE(double, double, -HUGE_VAL)
+CILK_C_REDUCER_MAX_INDEX_INSTANCE(long double, longdouble, -HUGE_VALL)
+#ifdef __cplusplus
+} /* end extern "C" */
+#endif
 
 /// @endcond
 
@@ -3463,35 +3442,34 @@ __CILKRTS_END_EXTERN_C
  *  This macro expands into the identifier which is the name of the min reducer
  *  type for a specified numeric type.
  *
- *  @param  tn  The @ref reducers_c_type_names "numeric type name" specifying the type of the
- *              reducer.
+ *  @param  tn  The @ref reducers_c_type_names "numeric type name" specifying
+ * the type of the reducer.
  *
  *  @see @ref reducers_c_predefined
  */
-#define CILK_C_REDUCER_MIN_TYPE(tn)                                         \
-    __CILKRTS_MKIDENT(cilk_c_reducer_min_,tn)
+#define CILK_C_REDUCER_MIN_TYPE(tn) __CILKRTS_MKIDENT(cilk_c_reducer_min_, tn)
 
 /** Declares a min reducer object.
  *
- *  This macro expands into a declaration of a min reducer object for a specified numeric
- *  type. For example:
+ *  This macro expands into a declaration of a min reducer object for a
+ * specified numeric type. For example:
  *
  *      CILK_C_REDUCER_MIN(my_reducer, double, DBL_MAX);
  *
  *  @param  obj The variable name to be used for the declared reducer object.
- *  @param  tn  The @ref reducers_c_type_names "numeric type name" specifying the type of the
- *              reducer.
- *  @param  v   The initial value for the reducer. (A value which can be assigned to the
- *              numeric type represented by @a tn.)
+ *  @param  tn  The @ref reducers_c_type_names "numeric type name" specifying
+ * the type of the reducer.
+ *  @param  v   The initial value for the reducer. (A value which can be
+ * assigned to the numeric type represented by @a tn.)
  *
  *  @see @ref reducers_c_predefined
  */
-#define CILK_C_REDUCER_MIN(obj,tn,v)                                        \
-    CILK_C_REDUCER_MIN_TYPE(tn) obj =                                       \
-        CILK_C_INIT_REDUCER(_Typeof(obj.value),                             \
-                        __CILKRTS_MKIDENT(cilk_c_reducer_min_reduce_,tn),   \
-                        __CILKRTS_MKIDENT(cilk_c_reducer_min_identity_,tn), \
-                        __cilkrts_hyperobject_noop_destroy, v)
+#define CILK_C_REDUCER_MIN(obj, tn, v)                                         \
+    CILK_C_REDUCER_MIN_TYPE(tn)                                                \
+    obj = CILK_C_INIT_REDUCER(                                                 \
+        _Typeof(obj.value), __CILKRTS_MKIDENT(cilk_c_reducer_min_reduce_, tn), \
+        __CILKRTS_MKIDENT(cilk_c_reducer_min_identity_, tn),                   \
+        0, v)
 
 /** Minimizes with a value.
  *
@@ -3504,120 +3482,131 @@ __CILKRTS_END_EXTERN_C
  *  @param reducer  The reducer whose contained value is to be updated.
  *  @param v        The value that it is to be minimized with.
  */
-#define CILK_C_REDUCER_MIN_CALC(reducer, v) do {                            \
-    _Typeof((reducer).value)* view = &(REDUCER_VIEW(reducer));              \
-    _Typeof(v) __value = (v);                                               \
-    if (*view > __value) {                                                  \
-        *view = __value;                                                    \
-    } } while (0)
+#define CILK_C_REDUCER_MIN_CALC(reducer, v)                                    \
+    do {                                                                       \
+        _Typeof((reducer).value) *view = &(REDUCER_VIEW(reducer));             \
+        _Typeof(v) __value = (v);                                              \
+        if (*view > __value) {                                                 \
+            *view = __value;                                                   \
+        }                                                                      \
+    } while (0)
 
 /// @cond internal
 
 /** Declares the min reducer functions for a numeric type.
  *
- *  This macro expands into external function declarations for functions which implement
- *  the reducer functionality for the min reducer type for a specified numeric type.
+ *  This macro expands into external function declarations for functions which
+ * implement the reducer functionality for the min reducer type for a specified
+ * numeric type.
  *
  *  @param  t   The value type of the reducer.
- *  @param  tn  The value "type name" identifier, used to construct the reducer type name,
- *              function names, etc.
+ *  @param  tn  The value "type name" identifier, used to construct the reducer
+ * type name, function names, etc.
  */
-#define CILK_C_REDUCER_MIN_DECLARATION(t,tn,id)                             \
-    typedef CILK_C_DECLARE_REDUCER(t) CILK_C_REDUCER_MIN_TYPE(tn);       \
-    __CILKRTS_DECLARE_REDUCER_REDUCE(cilk_c_reducer_min,tn,l,r);         \
-    __CILKRTS_DECLARE_REDUCER_IDENTITY(cilk_c_reducer_min,tn);
+#define CILK_C_REDUCER_MIN_DECLARATION(t, tn, id)                              \
+    typedef CILK_C_DECLARE_REDUCER(t) CILK_C_REDUCER_MIN_TYPE(tn);             \
+    __CILKRTS_DECLARE_REDUCER_REDUCE(cilk_c_reducer_min, tn, l, r);            \
+    __CILKRTS_DECLARE_REDUCER_IDENTITY(cilk_c_reducer_min, tn);
 
 /** Defines the min reducer functions for a numeric type.
  *
- *  This macro expands into function definitions for functions which implement the
- *  reducer functionality for the min reducer type for a specified numeric type.
+ *  This macro expands into function definitions for functions which implement
+ * the reducer functionality for the min reducer type for a specified numeric
+ * type.
  *
  *  @param  t   The value type of the reducer.
- *  @param  tn  The value "type name" identifier, used to construct the reducer type name,
- *              function names, etc.
+ *  @param  tn  The value "type name" identifier, used to construct the reducer
+ * type name, function names, etc.
  */
-#define CILK_C_REDUCER_MIN_DEFINITION(t,tn,id)                           \
-    typedef CILK_C_DECLARE_REDUCER(t) CILK_C_REDUCER_MIN_TYPE(tn);       \
-    __CILKRTS_DECLARE_REDUCER_REDUCE(cilk_c_reducer_min,tn,l,r)          \
-        { if (*(t*)l > *(t*)r) *(t*)l = *(t*)r; }                        \
-    __CILKRTS_DECLARE_REDUCER_IDENTITY(cilk_c_reducer_min,tn)            \
-        { *(t*)v = id; }
+#define CILK_C_REDUCER_MIN_DEFINITION(t, tn, id)                               \
+    typedef CILK_C_DECLARE_REDUCER(t) CILK_C_REDUCER_MIN_TYPE(tn);             \
+    __CILKRTS_DECLARE_REDUCER_REDUCE(cilk_c_reducer_min, tn, l, r) {           \
+        if (*(t *)l > *(t *)r)                                                 \
+            *(t *)l = *(t *)r;                                                 \
+    }                                                                          \
+    __CILKRTS_DECLARE_REDUCER_IDENTITY(cilk_c_reducer_min, tn) { *(t *)v = id; }
 
 //@{
 /** @def CILK_C_REDUCER_MIN_INSTANCE
  *  @brief Declare or define implementation functions for a reducer type.
  *
- *  In the runtime source file c_reducers.c, the macro `CILK_C_DEFINE_REDUCERS` will be defined, and
- *  this macro will generate reducer implementation functions. Everywhere else, `CILK_C_DEFINE_REDUCERS`
- *  will be undefined, and this macro will expand into external declarations for the functions.
+ *  In the runtime source file c_reducers.c, the macro `CILK_C_DEFINE_REDUCERS`
+ * will be defined, and this macro will generate reducer implementation
+ * functions. Everywhere else, `CILK_C_DEFINE_REDUCERS` will be undefined, and
+ * this macro will expand into external declarations for the functions.
  */
 #ifdef CILK_C_DEFINE_REDUCERS
-#   define CILK_C_REDUCER_MIN_INSTANCE(t,tn,id)  \
-        CILK_C_REDUCER_MIN_DEFINITION(t,tn,id)
+#define CILK_C_REDUCER_MIN_INSTANCE(t, tn, id)                                 \
+    CILK_C_REDUCER_MIN_DEFINITION(t, tn, id)
 #else
-#   define CILK_C_REDUCER_MIN_INSTANCE(t,tn,id)  \
-        CILK_C_REDUCER_MIN_DECLARATION(t,tn,id)
+#define CILK_C_REDUCER_MIN_INSTANCE(t, tn, id)                                 \
+    CILK_C_REDUCER_MIN_DECLARATION(t, tn, id)
 #endif
 //@}
 
-/*  Declares or defines an instance of the reducer type and its functions for each
- *  numeric type.
+/*  Declares or defines an instance of the reducer type and its functions for
+ * each numeric type.
  */
-__CILKRTS_BEGIN_EXTERN_C
-CILK_C_REDUCER_MIN_INSTANCE(char,               char,       CHAR_MAX)
-CILK_C_REDUCER_MIN_INSTANCE(unsigned char,      uchar,      CHAR_MAX)
-CILK_C_REDUCER_MIN_INSTANCE(signed char,        schar,      SCHAR_MAX)
-CILK_C_REDUCER_MIN_INSTANCE(wchar_t,            wchar_t,    WCHAR_MAX)
-CILK_C_REDUCER_MIN_INSTANCE(short,              short,      SHRT_MAX)
-CILK_C_REDUCER_MIN_INSTANCE(unsigned short,     ushort,     USHRT_MAX)
-CILK_C_REDUCER_MIN_INSTANCE(int,                int,        INT_MAX)
-CILK_C_REDUCER_MIN_INSTANCE(unsigned int,       uint,       UINT_MAX)
-CILK_C_REDUCER_MIN_INSTANCE(unsigned int,       unsigned,   UINT_MAX) // alternate name
-CILK_C_REDUCER_MIN_INSTANCE(long,               long,       LONG_MAX)
-CILK_C_REDUCER_MIN_INSTANCE(unsigned long,      ulong,      ULONG_MAX)
-CILK_C_REDUCER_MIN_INSTANCE(long long,          longlong,   LLONG_MAX)
-CILK_C_REDUCER_MIN_INSTANCE(unsigned long long, ulonglong,  ULLONG_MAX)
-CILK_C_REDUCER_MIN_INSTANCE(float,              float,      HUGE_VALF)
-CILK_C_REDUCER_MIN_INSTANCE(double,             double,     HUGE_VAL)
-CILK_C_REDUCER_MIN_INSTANCE(long double,        longdouble, HUGE_VALL)
-__CILKRTS_END_EXTERN_C
+#ifdef __cplusplus
+extern "C" {
+#endif
+CILK_C_REDUCER_MIN_INSTANCE(char, char, CHAR_MAX)
+CILK_C_REDUCER_MIN_INSTANCE(unsigned char, uchar, CHAR_MAX)
+CILK_C_REDUCER_MIN_INSTANCE(signed char, schar, SCHAR_MAX)
+CILK_C_REDUCER_MIN_INSTANCE(wchar_t, wchar_t, WCHAR_MAX)
+CILK_C_REDUCER_MIN_INSTANCE(short, short, SHRT_MAX)
+CILK_C_REDUCER_MIN_INSTANCE(unsigned short, ushort, USHRT_MAX)
+CILK_C_REDUCER_MIN_INSTANCE(int, int, INT_MAX)
+CILK_C_REDUCER_MIN_INSTANCE(unsigned int, uint, UINT_MAX)
+CILK_C_REDUCER_MIN_INSTANCE(unsigned int, unsigned, UINT_MAX) // alternate name
+CILK_C_REDUCER_MIN_INSTANCE(long, long, LONG_MAX)
+CILK_C_REDUCER_MIN_INSTANCE(unsigned long, ulong, ULONG_MAX)
+CILK_C_REDUCER_MIN_INSTANCE(long long, longlong, LLONG_MAX)
+CILK_C_REDUCER_MIN_INSTANCE(unsigned long long, ulonglong, ULLONG_MAX)
+CILK_C_REDUCER_MIN_INSTANCE(float, float, HUGE_VALF)
+CILK_C_REDUCER_MIN_INSTANCE(double, double, HUGE_VAL)
+CILK_C_REDUCER_MIN_INSTANCE(long double, longdouble, HUGE_VALL)
+#ifdef __cplusplus
+} /* end extern "C" */
+#endif
 
 /// @endcond
 
 /** Declares `min_index` reducer type name.
  *
- *  This macro expands into the identifier which is the name of the min_index reducer
- *  type for a specified numeric type.
+ *  This macro expands into the identifier which is the name of the min_index
+ * reducer type for a specified numeric type.
  *
- *  @param  tn  The @ref reducers_c_type_names "numeric type name" specifying the type of the
- *              reducer.
+ *  @param  tn  The @ref reducers_c_type_names "numeric type name" specifying
+ * the type of the reducer.
  *
  *  @see @ref reducers_c_predefined
  */
-#define CILK_C_REDUCER_MIN_INDEX_TYPE(tn)                                         \
-    __CILKRTS_MKIDENT(cilk_c_reducer_min_index_,tn)
+#define CILK_C_REDUCER_MIN_INDEX_TYPE(tn)                                      \
+    __CILKRTS_MKIDENT(cilk_c_reducer_min_index_, tn)
 
 /** Declares an op_min_index reducer object.
  *
- *  This macro expands into a declaration of a min_index reducer object for a specified
- *  numeric type. For example:
+ *  This macro expands into a declaration of a min_index reducer object for a
+ * specified numeric type. For example:
  *
  *      CILK_C_REDUCER_MIN_INDEX(my_reducer, double, -DBL_MIN_INDEX);
  *
  *  @param  obj The variable name to be used for the declared reducer object.
- *  @param  tn  The @ref reducers_c_type_names "numeric type name" specifying the type of the
- *              reducer.
- *  @param  v   The initial value for the reducer. (A value which can be assigned to the
- *              numeric type represented by @a tn.)
+ *  @param  tn  The @ref reducers_c_type_names "numeric type name" specifying
+ * the type of the reducer.
+ *  @param  v   The initial value for the reducer. (A value which can be
+ * assigned to the numeric type represented by @a tn.)
  *
  *  @see @ref reducers_c_predefined
  */
-#define CILK_C_REDUCER_MIN_INDEX(obj,tn,v)                                        \
-    CILK_C_REDUCER_MIN_INDEX_TYPE(tn) obj =                                       \
-        CILK_C_INIT_REDUCER(_Typeof(obj.value),                             \
-                        __CILKRTS_MKIDENT(cilk_c_reducer_min_index_reduce_,tn),   \
-                        __CILKRTS_MKIDENT(cilk_c_reducer_min_index_identity_,tn), \
-                        __cilkrts_hyperobject_noop_destroy, {0, v})
+#define CILK_C_REDUCER_MIN_INDEX(obj, tn, v)                                   \
+    CILK_C_REDUCER_MIN_INDEX_TYPE(tn)                                          \
+    obj = CILK_C_INIT_REDUCER(                                                 \
+        _Typeof(obj.value),                                                    \
+        __CILKRTS_MKIDENT(cilk_c_reducer_min_index_reduce_, tn),               \
+        __CILKRTS_MKIDENT(cilk_c_reducer_min_index_identity_, tn),             \
+        0, {0, v})
 
 /** Minimizes with a value.
  *
@@ -3627,20 +3616,23 @@ __CILKRTS_END_EXTERN_C
  *
  *      REDUCER_VIEW(reducer) = min_index(REDUCER_VIEW(reducer), v)
  *
- *  If the value of the reducer is changed to @a v, then the index of the reducer is
- *  changed to @a i.
+ *  If the value of the reducer is changed to @a v, then the index of the
+ * reducer is changed to @a i.
  *
- *  @param reducer  The reducer whose contained value and index are to be updated.
+ *  @param reducer  The reducer whose contained value and index are to be
+ * updated.
  *  @param i        The index associated with the new value.
  *  @param v        The value that it is to be minimized with.
  */
-#define CILK_C_REDUCER_MIN_INDEX_CALC(reducer, i, v) do {                   \
-    _Typeof((reducer).value)* view = &(REDUCER_VIEW(reducer));              \
-    _Typeof(v) __value = (v);                                               \
-    if (view->value > __value) {                                            \
-        view->index = (i);                                                  \
-        view->value = __value;                                              \
-    } } while (0)
+#define CILK_C_REDUCER_MIN_INDEX_CALC(reducer, i, v)                           \
+    do {                                                                       \
+        _Typeof((reducer).value) *view = &(REDUCER_VIEW(reducer));             \
+        _Typeof(v) __value = (v);                                              \
+        if (view->value > __value) {                                           \
+            view->index = (i);                                                 \
+            view->value = __value;                                             \
+        }                                                                      \
+    } while (0)
 
 /// @cond internal
 
@@ -3650,89 +3642,100 @@ __CILKRTS_END_EXTERN_C
  *  minimum value for the reducer and the index that was associated with
  *  that value in the sequence of input values.
  */
-#define CILK_C_REDUCER_MIN_INDEX_VIEW(t,tn)                                  \
-    typedef struct {                                                         \
-        __STDNS ptrdiff_t index;                                             \
-        t                 value;                                             \
-    } __CILKRTS_MKIDENT(cilk_c_reducer_min_index_view_,tn)
+#define CILK_C_REDUCER_MIN_INDEX_VIEW(t, tn)                                   \
+    typedef struct {                                                           \
+        ptrdiff_t index;                                                       \
+        t value;                                                               \
+    } __CILKRTS_MKIDENT(cilk_c_reducer_min_index_view_, tn)
 
 /** Declares the min_index reducer functions for a numeric type.
  *
- *  This macro expands into external function declarations for functions which implement
- *  the reducer functionality for the min_index reducer type for a specified numeric type.
+ *  This macro expands into external function declarations for functions which
+ * implement the reducer functionality for the min_index reducer type for a
+ * specified numeric type.
  *
  *  @param  t   The value type of the reducer.
- *  @param  tn  The value "type name" identifier, used to construct the reducer type name,
- *              function names, etc.
+ *  @param  tn  The value "type name" identifier, used to construct the reducer
+ * type name, function names, etc.
  */
-#define CILK_C_REDUCER_MIN_INDEX_DECLARATION(t,tn,id)                       \
-    CILK_C_REDUCER_MIN_INDEX_VIEW(t,tn);                                    \
-    typedef CILK_C_DECLARE_REDUCER(                                         \
-        __CILKRTS_MKIDENT(cilk_c_reducer_min_index_view_,tn))               \
-            CILK_C_REDUCER_MIN_INDEX_TYPE(tn);                              \
-    __CILKRTS_DECLARE_REDUCER_REDUCE(cilk_c_reducer_min_index,tn,l,r);      \
-    __CILKRTS_DECLARE_REDUCER_IDENTITY(cilk_c_reducer_min_index,tn);
+#define CILK_C_REDUCER_MIN_INDEX_DECLARATION(t, tn, id)                        \
+    CILK_C_REDUCER_MIN_INDEX_VIEW(t, tn);                                      \
+    typedef CILK_C_DECLARE_REDUCER(                                            \
+        __CILKRTS_MKIDENT(cilk_c_reducer_min_index_view_, tn))                 \
+        CILK_C_REDUCER_MIN_INDEX_TYPE(tn);                                     \
+    __CILKRTS_DECLARE_REDUCER_REDUCE(cilk_c_reducer_min_index, tn, l, r);      \
+    __CILKRTS_DECLARE_REDUCER_IDENTITY(cilk_c_reducer_min_index, tn);
 
 /** Defines the min_index reducer functions for a numeric type.
  *
- *  This macro expands into function definitions for functions which implement the
- *  reducer functionality for the min_index reducer type for a specified numeric type.
+ *  This macro expands into function definitions for functions which implement
+ * the reducer functionality for the min_index reducer type for a specified
+ * numeric type.
  *
  *  @param  t   The value type of the reducer.
- *  @param  tn  The value "type name" identifier, used to construct the reducer type name,
- *              function names, etc.
+ *  @param  tn  The value "type name" identifier, used to construct the reducer
+ * type name, function names, etc.
  */
-#define CILK_C_REDUCER_MIN_INDEX_DEFINITION(t,tn,id)                           \
-    CILK_C_REDUCER_MIN_INDEX_VIEW(t,tn);                                    \
-    typedef CILK_C_DECLARE_REDUCER(                                         \
-        __CILKRTS_MKIDENT(cilk_c_reducer_min_index_view_,tn))               \
-            CILK_C_REDUCER_MIN_INDEX_TYPE(tn);                              \
-    __CILKRTS_DECLARE_REDUCER_REDUCE(cilk_c_reducer_min_index,tn,l,r)          \
-        { typedef __CILKRTS_MKIDENT(cilk_c_reducer_min_index_view_,tn) view_t; \
-          if (((view_t*)l)->value > ((view_t*)r)->value)                       \
-              *(view_t*)l = *(view_t*)r; }                                     \
-    __CILKRTS_DECLARE_REDUCER_IDENTITY(cilk_c_reducer_min_index,tn)            \
-        { typedef __CILKRTS_MKIDENT(cilk_c_reducer_min_index_view_,tn) view_t; \
-          ((view_t*)v)->index = 0; ((view_t*)v)->value = id; }
+#define CILK_C_REDUCER_MIN_INDEX_DEFINITION(t, tn, id)                         \
+    CILK_C_REDUCER_MIN_INDEX_VIEW(t, tn);                                      \
+    typedef CILK_C_DECLARE_REDUCER(                                            \
+        __CILKRTS_MKIDENT(cilk_c_reducer_min_index_view_, tn))                 \
+        CILK_C_REDUCER_MIN_INDEX_TYPE(tn);                                     \
+    __CILKRTS_DECLARE_REDUCER_REDUCE(cilk_c_reducer_min_index, tn, l, r) {     \
+        typedef __CILKRTS_MKIDENT(cilk_c_reducer_min_index_view_, tn) view_t;  \
+        if (((view_t *)l)->value > ((view_t *)r)->value)                       \
+            *(view_t *)l = *(view_t *)r;                                       \
+    }                                                                          \
+    __CILKRTS_DECLARE_REDUCER_IDENTITY(cilk_c_reducer_min_index, tn) {         \
+        typedef __CILKRTS_MKIDENT(cilk_c_reducer_min_index_view_, tn) view_t;  \
+        ((view_t *)v)->index = 0;                                              \
+        ((view_t *)v)->value = id;                                             \
+    }
 
 //@{
 /** @def CILK_C_REDUCER_MIN_INDEX_INSTANCE
  *  @brief Declares or defines implementation functions for a reducer type.
  *
- *  In the runtime source file c_reducers.c, the macro `CILK_C_DEFINE_REDUCERS` will be defined, and
- *  this macro will generate reducer implementation functions. Everywhere else, `CILK_C_DEFINE_REDUCERS`
- *  will be undefined, and this macro will expand into external declarations for the functions.
+ *  In the runtime source file c_reducers.c, the macro `CILK_C_DEFINE_REDUCERS`
+ * will be defined, and this macro will generate reducer implementation
+ * functions. Everywhere else, `CILK_C_DEFINE_REDUCERS` will be undefined, and
+ * this macro will expand into external declarations for the functions.
  */
 #ifdef CILK_C_DEFINE_REDUCERS
-#   define CILK_C_REDUCER_MIN_INDEX_INSTANCE(t,tn,id)  \
-        CILK_C_REDUCER_MIN_INDEX_DEFINITION(t,tn,id)
+#define CILK_C_REDUCER_MIN_INDEX_INSTANCE(t, tn, id)                           \
+    CILK_C_REDUCER_MIN_INDEX_DEFINITION(t, tn, id)
 #else
-#   define CILK_C_REDUCER_MIN_INDEX_INSTANCE(t,tn,id)  \
-        CILK_C_REDUCER_MIN_INDEX_DECLARATION(t,tn,id)
+#define CILK_C_REDUCER_MIN_INDEX_INSTANCE(t, tn, id)                           \
+    CILK_C_REDUCER_MIN_INDEX_DECLARATION(t, tn, id)
 #endif
 //@}
 
-/*  Declares or defines an instance of the reducer type and its functions for each
- *  numeric type.
+/*  Declares or defines an instance of the reducer type and its functions for
+ * each numeric type.
  */
-__CILKRTS_BEGIN_EXTERN_C
-CILK_C_REDUCER_MIN_INDEX_INSTANCE(char,               char,       CHAR_MAX)
-CILK_C_REDUCER_MIN_INDEX_INSTANCE(unsigned char,      uchar,      CHAR_MAX)
-CILK_C_REDUCER_MIN_INDEX_INSTANCE(signed char,        schar,      SCHAR_MAX)
-CILK_C_REDUCER_MIN_INDEX_INSTANCE(wchar_t,            wchar_t,    WCHAR_MAX)
-CILK_C_REDUCER_MIN_INDEX_INSTANCE(short,              short,      SHRT_MAX)
-CILK_C_REDUCER_MIN_INDEX_INSTANCE(unsigned short,     ushort,     USHRT_MAX)
-CILK_C_REDUCER_MIN_INDEX_INSTANCE(int,                int,        INT_MAX)
-CILK_C_REDUCER_MIN_INDEX_INSTANCE(unsigned int,       uint,       UINT_MAX)
-CILK_C_REDUCER_MIN_INDEX_INSTANCE(unsigned int,       unsigned,   UINT_MAX) // alternate name
-CILK_C_REDUCER_MIN_INDEX_INSTANCE(long,               long,       LONG_MAX)
-CILK_C_REDUCER_MIN_INDEX_INSTANCE(unsigned long,      ulong,      ULONG_MAX)
-CILK_C_REDUCER_MIN_INDEX_INSTANCE(long long,          longlong,   LLONG_MAX)
-CILK_C_REDUCER_MIN_INDEX_INSTANCE(unsigned long long, ulonglong,  ULLONG_MAX)
-CILK_C_REDUCER_MIN_INDEX_INSTANCE(float,              float,      HUGE_VALF)
-CILK_C_REDUCER_MIN_INDEX_INSTANCE(double,             double,     HUGE_VAL)
-CILK_C_REDUCER_MIN_INDEX_INSTANCE(long double,        longdouble, HUGE_VALL)
-__CILKRTS_END_EXTERN_C
+#ifdef __cplusplus
+extern "C" {
+#endif
+CILK_C_REDUCER_MIN_INDEX_INSTANCE(char, char, CHAR_MAX)
+CILK_C_REDUCER_MIN_INDEX_INSTANCE(unsigned char, uchar, CHAR_MAX)
+CILK_C_REDUCER_MIN_INDEX_INSTANCE(signed char, schar, SCHAR_MAX)
+CILK_C_REDUCER_MIN_INDEX_INSTANCE(wchar_t, wchar_t, WCHAR_MAX)
+CILK_C_REDUCER_MIN_INDEX_INSTANCE(short, short, SHRT_MAX)
+CILK_C_REDUCER_MIN_INDEX_INSTANCE(unsigned short, ushort, USHRT_MAX)
+CILK_C_REDUCER_MIN_INDEX_INSTANCE(int, int, INT_MAX)
+CILK_C_REDUCER_MIN_INDEX_INSTANCE(unsigned int, uint, UINT_MAX)
+CILK_C_REDUCER_MIN_INDEX_INSTANCE(unsigned int, unsigned,
+                                  UINT_MAX) // alternate name
+CILK_C_REDUCER_MIN_INDEX_INSTANCE(long, long, LONG_MAX)
+CILK_C_REDUCER_MIN_INDEX_INSTANCE(unsigned long, ulong, ULONG_MAX)
+CILK_C_REDUCER_MIN_INDEX_INSTANCE(long long, longlong, LLONG_MAX)
+CILK_C_REDUCER_MIN_INDEX_INSTANCE(unsigned long long, ulonglong, ULLONG_MAX)
+CILK_C_REDUCER_MIN_INDEX_INSTANCE(float, float, HUGE_VALF)
+CILK_C_REDUCER_MIN_INDEX_INSTANCE(double, double, HUGE_VAL)
+CILK_C_REDUCER_MIN_INDEX_INSTANCE(long double, longdouble, HUGE_VALL)
+#ifdef __cplusplus
+} /* end extern "C" */
+#endif
 
 /// @endcond
 

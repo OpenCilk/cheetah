@@ -5,9 +5,7 @@
 #include "debug.h"
 
 #include "cilk-internal.h"
-#ifdef REDUCER_MODULE
 #include "cilkred_map.h"
-#endif
 #include "fiber.h"
 #include "mutex.h"
 
@@ -23,6 +21,18 @@ enum ClosureStatus {
     CLOSURE_PRE_INVALID, /* before first real use */
     CLOSURE_POST_INVALID /* after destruction */
 };
+
+static inline const char *Closure_status_to_str(enum ClosureStatus status) {
+    switch(status) {
+        case CLOSURE_RUNNING:      return "running";
+        case CLOSURE_SUSPENDED:    return "suspended";
+        case CLOSURE_RETURNING:    return "returning";
+        case CLOSURE_READY:        return "ready";
+        case CLOSURE_PRE_INVALID:  return "pre-invalid";
+        case CLOSURE_POST_INVALID: return "post-invalid";
+        default: return "unknown";
+    }
+}
 
 #if CILK_DEBUG
 #define Closure_assert_ownership(w, t) Closure_assert_ownership(w, t)
@@ -62,6 +72,9 @@ struct Closure {
     bool lock_wait;
     bool has_cilk_callee;
     unsigned int join_counter; /* number of outstanding spawned children */
+    bool simulated_stolen; /* ANGE XXX: Sorry, I probably messed
+                              up the alignment; should we update join_counter
+                              to be a short instead? */
 
     char *orig_rsp; /* the rsp one should use when sync successfully */
 
@@ -107,7 +120,6 @@ struct Closure {
     char *reraise_cfa;
     char *parent_rsp;
 
-#ifdef REDUCER_MODULE
     // cilkred_map *children_reducer_map;
     // cilkred_map *right_reducer_map;
 
@@ -120,7 +132,6 @@ struct Closure {
     _Atomic(cilkred_map *) volatile child_rmap;
     /* Reducer map for this closure when suspended at sync */
     cilkred_map *user_rmap;
-#endif
 
 } __attribute__((aligned(CILK_CACHE_LINE)));
 
@@ -170,8 +181,9 @@ CHEETAH_INTERNAL void Closure_add_callee(__cilkrts_worker *const w,
 CHEETAH_INTERNAL void Closure_remove_callee(__cilkrts_worker *const w,
                                             Closure *caller);
 
-CHEETAH_INTERNAL void Closure_suspend_victim(__cilkrts_worker *const w,
-                                             int victim, Closure *cl);
+CHEETAH_INTERNAL void Closure_suspend_victim(__cilkrts_worker *thief,
+                                             __cilkrts_worker *victim,
+                                             Closure *cl);
 CHEETAH_INTERNAL void Closure_suspend(__cilkrts_worker *const w, Closure *cl);
 
 CHEETAH_INTERNAL void Closure_make_ready(Closure *cl);

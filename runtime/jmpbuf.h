@@ -29,11 +29,16 @@ typedef void *jmpbuf[JMPBUF_SIZE];
 #define SP(SF) JMPBUF_SP((SF)->ctx)
 // typedef void *__CILK_JUMP_BUFFER[8];
 
+/* These macros are only for debugging. */
+#if defined __i386__
+#define ASM_GET_SP(osp) asm volatile("movl %%esp, %0" : "=r"(osp))
+#elif defined __x86_64__
 #define ASM_GET_SP(osp) asm volatile("movq %%rsp, %0" : "=r"(osp))
-#define ASM_SET_SP(nsp) asm volatile("movq %0, %%rsp" : : "r"(nsp) : "rsp")
+#else
+#define ASM_GET_SP(osp) (osp) = 0
+#endif
 
-#define ASM_GET_FP(ofp) asm volatile("movq %%rbp, %0" : "=r"(ofp))
-#define ASM_SET_FP(nfp) asm volatile("movq %0, %%rbp" : : "r"(nfp) : "rbp")
+#define ASM_GET_FP(ofp) (ofp) = __builtin_frame_address(0)
 
 #define DUMP_STACK(lvl, w)                                                     \
     {                                                                          \

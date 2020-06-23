@@ -1,10 +1,6 @@
 #ifndef _CILKRED_MAP_H
 #define _CILKRED_MAP_H
 
-#ifdef OPENCILK_ABI
-#define __cilk 300
-#endif
-
 #include "cilk-internal.h"
 #include "debug.h"
 #include <cilk/hyperobject_base.h>
@@ -12,7 +8,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-typedef uint32_t hyper_id_t;
+typedef uint32_t hyper_id_t; /* must match cilk/hyperobject_base.h */
 #define HYPER_ID_VALID 0x80000000
 
 enum merge_kind {
@@ -22,9 +18,6 @@ enum merge_kind {
 };
 typedef enum merge_kind merge_kind;
 
-// for each reducer, such ViewInfo is allocated in TLMM region, where the
-// key is a pointer to the hyperobject_base, and the val stores the pointer
-// to correpsonding view; hyperobjet_base->__tlmm_addr stores its addr
 typedef struct view_info {
     void *val; // pointer to the actual view for the reducer
     // pointer to the hyperbase object for a given reducer

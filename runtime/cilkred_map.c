@@ -1,4 +1,3 @@
-#ifdef REDUCER_MODULE
 #include "cilkred_map.h"
 
 // =================================================================
@@ -21,7 +20,10 @@ static inline void clear_view(ViewInfo *view) {
     __cilkrts_hyperobject_base *key = view->key;
 
     if (key != NULL) {
-        key->__c_monoid.destroy_fn(key, view->val);    // calls destructor
+        cilk_destroy_fn_t destroy = key->__c_monoid.destroy_fn;
+        if (destroy) {
+            key->__c_monoid.destroy_fn(key, view->val); // calls destructor
+        }
         key->__c_monoid.deallocate_fn(key, view->val); // free the memory
     }
     view->key = NULL;
@@ -38,7 +40,8 @@ void cilkred_map_log_id(__cilkrts_worker *const w, cilkred_map *this_map,
     CILK_ASSERT(w, this_map->num_of_vinfo <= this_map->spa_cap);
 
     if (this_map->num_of_vinfo == this_map->spa_cap) {
-        cilkrts_bug(w, "SPA resize not supported yet!");
+        cilkrts_bug(w, "SPA resize not supported yet! (vinfo = spa_cap = %lu)",
+                    (unsigned long)this_map->spa_cap);
     }
 
     if (this_map->num_of_logs < (this_map->spa_cap / 2)) {
@@ -227,4 +230,3 @@ size_t cilkred_map_num_views(cilkred_map *this_map) {
 
 /** @brief Is the cilkred_map leftmost */
 bool cilkred_map_is_leftmost(cilkred_map *this_map) { return false; }
-#endif

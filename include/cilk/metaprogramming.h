@@ -114,42 +114,6 @@ public:
 };
 
 
-/** Get the alignment of a type.
- *
- *  For example:
- *
- *      align_of<double>::value == 8
- *
- *  @tparam Tp  The type whose alignment is to be computed.
- *
- *  @result     The `value` member of an instantiation of this class template
- *              will hold the integral alignment requirement of @a Tp.
- *
- *  @pre        @a Tp shall be a complete type.
- *
- *  @ingroup common
- */
-template <typename Tp>
-struct align_of
-{
-private:
-    struct imp {
-        char m_padding;
-        Tp   m_val;
-
-        // The following declarations exist to suppress compiler-generated
-        // definitions, in case @a Tp does not have a public default
-        // constructor, copy constructor, or destructor.
-        imp(const imp&); // Declared but not defined
-        ~imp();          // Declared but not defined
-    };
-
-public:
-    /// The integral alignment requirement of @a Tp.
-    static const std::size_t    value = (sizeof(imp) - sizeof(Tp));
-};
-
-
 /** A class containing raw bytes with a specified alignment and size.
  *
  *  An object of type `aligned_storage<S, A>` will have alignment `A` and
@@ -176,6 +140,7 @@ public:
 template <std::size_t Size, std::size_t Alignment>
 struct aligned_storage;
 
+#define CILK_ALIGNAS(A) __attribute__((aligned(A)))
 /// @cond
 template<std::size_t Size> class aligned_storage<Size,  1>
     { CILK_ALIGNAS( 1) char m_bytes[Size]; };
@@ -192,6 +157,7 @@ template<std::size_t Size> class aligned_storage<Size, 32>
 template<std::size_t Size> class aligned_storage<Size, 64>
     { CILK_ALIGNAS(64) char m_bytes[Size]; };
 /// @endcond
+#undef CILK_ALIGNAS
 
 /** A buffer of uninitialized bytes with the same size and alignment as a
  *  specified type.
@@ -217,7 +183,7 @@ template<std::size_t Size> class aligned_storage<Size, 64>
  */
 template <typename Type>
 class storage_for_object :
-    aligned_storage< sizeof(Type), align_of<Type>::value >
+    aligned_storage< sizeof(Type), __alignof(Type) >
 {
 public:
     /// Return a typed reference to the buffer.
@@ -520,7 +486,7 @@ class new_aligned_pointer {
 public:
     /// Constructor allocates the pointer.
     new_aligned_pointer() :
-        m_ptr(allocate_aligned(sizeof(T), internal::align_of<T>::value)) {}
+        m_ptr(allocate_aligned(sizeof(T), __alignof(T))) {}
     /// Destructor deallocates the pointer.
     ~new_aligned_pointer() { if (m_ptr) deallocate_aligned(m_ptr); }
     /// Get the pointer.

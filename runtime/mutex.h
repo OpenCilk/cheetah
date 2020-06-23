@@ -7,6 +7,8 @@ typedef union cilk_mutex cilk_mutex;
 // Includes
 #include <pthread.h>
 
+#include "rts-config.h"
+
 #ifndef __APPLE__
 #define USE_SPINLOCK 1
 #endif
@@ -23,13 +25,13 @@ union cilk_mutex {
 };
 #endif
 
-void cilk_mutex_init(cilk_mutex *lock);
+CHEETAH_INTERNAL void cilk_mutex_init(cilk_mutex *lock);
 
-void cilk_mutex_lock(cilk_mutex *lock);
+CHEETAH_INTERNAL void cilk_mutex_lock(cilk_mutex *lock);
 
-void cilk_mutex_unlock(cilk_mutex *lock);
+CHEETAH_INTERNAL void cilk_mutex_unlock(cilk_mutex *lock);
 
-int cilk_mutex_try(cilk_mutex *lock);
+CHEETAH_INTERNAL int cilk_mutex_try(cilk_mutex *lock);
 
-void cilk_mutex_destroy(cilk_mutex *lock);
+CHEETAH_INTERNAL void cilk_mutex_destroy(cilk_mutex *lock);
 #endif

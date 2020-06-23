@@ -4,9 +4,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 
-#include "cilk-internal.h"
 #include "debug.h"
-#include "mutex.h"
 #include "rts-config.h"
 
 CHEETAH_INTERNAL extern int cheetah_page_shift;
@@ -15,17 +13,17 @@ CHEETAH_INTERNAL extern int cheetah_page_shift;
 
 #define INTERNAL_MALLOC_STATS CILK_STATS
 
-#if INTERNAL_MALLOC_STATS
 struct global_im_pool_stats {
-    int64_t allocated; // bytes allocated into the pool
-    int64_t wasted;    // bytes at the end of a chunk that could not be used
+    size_t allocated; // bytes allocated into the pool
+    size_t wasted;    // bytes at the end of a chunk that could not be used
 };
 
 struct im_bucket_stats {
-    int num_free;      // number of free blocks left; computed at terminate
-    int allocated;     // number of batch allocated and not freed
-    int max_allocated; // high watermark of batch_allocated
+    unsigned int num_free;  // number of free blocks left; computed at terminate
+    unsigned int allocated; // number of batch allocated and not freed
+    unsigned int max_allocated; // high watermark of batch_allocated
 };
+#if INTERNAL_MALLOC_STATS
 #define WHEN_IM_STATS(ex) ex
 #else
 #define WHEN_IM_STATS(ex)
@@ -44,27 +42,28 @@ struct global_im_pool {
 };
 
 struct im_bucket {
-    void *free_list;      // beginning of free list
-    int list_size;        // length of free list
-    int count_until_free; // number of allocations to make on the free list
+    void *free_list;        // beginning of free list
+    unsigned int list_size; // length of free list
+    unsigned int
+        count_until_free; // number of allocations to make on the free list
                           // before calling batch_free (back to the global)
     WHEN_IM_STATS(struct im_bucket_stats stats);
 };
 
 struct cilk_im_desc {
     struct im_bucket buckets[NUM_BUCKETS];
-    WHEN_CILK_DEBUG(int64_t used);
-    WHEN_CILK_DEBUG(int num_malloc);
+    size_t used;
+    unsigned long num_malloc;
 };
 
 /* Custom implementation of aligned_alloc. */
 static inline void *cilk_aligned_alloc(size_t alignment, size_t size) {
 #if defined(_ISOC11_SOURCE)
-  return aligned_alloc(alignment, size);
+    return aligned_alloc(alignment, size);
 #else
-  void *ptr;
-  posix_memalign(&ptr, alignment, size);
-  return ptr;
+    void *ptr;
+    posix_memalign(&ptr, alignment, size);
+    return ptr;
 #endif
 }
 
@@ -81,8 +80,8 @@ CHEETAH_INTERNAL void
 cilk_internal_malloc_per_worker_terminate(__cilkrts_worker *w);
 __attribute__((alloc_size(2), assume_aligned(32), malloc))
 CHEETAH_INTERNAL void *
-cilk_internal_malloc(__cilkrts_worker *w, int size);
+cilk_internal_malloc(__cilkrts_worker *w, size_t size);
 CHEETAH_INTERNAL void cilk_internal_free(__cilkrts_worker *w, void *p,
-                                         int size);
+                                         size_t size);
 
 #endif // _INTERAL_MALLOC_H

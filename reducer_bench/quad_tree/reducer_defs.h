@@ -24,7 +24,7 @@ void IEL_list_identity(void* key, void* value);
 
 typedef CILK_C_DECLARE_REDUCER(IntersectionEventList) IELReducer;
 
-#define IEL_RED CILK_C_INIT_REDUCER(IntersectionEventList, IEL_list_reduce, IEL_list_identity, __cilkrts_hyperobject_noop_destroy, (IntersectionEventList) { .head = NULL, .tail = NULL })
+#define IEL_RED CILK_C_INIT_REDUCER(IntersectionEventList, IEL_list_reduce, IEL_list_identity, 0, (IntersectionEventList) { .head = NULL, .tail = NULL })
 
 //----- unsigned int
 

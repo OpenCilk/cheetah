@@ -1,59 +1,55 @@
-#include <stdbool.h>
-#include <stdatomic.h>
 #include <signal.h>
+#include <stdatomic.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
 #include <unwind.h>
 
+#include "cilk-internal.h"
 #include "cilk2c.h"
 #include "closure.h"
 #include "readydeque.h"
-#include "cilk-internal.h"
 
-typedef _Unwind_Reason_Code (*__personality_routine)
-      (int version, _Unwind_Action actions,
-       uint64_t exception_class,
-       struct _Unwind_Exception *exception_object,
-       struct _Unwind_Context *context);
+typedef _Unwind_Reason_Code (*__personality_routine)(
+    int version, _Unwind_Action actions, uint64_t exception_class,
+    struct _Unwind_Exception *exception_object,
+    struct _Unwind_Context *context);
 
-static char *get_cfa(struct _Unwind_Context* context)
-{
-  /* _Unwind_GetCFA is originally a gcc extension.  FreeBSD has its
-     own library without that extension. */
-#ifdef __linux__
-  return (char *)_Unwind_GetCFA(context);
+static char *get_cfa(struct _Unwind_Context *context) {
+    /* _Unwind_GetCFA is originally a gcc extension.  FreeBSD has its
+       own library without that extension. */
+#if defined(__linux__) || (defined(__APPLE__) && defined(__MACH__))
+    return (char *)_Unwind_GetCFA(context);
 #else
-  /* See *RegisterInfo.td in LLVM source */
+    /* See *RegisterInfo.td in LLVM source */
 #ifdef __i386__
-  int sp_regno = 5; /* unclear if 5 or 6 is right here */
+    int sp_regno = 5; /* unclear if 5 or 6 is right here */
 #elif defined __x86_64__
-  int sp_regno = 7;
+    int sp_regno = 7;
 #elif defined __aarch64__
-  int sp_regno = 31;
+    int sp_regno = 31;
 #elif defined __arm__
-  int sp_regno = 13;
+    int sp_regno = 13;
 #else
-  /* Probably 14 for SPARC, 2 for RISCV, and 1 for PPC. */
+    /* Probably 14 for SPARC, 2 for RISCV, and 1 for PPC. */
 #error "no CFA"
 #endif
-  return (char *)_Unwind_GetGR(context, sp_regno);
+    return (char *)_Unwind_GetGR(context, sp_regno);
 #endif
 }
 
-_Unwind_Reason_Code
-__cilk_personality_internal(__personality_routine std_lib_personality,
-                            int version, _Unwind_Action actions,
-                            uint64_t exception_class,
-                            struct _Unwind_Exception *ue_header,
-                            struct _Unwind_Context *context) {
+_Unwind_Reason_Code __cilk_personality_internal(
+    __personality_routine std_lib_personality, int version,
+    _Unwind_Action actions, uint64_t exception_class,
+    struct _Unwind_Exception *ue_header, struct _Unwind_Context *context) {
 
     __cilkrts_worker *w = __cilkrts_get_tls_worker();
     __cilkrts_stack_frame *sf = w->current_stack_frame;
 
     if (actions & _UA_SEARCH_PHASE) {
         // don't do anything out of the ordinary during search phase.
-        return std_lib_personality(version, actions, exception_class,
-                                    ue_header, context);
+        return std_lib_personality(version, actions, exception_class, ue_header,
+                                   context);
     } else if (actions & _UA_CLEANUP_PHASE) {
         cilkrts_alert(ALERT_EXCEPT, sf->worker,
                       "cilk_personality called %p  CFA %p\n", sf,
@@ -94,8 +90,7 @@ __cilk_personality_internal(__personality_routine std_lib_personality,
         deque_lock_self(w);
         Closure *t = deque_peek_bottom(w, w->self);
         deque_unlock_self(w);
-        bool in_reraised_cfa =
-            (t->reraise_cfa == (char *)get_cfa(context));
+        bool in_reraised_cfa = (t->reraise_cfa == (char *)get_cfa(context));
         bool skip_leaveframe = ((t->reraise_cfa != NULL) && !in_reraised_cfa);
         if (in_reraised_cfa)
             t->reraise_cfa = NULL;
@@ -108,10 +103,11 @@ __cilk_personality_internal(__personality_routine std_lib_personality,
             // Remember the CFA from which we raised the new exception.
             t->reraise_cfa = (char *)get_cfa(context);
             // Raise the new exception.
-            // __cilkrts_check_exception_raise(sf);
+            __cilkrts_check_exception_raise(sf);
             // Calling Resume instead of RaiseException also appears to work,
             // and is a bit faster.
-            __cilkrts_check_exception_resume(sf);
+            // NOTE: Calling resume does not seem to work on MacOSX.
+            // __cilkrts_check_exception_resume(sf);
         }
 
         // Record whether this frame is detached, which indicates that

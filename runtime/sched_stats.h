@@ -8,7 +8,6 @@ typedef struct __cilkrts_worker __cilkrts_worker;
 
 #define SCHED_STATS CILK_STATS
 
-#if SCHED_STATS
 enum timing_type {
     INTERVAL_WORK = 0, // work time
     INTERVAL_SCHED,    // scheduling time
@@ -26,11 +25,18 @@ struct global_sched_stats {
     double time[NUMBER_OF_STATS]; // Total time measured for all stats
 };
 
+#if SCHED_STATS
+CHEETAH_INTERNAL
 void cilk_global_sched_stats_init(struct global_sched_stats *s);
+CHEETAH_INTERNAL
 void cilk_sched_stats_init(struct sched_stats *s);
+CHEETAH_INTERNAL
 void cilk_start_timing(__cilkrts_worker *w, enum timing_type t);
+CHEETAH_INTERNAL
 void cilk_stop_timing(__cilkrts_worker *w, enum timing_type t);
+CHEETAH_INTERNAL
 void cilk_drop_timing(__cilkrts_worker *w, enum timing_type t);
+CHEETAH_INTERNAL
 void cilk_sched_stats_print(struct global_state *g);
 // void cilk_reset_timing(__cilkrts_worker *w, enum timing_type t);
 // FIXME: should have a header file that's user-code interfacing

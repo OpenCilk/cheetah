@@ -7,14 +7,17 @@ OBJS = $(patsubst %.c,%.o,$(SRCS))
 MANY = 8 # how many cores is a lot?
 ENABLE_X11 = false
 
-CTESTS   = intlist serialsum intsum multispawnsum repeatedintsum
+CTESTS   = intlist serialsum intsum multispawnsum repeatedintsum # cilksan_test
 CXXTESTS = cppsum
 DIRTESTS = nqueens quad_tree
 TESTS    = $(CTESTS) $(CXXTESTS) $(DIRTESTS)
 WARN     = -W -Wno-mismatched-tags -Wno-unused-parameter -Werror
-OPTIONS  = $(OPT) $(ARCH) $(DBG) $(RTS_OPT) $(WARN) # -fno-omit-frame-pointer
+OPTIONS  = $(OPT) $(SAN) $(ARCH) $(DBG) $(RTS_OPT) $(WARN) # -fno-omit-frame-pointer
 
-RTS_LIBS = ../runtime/$(RTS_LIB).a $(patsubst %,../runtime/%/module.a,$(MODS))
+$(CTESTS): RTS_PERSONALITY_LIB = $(RTS_DIR)/$(RTS_C_PERSONALITY_LIB).a
+$(CXXTESTS): RTS_PERSONALITY_LIB = $(RTS_DIR)/$(RTS_CXX_PERSONALITY_LIB).a
+
+RTS_LIBS = $(RTS_PERSONALITY_LIB) $(RTS_DIR)/$(RTS_LIB).a $(patsubst %,../runtime/%/module.a,$(MODS))
 
 TIMING_COUNT := 1
 
@@ -23,10 +26,10 @@ TIMING_COUNT := 1
 all: $(TESTS)
 
 $(CTESTS): %: %.o ktiming.o getoptions.o
-	$(CC) $^ -o $@ $(RTS_LIBS) -lrt -lpthread -lm
+	$(CC) $^ -o $@ $(RTS_LIBS) $(RTS_LIB_FLAG) $(SAN) -lrt -lpthread -lm
 
 $(CXXTESTS): %: %.o ktiming.o getoptions.o
-	$(CXX) $^ -o $@ $(RTS_LIBS) -lrt -lpthread -lm
+	$(CXX) $^ -o $@ $(RTS_LIBS) $(RTS_LIB_FLAG) $(SAN) -lrt -lpthread -lm
 
 $(DIRTESTS):
 	$(MAKE) -C $@ $(TOPASS)

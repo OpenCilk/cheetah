@@ -61,8 +61,7 @@ typedef CILK_C_DECLARE_REDUCER(BoardList) BoardListReducer;
 
 BoardListReducer X =
     CILK_C_INIT_REDUCER(BoardList, // type
-                        board_list_reduce, board_list_identity,
-                        __cilkrts_hyperobject_noop_destroy, // functions
+                        board_list_reduce, board_list_identity, 0, // functions
                         (BoardList)0);                      // initial value
 
 void queens(board_t cur_board, int row, int down, int left, int right) {

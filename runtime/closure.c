@@ -1,6 +1,7 @@
 #include "closure.h"
 #include "cilk-internal.h"
 #include "cilk2c.h"
+#include "global.h"
 #include "internal-malloc.h"
 #include "readydeque.h"
 
@@ -61,7 +62,7 @@ void Closure_lock(__cilkrts_worker *const w, Closure *t) {
 void Closure_unlock(__cilkrts_worker *const w, Closure *t) {
     Closure_checkmagic(w, t);
     Closure_assert_ownership(w, t);
-    t->mutex_owner = NOBODY;
+    t->mutex_owner = NO_WORKER;
     cilk_mutex_unlock(&(t->mutex));
 }
 
@@ -92,12 +93,13 @@ int Closure_has_children(Closure *cl) {
 static inline void Closure_init(Closure *t) {
     cilk_mutex_init(&t->mutex);
 
-    t->mutex_owner = NOBODY;
-    t->owner_ready_deque = NOBODY;
+    t->mutex_owner = NO_WORKER;
+    t->owner_ready_deque = NO_WORKER;
     t->status = CLOSURE_PRE_INVALID;
     t->lock_wait = false;
     t->has_cilk_callee = false;
     t->join_counter = 0;
+    t->simulated_stolen = false;
 
     t->frame = NULL;
     t->fiber = NULL;
@@ -123,11 +125,9 @@ static inline void Closure_init(Closure *t) {
     t->reraise_cfa = NULL;
     t->parent_rsp = NULL;
 
-#ifdef REDUCER_MODULE
     atomic_store_explicit(&t->child_rmap, NULL, memory_order_relaxed);
     atomic_store_explicit(&t->right_rmap, NULL, memory_order_relaxed);
     t->user_rmap = NULL;
-#endif
 }
 
 Closure *Closure_create(__cilkrts_worker *const w) {
@@ -242,9 +242,7 @@ void Closure_remove_child(__cilkrts_worker *const w, Closure *parent,
         parent->right_most_child = child->left_sib;
     }
 
-#ifdef REDUCER_MODULE
     CILK_ASSERT(w, child->right_rmap == (cilkred_map *)NULL);
-#endif
 
     unlink_child(w, child);
 }
@@ -294,36 +292,26 @@ void Closure_remove_callee(__cilkrts_worker *const w, Closure *caller) {
     caller->callee = NULL;
 }
 
-/*
- * ANGE: w must have locks on closure and its own deque.
- * Ws first sets cl from RUNNING to SUSPENDED, then removes closure
- * cl from the ready deque.  Since this function is called from
- * promote_child (steal), the thief's stack is not remapped yet, so we can't
- * access the oldest frame nor the fields of the frame.  Hence, this is a
- * separate and distinctly different function from Closure_suspend (which
- * suspend a closure owned by the worker with appropriate stack mapping).
- * JFC: Without TLMM does this merge with Closure_suspend?
- */
-void Closure_suspend_victim(__cilkrts_worker *const w, int victim,
+/* This function is used for steal, the next function for sync.
+   The invariants are slightly different. */
+void Closure_suspend_victim(__cilkrts_worker *thief, __cilkrts_worker *victim,
                             Closure *cl) {
 
     Closure *cl1;
 
-#ifdef REDUCER_MODULE
-    CILK_ASSERT(w, !cl->user_rmap);
-#endif
+    CILK_ASSERT(thief, !cl->user_rmap);
 
-    Closure_checkmagic(w, cl);
-    Closure_assert_ownership(w, cl);
-    deque_assert_ownership(w, victim);
+    Closure_checkmagic(thief, cl);
+    Closure_assert_ownership(thief, cl);
+    deque_assert_ownership(thief, victim->self);
 
-    CILK_ASSERT(w,
-                cl == w->g->invoke_main || cl->spawn_parent || cl->call_parent);
+    CILK_ASSERT(thief, cl == thief->g->invoke_main || cl->spawn_parent ||
+                           cl->call_parent);
 
-    Closure_change_status(w, cl, CLOSURE_RUNNING, CLOSURE_SUSPENDED);
+    Closure_change_status(thief, cl, CLOSURE_RUNNING, CLOSURE_SUSPENDED);
 
-    cl1 = deque_xtract_bottom(w, victim);
-    CILK_ASSERT(w, cl == cl1);
+    cl1 = deque_xtract_bottom(thief, victim->self);
+    CILK_ASSERT(thief, cl == cl1);
     USE_UNUSED(cl1);
 }
 
@@ -331,9 +319,7 @@ void Closure_suspend(__cilkrts_worker *const w, Closure *cl) {
 
     Closure *cl1;
 
-#ifdef REDUCER_MODULE
     CILK_ASSERT(w, !cl->user_rmap);
-#endif
 
     cilkrts_alert(ALERT_SCHED, w, "Closure_suspend %p", cl);
 
@@ -348,7 +334,7 @@ void Closure_suspend(__cilkrts_worker *const w, Closure *cl) {
     CILK_ASSERT(w, cl->frame->worker->self == w->self);
 
     Closure_change_status(w, cl, CLOSURE_RUNNING, CLOSURE_SUSPENDED);
-    cl->frame->worker = (__cilkrts_worker *)NOBODY;
+    cl->frame->worker = (struct __cilkrts_worker *)0xbfbfbfbfbf;
 
     cl1 = deque_xtract_bottom(w, w->self);
 
@@ -366,20 +352,16 @@ static inline void Closure_clean(__cilkrts_worker *const w, Closure *t) {
         CILK_ASSERT(w, t->left_sib == (Closure *)NULL);
         CILK_ASSERT(w, t->right_sib == (Closure *)NULL);
         CILK_ASSERT(w, t->right_most_child == (Closure *)NULL);
-#ifdef REDUCER_MODULE
         CILK_ASSERT(w, t->user_rmap == (cilkred_map *)NULL);
         CILK_ASSERT(w, t->child_rmap == (cilkred_map *)NULL);
         CILK_ASSERT(w, t->right_rmap == (cilkred_map *)NULL);
-#endif
     } else {
         CILK_ASSERT_G(t->left_sib == (Closure *)NULL);
         CILK_ASSERT_G(t->right_sib == (Closure *)NULL);
         CILK_ASSERT_G(t->right_most_child == (Closure *)NULL);
-#ifdef REDUCER_MODULE
         CILK_ASSERT_G(t->user_rmap == (cilkred_map *)NULL);
         CILK_ASSERT_G(t->child_rmap == (cilkred_map *)NULL);
         CILK_ASSERT_G(t->right_rmap == (cilkred_map *)NULL);
-#endif
     }
 
     cilk_mutex_destroy(&t->mutex);

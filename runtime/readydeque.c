@@ -1,8 +1,56 @@
 #include "readydeque.h"
+#include "closure.h"
+#include "debug.h"
+#include "global.h"
 
 /*********************************************************
  * Management of ReadyDeques
  *********************************************************/
+
+void deque_assert_ownership(__cilkrts_worker *const w, worker_id pn) {
+    CILK_ASSERT(w, w->g->deques[pn].mutex_owner == w->self);
+}
+
+void deque_lock_self(__cilkrts_worker *const w) {
+    struct local_state *l = w->l;
+    worker_id id = w->self;
+    global_state *g = w->g;
+    l->lock_wait = true;
+    cilk_mutex_lock(&g->deques[id].mutex);
+    l->lock_wait = false;
+    g->deques[id].mutex_owner = id;
+}
+
+void deque_unlock_self(__cilkrts_worker *const w) {
+    worker_id id = w->self;
+    global_state *g = w->g;
+    g->deques[id].mutex_owner = NO_WORKER;
+    cilk_mutex_unlock(&g->deques[id].mutex);
+}
+
+int deque_trylock(__cilkrts_worker *const w, worker_id pn) {
+    global_state *g = w->g;
+    int ret = cilk_mutex_try(&g->deques[pn].mutex);
+    if (ret) {
+        g->deques[pn].mutex_owner = w->self;
+    }
+    return ret;
+}
+
+void deque_lock(__cilkrts_worker *const w, worker_id pn) {
+    global_state *g = w->g;
+    struct local_state *l = w->l;
+    l->lock_wait = true;
+    cilk_mutex_lock(&g->deques[pn].mutex);
+    l->lock_wait = false;
+    g->deques[pn].mutex_owner = w->self;
+}
+
+void deque_unlock(__cilkrts_worker *const w, worker_id pn) {
+    global_state *g = w->g;
+    g->deques[pn].mutex_owner = NO_WORKER;
+    cilk_mutex_unlock(&w->g->deques[pn].mutex);
+}
 
 /*
  * functions that add/remove elements from the top/bottom
@@ -30,7 +78,7 @@ Closure *deque_xtract_top(__cilkrts_worker *const w, worker_id pn) {
             CILK_ASSERT(w, cl->next_ready);
             (cl->next_ready)->prev_ready = (Closure *)NULL;
         }
-        WHEN_CILK_DEBUG(cl->owner_ready_deque = NOBODY);
+        WHEN_CILK_DEBUG(cl->owner_ready_deque = NO_WORKER);
     } else {
         CILK_ASSERT(w, w->g->deques[pn].bottom == (Closure *)NULL);
     }
@@ -75,7 +123,7 @@ Closure *deque_xtract_bottom(__cilkrts_worker *const w, worker_id pn) {
             (cl->prev_ready)->next_ready = (Closure *)NULL;
         }
 
-        WHEN_CILK_DEBUG(cl->owner_ready_deque = NOBODY);
+        WHEN_CILK_DEBUG(cl->owner_ready_deque = NO_WORKER);
     } else {
         CILK_ASSERT(w, w->g->deques[pn].top == (Closure *)NULL);
     }
@@ -114,7 +162,7 @@ void deque_assert_is_bottom(__cilkrts_worker *const w, Closure *t) {
 void deque_add_bottom(__cilkrts_worker *const w, Closure *cl, worker_id pn) {
 
     deque_assert_ownership(w, pn);
-    CILK_ASSERT(w, cl->owner_ready_deque == NOBODY);
+    CILK_ASSERT(w, cl->owner_ready_deque == NO_WORKER);
 
     cl->prev_ready = w->g->deques[pn].bottom;
     cl->next_ready = (Closure *)NULL;

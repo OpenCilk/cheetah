@@ -1,26 +1,18 @@
 all:
 	$(MAKE) -C runtime
 	$(MAKE) -C handcomp_test
-	$(MAKE) -C bench
-	$(MAKE) -C reducer_bench
-
-rebuild:
-	$(MAKE) -C runtime clean
-	$(MAKE) -C runtime
-	$(MAKE) -C handcomp_test clean
-	$(MAKE) -C handcomp_test
-	$(MAKE) -C bench clean
-	$(MAKE) -C bench
-	$(MAKE) -C reducer_bench clean
-	$(MAKE) -C reducer_bench
+	if [ -d bench ]; then $(MAKE) -C bench; fi
+	if [ -d reducer_bench ]; then $(MAKE) -C reducer_bench; fi
 
 clean:
-	$(MAKE) -C handcomp_test clean
-	$(MAKE) -C bench clean
 	$(MAKE) -C runtime clean
-	$(MAKE) -C reducer_bench clean
+	$(MAKE) -C handcomp_test clean
+	if [ -d bench ]; then $(MAKE) -C bench clean; fi
+	if [ -d reducer_bench ]; then $(MAKE) -C reducer_bench clean; fi
+
+rebuild: clean all
 
 check:
-	$(MAKE) -C bench test
+	if [ -d bench ]; then $(MAKE) -C bench test; fi
 	$(MAKE) -C handcomp_test check
-	$(MAKE) -C reducer_bench check
+	if [ -d reducer_bench ]; then $(MAKE) -C reducer_bench check; fi

@@ -2,11 +2,11 @@
  *
  *  Copyright (C) 2009-2018, Intel Corporation
  *  All rights reserved.
- *  
+ *
  *  Redistribution and use in source and binary forms, with or without
  *  modification, are permitted provided that the following conditions
  *  are met:
- *  
+ *
  *    * Redistributions of source code must retain the above copyright
  *      notice, this list of conditions and the following disclaimer.
  *    * Redistributions in binary form must reproduce the above copyright
@@ -16,7 +16,7 @@
  *    * Neither the name of Intel Corporation nor the names of its
  *      contributors may be used to endorse or promote products derived
  *      from this software without specific prior written permission.
- *  
+ *
  *  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
  *  "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
  *  LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
@@ -29,9 +29,9 @@
  *  LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY
  *  WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  *  POSSIBILITY OF SUCH DAMAGE.
- *  
+ *
  *  *********************************************************************
- *  
+ *
  *  PLEASE NOTE: This file is a downstream copy of a file maintained in
  *  a repository at cilkplus.org. Changes made to this file that are not
  *  submitted through the contribution process detailed at
@@ -40,14 +40,15 @@
  *  GNU compiler collection or posted to the git repository at
  *  https://bitbucket.org/intelcilkruntime/intel-cilk-runtime are
  *  not tracked.
- *  
+ *
  *  We welcome your contributions to this open source project. Thank you
  *  for your assistance in helping us improve Cilk Plus.
  */
 
 /** @file reducer.h
  *
- *  @brief Defines foundation classes for creating Intel(R) Cilk(TM) Plus reducers.
+ *  @brief Defines foundation classes for creating Intel(R) Cilk(TM) Plus
+ * reducers.
  *
  *  @ingroup Reducers
  *
@@ -61,6 +62,9 @@
 
 #include "cilk/hyperobject_base.h"
 #include "cilk/metaprogramming.h"
+#include <assert.h>
+
+#define __CILKRTS_STRAND_STALE(fn) fn
 
 #ifdef __cplusplus
 
@@ -102,7 +106,7 @@ namespace cilk {
  *  in `x1` will be destroyed.
  *
  *  **NOTE**: Do *not* be tempted to chain a `provisional_guard`
- *  constructor with `confirm_if` as in this example: 
+ *  constructor with `confirm_if` as in this example:
  *
  *      // BAD IDEA
  *      provisional_guard<T1>( new (x1) T1 ).confirm_if( new (x2) T2 );
@@ -116,22 +120,23 @@ namespace cilk {
  *
  *  @tparam Type    The type of the provisionally constructed object.
  */
-template <typename Type>
-class provisional_guard {
-    Type* m_ptr;
+template <typename Type> class provisional_guard {
+    Type *m_ptr;
 
-public:
-
+  public:
     /** Constructor. Creates a guard for a provisionally constructed object.
      *
      *  @param ptr  A pointer to the provisionally constructed object.
      */
-    provisional_guard(Type* ptr) : m_ptr(ptr) {}
+    provisional_guard(Type *ptr) : m_ptr(ptr) {}
 
     /** Destructor. Destroy the object pointed to by the contained pointer
      *  if it has not been confirmed.
      */
-    ~provisional_guard() { if (m_ptr) m_ptr->~Type(); }
+    ~provisional_guard() {
+        if (m_ptr)
+            m_ptr->~Type();
+    }
 
     /** Confirm the provisional construction. Do *not* delete the contained
      *  pointer when the guard is destroyed.
@@ -150,8 +155,11 @@ public:
      *
      *  @returns    The value of the @a cond argument.
      */
-    template <typename Cond>
-    Cond* confirm_if(Cond* cond) { if (cond) m_ptr = 0; return cond; }
+    template <typename Cond> Cond *confirm_if(Cond *cond) {
+        if (cond)
+            m_ptr = 0;
+        return cond;
+    }
 };
 
 /** Base class for defining monoids.
@@ -171,20 +179,17 @@ public:
  *
  *  @see monoid_with_view
  */
-template <typename Value, typename View = Value>
-class monoid_base
-{
+template <typename Value, typename View = Value> class monoid_base {
 
-public:
-
+  public:
     /** Value type of the monoid.
      */
-    typedef Value   value_type;
+    typedef Value value_type;
 
     /** View type of the monoid. Defaults to be the same as the value type.
      *  @see monoid_with_view
      */
-    typedef View    view_type;
+    typedef View view_type;
 
     enum {
         /** Should reducers created with this monoid be aligned?
@@ -204,9 +209,9 @@ public:
          *  Default is false (unaligned) unless overridden in a subclass.
          *
          *  @since 1.02
-         *  (In Intel Cilk Plus library versions 1.0 and 1.01, the default was true.
-         *  In Intel Cilk Plus library versions prior to 1.0, reducers were always
-         *  aligned, and this data member did not exist.)
+         *  (In Intel Cilk Plus library versions 1.0 and 1.01, the default was
+         * true. In Intel Cilk Plus library versions prior to 1.0, reducers were
+         * always aligned, and this data member did not exist.)
          */
         align_reducer = false
     };
@@ -216,7 +221,7 @@ public:
      *
      *  @param p    The address of the @a View object to be destroyed.
      */
-    void destroy(view_type* p) const { p->~view_type(); }
+    void destroy(view_type *p) const { p->~view_type(); }
 
     /** Allocates raw memory. Allocate @a s bytes of memory with no
      *  initialization.
@@ -224,7 +229,7 @@ public:
      *  @param s    The number of bytes of memory to allocate.
      *  @return     An untyped pointer to the allocated memory.
      */
-    void* allocate(size_t s) const { return operator new(s); }
+    void *allocate(size_t s) const { return operator new(s); }
 
     /** Deallocates raw memory pointed to by @a p
      *  without doing any destruction.
@@ -234,7 +239,7 @@ public:
      *  @pre        @a p points to a block of memory that was allocated by a
      *              call to allocate().
      */
-    void deallocate(void* p) const { operator delete(p); }
+    void deallocate(void *p) const { operator delete(p); }
 
     /** Creates the identity value. Constructs (without allocating) a @a View
      *  object representing the default value of the @a Value type.
@@ -251,8 +256,7 @@ public:
      *              their identity function explicitly, rather than relying on
      *              this default definition.
      */
-    void identity(View* p) const { new ((void*) p) View(); }
-
+    void identity(View *p) const { new ((void *)p) View(); }
 
     /** @name Constructs the monoid and the view with arbitrary arguments.
      *
@@ -283,9 +287,8 @@ public:
      */
     //@{
     template <typename Monoid>
-    static void construct(Monoid* monoid, View* view)
-    {
-        provisional_guard<Monoid> guard( new((void*) monoid) Monoid() );
+    static void construct(Monoid *monoid, View *view) {
+        provisional_guard<Monoid> guard(new ((void *)monoid) Monoid());
         monoid->identity(view);
         guard.confirm();
     }
@@ -297,46 +300,40 @@ public:
     //@{
 
     template <typename Monoid, typename T1>
-    static void construct(Monoid* monoid, View* view, const T1& x1)
-    {
-        provisional_guard<Monoid> guard( new((void*) monoid) Monoid() );
-        guard.confirm_if( new((void*) view) View(x1) );
+    static void construct(Monoid *monoid, View *view, const T1 &x1) {
+        provisional_guard<Monoid> guard(new ((void *)monoid) Monoid());
+        guard.confirm_if(new ((void *)view) View(x1));
     }
 
     template <typename Monoid, typename T1, typename T2>
-    static void construct(Monoid* monoid, View* view,
-                            const T1& x1, const T2& x2)
-    {
-        provisional_guard<Monoid> guard( new((void*) monoid) Monoid() );
-        guard.confirm_if( new((void*) view) View(x1, x2) );
+    static void construct(Monoid *monoid, View *view, const T1 &x1,
+                          const T2 &x2) {
+        provisional_guard<Monoid> guard(new ((void *)monoid) Monoid());
+        guard.confirm_if(new ((void *)view) View(x1, x2));
     }
 
     template <typename Monoid, typename T1, typename T2, typename T3>
-    static void construct(Monoid* monoid, View* view,
-                            const T1& x1, const T2& x2, const T3& x3)
-    {
-        provisional_guard<Monoid> guard( new((void*) monoid) Monoid() );
-        guard.confirm_if( new((void*) view) View(x1, x2, x3) );
+    static void construct(Monoid *monoid, View *view, const T1 &x1,
+                          const T2 &x2, const T3 &x3) {
+        provisional_guard<Monoid> guard(new ((void *)monoid) Monoid());
+        guard.confirm_if(new ((void *)view) View(x1, x2, x3));
     }
 
     template <typename Monoid, typename T1, typename T2, typename T3,
-                typename T4>
-    static void construct(Monoid* monoid, View* view,
-                            const T1& x1, const T2& x2, const T3& x3,
-                            const T4& x4)
-    {
-        provisional_guard<Monoid> guard( new((void*) monoid) Monoid() );
-        guard.confirm_if( new((void*) view) View(x1, x2, x3, x4) );
+              typename T4>
+    static void construct(Monoid *monoid, View *view, const T1 &x1,
+                          const T2 &x2, const T3 &x3, const T4 &x4) {
+        provisional_guard<Monoid> guard(new ((void *)monoid) Monoid());
+        guard.confirm_if(new ((void *)view) View(x1, x2, x3, x4));
     }
 
     template <typename Monoid, typename T1, typename T2, typename T3,
-                typename T4, typename T5>
-    static void construct(Monoid* monoid, View* view,
-                            const T1& x1, const T2& x2, const T3& x3,
-                            const T4& x4, const T5& x5)
-    {
-        provisional_guard<Monoid> guard( new((void*) monoid) Monoid() );
-        guard.confirm_if( new((void*) view) View(x1, x2, x3, x4, x5) );
+              typename T4, typename T5>
+    static void construct(Monoid *monoid, View *view, const T1 &x1,
+                          const T2 &x2, const T3 &x3, const T4 &x4,
+                          const T5 &x5) {
+        provisional_guard<Monoid> guard(new ((void *)monoid) Monoid());
+        guard.confirm_if(new ((void *)view) View(x1, x2, x3, x4, x5));
     }
 
     //@}
@@ -346,10 +343,9 @@ public:
      */
     //@{
     template <typename Monoid, typename T1>
-    static void construct(Monoid* monoid, View* view, T1& x1)
-    {
-        provisional_guard<Monoid> guard( new((void*) monoid) Monoid() );
-        guard.confirm_if( new((void*) view) View(x1) );
+    static void construct(Monoid *monoid, View *view, T1 &x1) {
+        provisional_guard<Monoid> guard(new ((void *)monoid) Monoid());
+        guard.confirm_if(new ((void *)view) View(x1));
     }
     //@}
 
@@ -362,9 +358,8 @@ public:
      */
     //@{
     template <typename Monoid>
-    static void construct(Monoid* monoid, View* view, const Monoid& m)
-    {
-        provisional_guard<Monoid> guard( new((void*) monoid) Monoid(m) );
+    static void construct(Monoid *monoid, View *view, const Monoid &m) {
+        provisional_guard<Monoid> guard(new ((void *)monoid) Monoid(m));
         monoid->identity(view);
         guard.confirm();
     }
@@ -376,44 +371,39 @@ public:
     //@{
 
     template <typename Monoid, typename T1>
-    static void construct(Monoid* monoid, View* view, const Monoid& m,
-                            const T1& x1)
-    {
-        provisional_guard<Monoid> guard( new((void*) monoid) Monoid(m) );
-        guard.confirm_if( new((void*) view) View(x1) );
+    static void construct(Monoid *monoid, View *view, const Monoid &m,
+                          const T1 &x1) {
+        provisional_guard<Monoid> guard(new ((void *)monoid) Monoid(m));
+        guard.confirm_if(new ((void *)view) View(x1));
     }
 
     template <typename Monoid, typename T1, typename T2>
-    static void construct(Monoid* monoid, View* view, const Monoid& m,
-                            const T1& x1, const T2& x2)
-    {
-        provisional_guard<Monoid> guard( new((void*) monoid) Monoid(m) );
-        guard.confirm_if( new((void*) view) View(x1, x2) );
+    static void construct(Monoid *monoid, View *view, const Monoid &m,
+                          const T1 &x1, const T2 &x2) {
+        provisional_guard<Monoid> guard(new ((void *)monoid) Monoid(m));
+        guard.confirm_if(new ((void *)view) View(x1, x2));
     }
 
     template <typename Monoid, typename T1, typename T2, typename T3>
-    static void construct(Monoid* monoid, View* view, const Monoid& m,
-                            const T1& x1, const T2& x2, const T3& x3)
-    {
-        provisional_guard<Monoid> guard( new((void*) monoid) Monoid(m) );
-        guard.confirm_if( new((void*) view) View(x1, x2, x3) );
+    static void construct(Monoid *monoid, View *view, const Monoid &m,
+                          const T1 &x1, const T2 &x2, const T3 &x3) {
+        provisional_guard<Monoid> guard(new ((void *)monoid) Monoid(m));
+        guard.confirm_if(new ((void *)view) View(x1, x2, x3));
     }
 
     template <typename Monoid, typename T1, typename T2, typename T3,
-                typename T4>
-    static void construct(Monoid* monoid, View* view, const Monoid& m,
-                            const T1& x1, const T2& x2, const T3& x3,
-                            const T4& x4)
-    {
-        provisional_guard<Monoid> guard( new((void*) monoid) Monoid(m) );
-        guard.confirm_if( new((void*) view) View(x1, x2, x3, x4) );
+              typename T4>
+    static void construct(Monoid *monoid, View *view, const Monoid &m,
+                          const T1 &x1, const T2 &x2, const T3 &x3,
+                          const T4 &x4) {
+        provisional_guard<Monoid> guard(new ((void *)monoid) Monoid(m));
+        guard.confirm_if(new ((void *)view) View(x1, x2, x3, x4));
     }
 
     //@}
 
     //@}
 };
-
 
 /** Monoid class that gets its value type and identity and reduce operations
  *  from its view.
@@ -438,9 +428,16 @@ public:
  *
  *  Definition                       | Meaning
  *  ---------------------------------|--------
- *  `value_type`                     | a typedef of the value type for the reduction
- *  `View()`                         | a default constructor which constructs the identity value for the reduction
- *  `void reduce(const View* other)` | a member function which applies the reduction operation to the values of `this` view and the `other` view, leaving the result as the value of `this` view, and leaving the value of the `other` view undefined (but valid)
+ *  `value_type`                     | a typedef of the value type for the
+ *                                   | reduction
+ *  `View()`                         | a default constructor which constructs
+ *                                   | the identity value for the reduction
+ *  `void reduce(const View* other)` | a member function which applies the
+ *                                   | reduction operation to the values of
+ *                                   | `this` view and the `other` view,
+ *                                   | leaving the result as the value of
+ *                                   | `this` view, and leaving the value of
+ *                                   | the `other` view undefined (but valid)
  *
  *  @tparam View    The view class for the monoid.
  *  @tparam Align   If true, reducers instantiated on this monoid will be
@@ -449,9 +446,8 @@ public:
  *                  contents.
  */
 template <class View, bool Align = false>
-class monoid_with_view : public monoid_base<typename View::value_type, View>
-{
-public:
+class monoid_with_view : public monoid_base<typename View::value_type, View> {
+  public:
     /** Should reducers created with this monoid be aligned?
      */
     enum { align_reducer = Align };
@@ -464,7 +460,7 @@ public:
      *  @param  p   A pointer to a block of raw memory large enough to hold a
      *              @p View object.
      */
-    void identity(View* p) const { new((void*) p) View(); }
+    void identity(View *p) const { new ((void *)p) View(); }
 
     /** Reduce the values of two views.
      *
@@ -476,9 +472,8 @@ public:
      *  @post           The left view contains the result of the reduce
      *                  operation, and the right view is undefined.
      */
-    void reduce(View* left, View* right) const { left->reduce(right); }
+    void reduce(View *left, View *right) const { left->reduce(right); }
 };
-
 
 /** Base class for simple views with (usually) scalar values.
  *
@@ -494,13 +489,11 @@ public:
  *
  *  @tparam Type    The type of value wrapped by the view.
  */
-template <typename Type>
-class scalar_view
-{
-protected:
-    Type m_value;       ///< The wrapped accumulator variable.
+template <typename Type> class scalar_view {
+  protected:
+    Type m_value; ///< The wrapped accumulator variable.
 
-public:
+  public:
     /** Value type definition required by @ref monoid_with_view.
      */
     typedef Type value_type;
@@ -511,7 +504,7 @@ public:
 
     /** Value constructor.
      */
-    scalar_view(const Type& v) : m_value(v) {}
+    scalar_view(const Type &v) : m_value(v) {}
 
     /** @name Value functions required by the reducer class.
      *
@@ -521,36 +514,35 @@ public:
 
     /** Set the value of the view.
      */
-    void view_move_in(Type& v) { m_value = v; }
+    void view_move_in(Type &v) { m_value = v; }
 
     /** Get the value of the view.
      */
-    void view_move_out(Type& v) { v = m_value; }
+    void view_move_out(Type &v) { v = m_value; }
 
     /** Set the value of the view.
      */
-    void view_set_value(const Type& v) { m_value = v; }
+    void view_set_value(const Type &v) { m_value = v; }
 
     /** Get the value of the view.
      */
-    Type const& view_get_value() const { return m_value; }
+    Type const &view_get_value() const { return m_value; }
 
     /** Type returned by view_get_value.
      */
-    typedef Type const& return_type_for_get_value;
+    typedef Type const &return_type_for_get_value;
 
     /** Get a reference to the value contained in the view. For legacy
      *  reducer support only.
      */
-    Type      & view_get_reference()       { return m_value; }
+    Type &view_get_reference() { return m_value; }
 
     /** Get a reference to the value contained in the view. For legacy
      *  reducer support only.
      */
-    Type const& view_get_reference() const { return m_value; }
+    Type const &view_get_reference() const { return m_value; }
     //@}
 };
-
 
 /** Wrapper class for move-in construction.
  *
@@ -607,28 +599,26 @@ public:
  *
  *  @see cilk::move_in()
  */
-template <typename Type>
-class move_in_wrapper
-{
+template <typename Type> class move_in_wrapper {
     Type *m_pointer;
-public:
 
+  public:
     /** Constructor that captures the address of its argument. This is almost
      *  always called from the @ref move_in function.
      */
-    explicit move_in_wrapper(Type& ref) : m_pointer(&ref) { }
+    explicit move_in_wrapper(Type &ref) : m_pointer(&ref) {}
 
     /** Implicit conversion to the wrapped value. This allows a move_in_wrapper
      *  to be used where a value of the wrapped type is expected, in which case
      *  the wrapper is completely transparent.
      */
-    operator Type&() const { return *m_pointer; }
+    operator Type &() const { return *m_pointer; }
 
     /** Get a reference to the pointed-to value. This has the same effect as
      *  the implicit conversion, but makes the intent clearer in a move-in
      *  constructor.
      */
-    Type& value() const { return *m_pointer; }
+    Type &value() const { return *m_pointer; }
 };
 
 /** Function to create a move_in_wrapper for a value.
@@ -638,11 +628,9 @@ public:
  *
  *  @see move_in_wrapper
  */
-template <typename Type>
-inline
-move_in_wrapper<Type> move_in(Type& ref)
-    { return move_in_wrapper<Type>(ref); }
-
+template <typename Type> inline move_in_wrapper<Type> move_in(Type &ref) {
+    return move_in_wrapper<Type>(ref);
+}
 
 /** @copydoc move_in(Type&)
  *
@@ -653,17 +641,15 @@ move_in_wrapper<Type> move_in(Type& ref)
  *          language treats as a const. Using it for any other purpose will
  *          probably end in tears.
  */
-template <typename Type>
-inline
-move_in_wrapper<Type> move_in(const Type& ref)
-    { return move_in_wrapper<Type>(ref); }
-
+template <typename Type> inline move_in_wrapper<Type> move_in(const Type &ref) {
+    return move_in_wrapper<Type>(ref);
+}
 
 /** Wrapper class to allow implicit downcasts to reducer subclasses.
  *
- *  The Intel Cilk Plus library contains a collection of reducer wrapper classes which
- *  were created before the `cilk::reducer<Monoid>` style was developed. For
- *  example, `cilk::reducer_opadd<Type>` provided essentially the same
+ *  The Intel Cilk Plus library contains a collection of reducer wrapper classes
+ * which were created before the `cilk::reducer<Monoid>` style was developed.
+ * For example, `cilk::reducer_opadd<Type>` provided essentially the same
  *  functionality that is now provided by
  *  `cilk::reducer< cilk::op_add<Type> >`. These legacy reducer classes are
  *  deprecated, but still supported, and they have been reimplemented as
@@ -705,37 +691,33 @@ move_in_wrapper<Type> move_in(const Type& ref)
  *                  reducer class is `type`, if there is such a legacy reducer
  *                  class.
  */
-template <typename Reducer>
-struct legacy_reducer_downcast
-{
+template <typename Reducer> struct legacy_reducer_downcast {
     /** The related legacy reducer class.
      *
      *  By default, this is just a trivial subclass of Reducer, but it can be
      *  overridden in the specialization of legacy_reducer_downcast for
      *  a reducer that has a corresponding legacy reducers.
      */
-    struct type : Reducer { };
+    struct type : Reducer {};
 };
-
 
 namespace internal {
 /// @cond internal
 
-template <typename Value, typename View>
-struct reducer_set_get
-{
+template <typename Value, typename View> struct reducer_set_get {
     // sizeof(notchar) != sizeof(char)
-    struct notchar { char x[2]; };
+    struct notchar {
+        char x[2];
+    };
 
     // `does_view_define_return_type_for_get_value(View*)` returns `char` if
     // `View` defines `return_type_for_get_value`, and `notchar` if it doesn't.
 
-    template <typename T>
-    struct using_type {};
+    template <typename T> struct using_type {};
 
     template <typename T>
     static char does_view_define_return_type_for_get_value(
-                        using_type<typename T::return_type_for_get_value>*);
+        using_type<typename T::return_type_for_get_value> *);
 
     template <typename T>
     static notchar does_view_define_return_type_for_get_value(...);
@@ -743,9 +725,11 @@ struct reducer_set_get
     // `VIEW_DOES_DEFINE_RETURN_TYPE_FOR_GET_VALUE` is true if `View` defines
     // `return_type_for_get_value`.
 
-    enum { VIEW_DOES_DEFINE_RETURN_TYPE_FOR_GET_VALUE =
-            sizeof( does_view_define_return_type_for_get_value<View>(0) )
-            == sizeof(char) } ;
+    enum {
+        VIEW_DOES_DEFINE_RETURN_TYPE_FOR_GET_VALUE =
+            sizeof(does_view_define_return_type_for_get_value<View>(0)) ==
+            sizeof(char)
+    };
 
     // `return_type_for_get_value` is `View::return_type_for_get_value`
     // if it is defined, and just `Value` otherwise.
@@ -760,64 +744,57 @@ struct reducer_set_get
         typedef typename InnerView::return_type_for_get_value type;
     };
 
-public:
-
-    typedef
-        typename
-            return_type_for_view_get_value<
-                View,
-                VIEW_DOES_DEFINE_RETURN_TYPE_FOR_GET_VALUE
-            >::type
+  public:
+    typedef typename return_type_for_view_get_value<
+        View, VIEW_DOES_DEFINE_RETURN_TYPE_FOR_GET_VALUE>::type
         return_type_for_get_value;
 
-    static void move_in(View& view, Value& v)   { view.view_move_in(v); }
-    static void move_out(View& view,  Value& v) { view.view_move_out(v); }
+    static void move_in(View &view, Value &v) { view.view_move_in(v); }
+    static void move_out(View &view, Value &v) { view.view_move_out(v); }
 
-    static void set_value(View& view, const Value& v)
-        { view.view_set_value(v); }
+    static void set_value(View &view, const Value &v) {
+        view.view_set_value(v);
+    }
 
-    static return_type_for_get_value get_value(const View& view)
-        { return view.view_get_value(); }
+    static return_type_for_get_value get_value(const View &view) {
+        return view.view_get_value();
+    }
 };
 
-template <typename Value>
-struct reducer_set_get<Value, Value>
-{
-    typedef const Value& return_type_for_get_value;
+template <typename Value> struct reducer_set_get<Value, Value> {
+    typedef const Value &return_type_for_get_value;
 
-    static void move_in(Value& view, Value& v)   { view = v; }
-    static void move_out(Value& view,  Value& v) { v = view; }
+    static void move_in(Value &view, Value &v) { view = v; }
+    static void move_out(Value &view, Value &v) { v = view; }
 
-    static void set_value(Value& view, const Value& v)
-        { view = v; }
+    static void set_value(Value &view, const Value &v) { view = v; }
 
-    static return_type_for_get_value get_value(const Value& view)
-        { return view; }
+    static return_type_for_get_value get_value(const Value &view) {
+        return view;
+    }
 };
 
 /// @endcond
 
-
 /** Base class defining the data layout that is common to all reducers.
  */
-template <typename Monoid>
-class reducer_base {
+template <typename Monoid> class reducer_base {
     typedef typename Monoid::view_type view_type;
 
     // This makes the reducer a hyper-object. (Partially initialized in
     // the derived reducer_content class.)
     //
-    __cilkrts_hyperobject_base      m_base;
+    __cilkrts_hyperobject_base m_base;
 
     // The monoid is allocated here as raw bytes, and is constructed explicitly
     // by a call to the monoid_type::construct() function in the constructor of
     // the `reducer` subclass.
     //
-    storage_for_object<Monoid>      m_monoid;
+    storage_for_object<Monoid> m_monoid;
 
     // Used for sanity checking at destruction.
     //
-    void*                           m_initialThis;
+    void *m_initialThis;
 
     // The leftmost view comes next. It is defined in the derived
     // reducer_content class.
@@ -826,27 +803,26 @@ class reducer_base {
      */
     //@{
 
-    static void reduce_wrapper(void* r, void* lhs, void* rhs);
-    static void identity_wrapper(void* r, void* view);
-    static void destroy_wrapper(void* r, void* view);
-    static void* allocate_wrapper(void* r, __STDNS size_t bytes);
-    static void deallocate_wrapper(void* r, void* view);
+    static void reduce_wrapper(void *r, void *lhs, void *rhs);
+    static void identity_wrapper(void *r, void *view);
+    static void destroy_wrapper(void *r, void *view);
+    static void *allocate_wrapper(void *r, size_t bytes);
+    static void deallocate_wrapper(void *r, void *view);
 
     //@}
 
-protected:
-
+  protected:
     /** Constructor.
      *
      *  @param  leftmost    The address of the leftmost view in the reducer.
      */
     reducer_base(char* leftmost)
       : m_base{{
-            (cilk_c_reducer_reduce_fn_t)     &reduce_wrapper,
-            (cilk_c_reducer_identity_fn_t)   &identity_wrapper,
-            (cilk_c_reducer_destroy_fn_t)    &destroy_wrapper,
-            (cilk_c_reducer_allocate_fn_t)   &allocate_wrapper,
-            (cilk_c_reducer_deallocate_fn_t) &deallocate_wrapper
+            (cilk_reduce_fn_t)     &reduce_wrapper,
+            (cilk_identity_fn_t)   &identity_wrapper,
+            (cilk_destroy_fn_t)    &destroy_wrapper,
+            (cilk_allocate_fn_t)   &allocate_wrapper,
+            (cilk_deallocate_fn_t) &deallocate_wrapper
           },
           0, /* Cilk Plus flags or OpenCilk ID */
           (char*)leftmost - (char*)this, /* __view_offset */
@@ -859,15 +835,9 @@ protected:
 
     /** Destructor.
      */
-    __CILKRTS_STRAND_STALE(~reducer_base())
-    {
+    __CILKRTS_STRAND_STALE(~reducer_base()) {
         // Make sure we haven't been memcopy'd or corrupted
-        __CILKRTS_ASSERT(
-            this == m_initialThis ||
-            // Allow for a layout bug that may put the initialThis field one
-            // word later in 1.0 reducers than in 0.9  and 1.1 reducers.
-            this == *(&m_initialThis + 1)
-        );
+        assert(this == m_initialThis);
         __cilkrts_hyper_destroy(&m_base);
     }
 
@@ -875,7 +845,7 @@ protected:
      *
      *  @return A pointer to the reducer's monoid data member.
      */
-    Monoid* monoid_ptr() { return &m_monoid.object(); }
+    Monoid *monoid_ptr() { return &m_monoid.object(); }
 
     /** Leftmost view data member.
      *
@@ -887,14 +857,12 @@ protected:
      *          Use the reducer::view() function to access the per-strand
      *          view instance.
      */
-    view_type* leftmost_ptr()
-    {
-        char* view_addr = (char*)this + m_base.__view_offset;
-        return reinterpret_cast<view_type*>(view_addr);
+    view_type *leftmost_ptr() {
+        char *view_addr = (char *)this + m_base.__view_offset;
+        return reinterpret_cast<view_type *>(view_addr);
     }
 
-public:
-
+  public:
     /** @name Access the current view.
      *
      *  These functions return a reference to the instance of the reducer's
@@ -909,16 +877,14 @@ public:
      *
      *  @return A reference to the per-strand view instance.
      */
-    view_type& view()
-    {
+    view_type &view() {
         return *static_cast<view_type *>(__cilkrts_hyper_lookup(&m_base));
     }
 
     /** @copydoc view()
      */
-    const view_type& view() const
-    {
-        return const_cast<reducer_base*>(this)->view();
+    const view_type &view() const {
+        return const_cast<reducer_base *>(this)->view();
     }
 
     //@}
@@ -933,45 +899,39 @@ public:
      *          reducer layout code. There is never any reason for user code
      *          to call it.
      */
-    const void* const & initial_this() const { return m_initialThis; }
+    const void *const &initial_this() const { return m_initialThis; }
 };
 
 template <typename Monoid>
-void reducer_base<Monoid>::reduce_wrapper(void* r, void* lhs, void* rhs)
-{
-    Monoid* monoid = static_cast<reducer_base*>(r)->monoid_ptr();
-    monoid->reduce(static_cast<view_type*>(lhs),
-                         static_cast<view_type*>(rhs));
+void reducer_base<Monoid>::reduce_wrapper(void *r, void *lhs, void *rhs) {
+    Monoid *monoid = static_cast<reducer_base *>(r)->monoid_ptr();
+    monoid->reduce(static_cast<view_type *>(lhs),
+                   static_cast<view_type *>(rhs));
 }
 
 template <typename Monoid>
-void reducer_base<Monoid>::identity_wrapper(void* r, void* view)
-{
-    Monoid* monoid = static_cast<reducer_base*>(r)->monoid_ptr();
-    monoid->identity(static_cast<view_type*>(view));
+void reducer_base<Monoid>::identity_wrapper(void *r, void *view) {
+    Monoid *monoid = static_cast<reducer_base *>(r)->monoid_ptr();
+    monoid->identity(static_cast<view_type *>(view));
 }
 
 template <typename Monoid>
-void reducer_base<Monoid>::destroy_wrapper(void* r, void* view)
-{
-    Monoid* monoid = static_cast<reducer_base*>(r)->monoid_ptr();
-    monoid->destroy(static_cast<view_type*>(view));
+void reducer_base<Monoid>::destroy_wrapper(void *r, void *view) {
+    Monoid *monoid = static_cast<reducer_base *>(r)->monoid_ptr();
+    monoid->destroy(static_cast<view_type *>(view));
 }
 
 template <typename Monoid>
-void* reducer_base<Monoid>::allocate_wrapper(void* r, __STDNS size_t bytes)
-{
-    Monoid* monoid = static_cast<reducer_base*>(r)->monoid_ptr();
+void *reducer_base<Monoid>::allocate_wrapper(void *r, size_t bytes) {
+    Monoid *monoid = static_cast<reducer_base *>(r)->monoid_ptr();
     return monoid->allocate(bytes);
 }
 
 template <typename Monoid>
-void reducer_base<Monoid>::deallocate_wrapper(void* r, void* view)
-{
-    Monoid* monoid = static_cast<reducer_base*>(r)->monoid_ptr();
-    monoid->deallocate(static_cast<view_type*>(view));
+void reducer_base<Monoid>::deallocate_wrapper(void *r, void *view) {
+    Monoid *monoid = static_cast<reducer_base *>(r)->monoid_ptr();
+    monoid->deallocate(static_cast<view_type *>(view));
 }
-
 
 /** Base class defining the data members of a reducer.
  *
@@ -985,8 +945,7 @@ class reducer_content;
 /** Base class defining the data members of an aligned reducer.
  */
 template <typename Monoid>
-class reducer_content<Monoid, true> : public reducer_base<Monoid>
-{
+class reducer_content<Monoid, true> : public reducer_base<Monoid> {
     typedef typename Monoid::view_type view_type;
 
     // The leftmost view is defined as raw bytes. It will be constructed
@@ -997,80 +956,17 @@ class reducer_content<Monoid, true> : public reducer_base<Monoid>
     // after the view, all this means that the leftmost view gets one or more
     // cache lines all to itself, which prevents false sharing.
     //
-    __CILKRTS_CACHE_ALIGN
-    char m_leftmost[sizeof(view_type)];
+    __attribute__((aligned((64)))) char m_leftmost[sizeof(view_type)];
 
-    /** Test if the reducer is cache-line-aligned.
-     *
-     *  Used in assertions.
-     */
-    bool reducer_is_cache_aligned() const
-        { return 0 == ((std::size_t) this & (__CILKRTS_CACHE_LINE__ - 1)); }
-
-protected:
-
-    /** Constructor.
-     */
-    reducer_content() : reducer_base<Monoid>((char*)&m_leftmost)
-    {
-#ifndef CILK_IGNORE_REDUCER_ALIGNMENT
-    assert(reducer_is_cache_aligned() &&
-           "Reducer should be cache aligned. Please see comments following "
-           "this assertion for explanation and fixes.");
-#endif
-    /*  "REDUCER SHOULD BE CACHE ALIGNED" ASSERTION.
-     *
-     *  This Reducer class instantiation specifies cache-line alignment of the
-     *  leftmost view field (and, implicitly, of the reducer itself). You got
-     *  this assertion because a reducer with this class was allocated at a
-     *  non-cache-aligned address, probably because it was allocated on the
-     *  heap with `new`. This can be a problem for two reasons:
-     *
-     *  1.  If the leftmost view is not on a cache line by itself, there might
-     *      be a slowdown resulting from accesses to the same cache line from
-     *      different threads.
-     *
-     *  2.  The compiler thinks that reducer is cache-line aligned, but it
-     *      really isn't. If the reducer is contained in a structure, then the
-     *      compiler will believe that the containing structure, and other
-     *      fields contained in it, are also more aligned than they really
-     *      are. In particular, if the structure contains a numeric array that
-     *      is used in a vectorizable loop, then the compiler might generate
-     *      invalid vector instructions, resulting in a runtime error.
-     *
-     *  The compiler will always allocate reducer variables, and structure
-     *  variables containing reducers, with their required alignment.
-     *  Reducers, and structures containing a reducer, which are allocated
-     *  on the heap with `new` will _not_ be properly aligned.
-     *
-     *  There are three ways that you can fix this assertion failure.
-     *
-     *  A.  Rewrite your code to use the new-style `reducer< op_XXX<Type> >`
-     *      instead of the legacy `reducer_XXX<type>`. The new-style reducers
-     *      are not declared to be cache-aligned, and will work properly if
-     *      they are not cache-aligned.
-     *
-     *  B.  If you must allocate an old-style reducer or a structure containing
-     *      a reducer on the heap, figure out how to align it correctly. The
-     *      suggested fix is to use `cilk::aligned_new()` and
-     *      `cilk::aligned_delete()` instead of `new` and `delete`, as follows:
-     *
-     *          Type* ptr = cilk::aligned_new<Type>(constructor-arguments);
-     *          cilk::aligned_delete(ptr);
-     *
-     *  C.  Define the macro CILK_IGNORE_REDUCER_ALIGNMENT, which will suppress
-     *      the assertion check. Do this only if you are comfortable that
-     *      problem (2) above will not occur.
-     */
-    }
+  protected:
+    reducer_content() : reducer_base<Monoid>((char *)&m_leftmost) {}
 };
 
 /** Base class defining the data members of an unaligned reducer.
  */
 template <typename Monoid>
-class reducer_content<Monoid, false> : public reducer_base<Monoid>
-{
-    typedef typename Monoid::view_type view_type;      ///< The view type.
+class reducer_content<Monoid, false> : public reducer_base<Monoid> {
+    typedef typename Monoid::view_type view_type; ///< The view type.
 
     // Reserve space for the leftmost view. The view will be allocated at an
     // aligned offset in this space at runtime, to guarantee that the view
@@ -1085,31 +981,20 @@ class reducer_content<Monoid, false> : public reducer_base<Monoid>
     //   area will contain a cache-aligned block of the required cache lines,
     //   no matter where the reserved area starts.
     //
-    char m_leftmost[
-        // View size rounded up to multiple cache lines
-        (   (sizeof(view_type) + __CILKRTS_CACHE_LINE__ - 1)
-            & ~ (__CILKRTS_CACHE_LINE__ - 1)
-        )
-        // plus filler to allow alignment.
-        + __CILKRTS_CACHE_LINE__ - 1
-        ];
+    char m_leftmost[((sizeof(view_type) + 63UL) & ~63UL) + 63U];
+    // View size rounded up to multiple cache lines
 
-protected:
-
+  protected:
     /** Constructor. Find the first cache-aligned position in the reserved
      *  area, and pass it to the base constructor as the leftmost view
      *  address.
      */
-    reducer_content() :
-        reducer_base<Monoid>(
-            (char*)( ((std::size_t)&m_leftmost + __CILKRTS_CACHE_LINE__ - 1)
-                     & ~ (__CILKRTS_CACHE_LINE__ - 1) ) )
-    {}
+    reducer_content()
+        : reducer_base<Monoid>(
+              (char *)(((std::size_t)&m_leftmost + 63UL) & ~63UL)) {}
 };
 
-
 } // namespace internal
-
 
 // The __cilkrts_hyperobject_ functions are defined differently depending on
 // whether a file is compiled with or without the CILK_STUB option. Therefore,
@@ -1134,24 +1019,23 @@ namespace stub {
  *  @see @ref pagereducers
  */
 template <class Monoid>
-class reducer : public internal::reducer_content<Monoid>
-{
+class reducer : public internal::reducer_content<Monoid> {
     typedef internal::reducer_content<Monoid> base;
-    using base::monoid_ptr;
     using base::leftmost_ptr;
+    using base::monoid_ptr;
+
   public:
-    typedef Monoid                          monoid_type;  ///< The monoid type.
-    typedef typename Monoid::value_type     value_type;   ///< The value type.
-    typedef typename Monoid::view_type      view_type;    ///< The view type.
+    typedef Monoid monoid_type;                     ///< The monoid type.
+    typedef typename Monoid::value_type value_type; ///< The value type.
+    typedef typename Monoid::view_type view_type;   ///< The view type.
 
   private:
     typedef internal::reducer_set_get<value_type, view_type> set_get;
 
-    reducer(const reducer&);                ///< Disallow copying.
-    reducer& operator=(const reducer&);     ///< Disallow assignment.
+    reducer(const reducer &);            ///< Disallow copying.
+    reducer &operator=(const reducer &); ///< Disallow assignment.
 
   public:
-
     /** @name Constructors
      *
      *  All reducer constructors call the static `construct()` function of the
@@ -1167,50 +1051,39 @@ class reducer : public internal::reducer_content<Monoid>
      */
     //@{
 
-    reducer()
-    {
-        monoid_type::construct(monoid_ptr(), leftmost_ptr());
-    }
+    reducer() { monoid_type::construct(monoid_ptr(), leftmost_ptr()); }
 
-    template <typename T1>
-    reducer(const T1& x1)
-    {
+    template <typename T1> reducer(const T1 &x1) {
         monoid_type::construct(monoid_ptr(), leftmost_ptr(), x1);
     }
 
-    template <typename T1, typename T2>
-    reducer(const T1& x1, const T2& x2)
-    {
+    template <typename T1, typename T2> reducer(const T1 &x1, const T2 &x2) {
         monoid_type::construct(monoid_ptr(), leftmost_ptr(), x1, x2);
     }
 
     template <typename T1, typename T2, typename T3>
-    reducer(const T1& x1, const T2& x2, const T3& x3)
-    {
+    reducer(const T1 &x1, const T2 &x2, const T3 &x3) {
         monoid_type::construct(monoid_ptr(), leftmost_ptr(), x1, x2, x3);
     }
 
     template <typename T1, typename T2, typename T3, typename T4>
-    reducer(const T1& x1, const T2& x2, const T3& x3, const T4& x4)
-    {
+    reducer(const T1 &x1, const T2 &x2, const T3 &x3, const T4 &x4) {
         monoid_type::construct(monoid_ptr(), leftmost_ptr(), x1, x2, x3, x4);
     }
 
     template <typename T1, typename T2, typename T3, typename T4, typename T5>
-    reducer(const T1& x1, const T2& x2, const T3& x3, const T4& x4,
-            const T5& x5)
-    {
-        monoid_type::construct(monoid_ptr(), leftmost_ptr(),
-                               x1, x2, x3, x4, x5);
+    reducer(const T1 &x1, const T2 &x2, const T3 &x3, const T4 &x4,
+            const T5 &x5) {
+        monoid_type::construct(monoid_ptr(), leftmost_ptr(), x1, x2, x3, x4,
+                               x5);
     }
 
-    template <typename T1, typename T2, typename T3, typename T4,
-              typename T5, typename T6>
-    reducer(const T1& x1, const T2& x2, const T3& x3, const T4& x4,
-            const T5& x5, const T6& x6)
-    {
-        monoid_type::construct(monoid_ptr(), leftmost_ptr(),
-                               x1, x2, x3, x4, x5, x6);
+    template <typename T1, typename T2, typename T3, typename T4, typename T5,
+              typename T6>
+    reducer(const T1 &x1, const T2 &x2, const T3 &x3, const T4 &x4,
+            const T5 &x5, const T6 &x6) {
+        monoid_type::construct(monoid_ptr(), leftmost_ptr(), x1, x2, x3, x4, x5,
+                               x6);
     }
 
     //@}
@@ -1219,9 +1092,7 @@ class reducer : public internal::reducer_content<Monoid>
      */
     //@{
 
-    template <typename T1>
-    reducer(T1& x1)
-    {
+    template <typename T1> reducer(T1 &x1) {
         monoid_type::construct(monoid_ptr(), leftmost_ptr(), x1);
     }
 
@@ -1229,8 +1100,7 @@ class reducer : public internal::reducer_content<Monoid>
 
     /** Destructor.
      */
-    __CILKRTS_STRAND_STALE(~reducer())
-    {
+    __CILKRTS_STRAND_STALE(~reducer()) {
         leftmost_ptr()->~view_type();
         monoid_ptr()->~monoid_type();
     }
@@ -1240,10 +1110,11 @@ class reducer : public internal::reducer_content<Monoid>
      *
      *  @return A reference to the monoid object belonging to this reducer.
      */
-    Monoid& monoid() { return *monoid_ptr(); }
+    Monoid &monoid() { return *monoid_ptr(); }
 
-    const Monoid& monoid() const
-    { return const_cast<reducer*>(this)->monoid(); }
+    const Monoid &monoid() const {
+        return const_cast<reducer *>(this)->monoid();
+    }
     //@}
 
     //@{
@@ -1253,10 +1124,9 @@ class reducer : public internal::reducer_content<Monoid>
      *  created for the current strand of a parallel computation (and create
      *  it if it doesn't already exist).
      */
-          view_type& view()       { return base::view(); }
-    const view_type& view() const { return base::view(); }
+    view_type &view() { return base::view(); }
+    const view_type &view() const { return base::view(); }
     //@}
-
 
     /** @name Dereference the reducer to get the view.
      *
@@ -1287,8 +1157,8 @@ class reducer : public internal::reducer_content<Monoid>
      *
      *  @return A reference to the per-strand view instance.
      */
-    view_type&       operator*()       { return view(); }
-    view_type const& operator*() const { return view(); }
+    view_type &operator*() { return view(); }
+    view_type const &operator*() const { return view(); }
     //@}
 
     //@{
@@ -1296,8 +1166,8 @@ class reducer : public internal::reducer_content<Monoid>
      *
      *  @return A pointer to the per-strand view instance.
      */
-    view_type*       operator->()       { return &view(); }
-    view_type const* operator->() const { return &view(); }
+    view_type *operator->() { return &view(); }
+    view_type const *operator->() const { return &view(); }
     //@}
 
     //@{
@@ -1310,8 +1180,8 @@ class reducer : public internal::reducer_content<Monoid>
      *
      *  @return A reference to the per-strand view instance.
      */
-    view_type&       operator()()       { return view(); }
-    view_type const& operator()() const { return view(); }
+    view_type &operator()() { return view(); }
+    view_type const &operator()() const { return view(); }
     //@}
 
     //@}
@@ -1399,7 +1269,7 @@ class reducer : public internal::reducer_content<Monoid>
      *
      *  @see set_value()
      */
-    void move_in(value_type& obj) { set_get::move_in(view(), obj);}
+    void move_in(value_type &obj) { set_get::move_in(view(), obj); }
 
     /** Move the value out of the reducer.
      *
@@ -1441,7 +1311,7 @@ class reducer : public internal::reducer_content<Monoid>
      *
      *  @see get_value()
      */
-    void move_out(value_type& obj) { set_get::move_out(view(), obj); }
+    void move_out(value_type &obj) { set_get::move_out(view(), obj); }
 
     /** Set the value of the reducer.
      *
@@ -1475,7 +1345,7 @@ class reducer : public internal::reducer_content<Monoid>
      *
      *  @see move_in()
      */
-    void set_value(const value_type& obj) { set_get::set_value(view(), obj); }
+    void set_value(const value_type &obj) { set_get::set_value(view(), obj); }
 
     /** Get the value of the reducer.
      *
@@ -1490,8 +1360,9 @@ class reducer : public internal::reducer_content<Monoid>
      *
      *  @see move_out()
      */
-    typename set_get::return_type_for_get_value get_value() const
-        { return set_get::get_value(view()); }
+    typename set_get::return_type_for_get_value get_value() const {
+        return set_get::get_value(view());
+    }
 
     //@}
 
@@ -1499,21 +1370,18 @@ class reducer : public internal::reducer_content<Monoid>
      *
      *  @see legacy_reducer_downcast
      */
-    operator typename legacy_reducer_downcast<reducer>::type& ()
-    {
+    operator typename legacy_reducer_downcast<reducer>::type &() {
         typedef typename legacy_reducer_downcast<reducer>::type downcast_type;
-        return *reinterpret_cast<downcast_type*>(this);
+        return *reinterpret_cast<downcast_type *>(this);
     }
-
 
     /** Implicit downcast to legacy reducer wrapper, if any.
      *
      *  @see legacy_reducer_downcast
      */
-    operator const typename legacy_reducer_downcast<reducer>::type& () const
-    {
+    operator const typename legacy_reducer_downcast<reducer>::type &() const {
         typedef typename legacy_reducer_downcast<reducer>::type downcast_type;
-        return *reinterpret_cast<const downcast_type*>(this);
+        return *reinterpret_cast<const downcast_type *>(this);
     }
 };
 
@@ -1530,8 +1398,8 @@ using stub::reducer;
  *
  *  @tableofcontents
  *
- *  The Intel Cilk Plus runtime supports reducers written in C as well as in C++. The
- *  basic logic is the same, but the implementation details are very
+ *  The Intel Cilk Plus runtime supports reducers written in C as well as in
+ * C++. The basic logic is the same, but the implementation details are very
  *  different. The C++ reducer implementation uses templates heavily to create
  *  very generic components. The C reducer implementation uses macros, which
  *  are a much blunter instrument. The most immediate consequence is that the
@@ -1605,8 +1473,8 @@ using stub::reducer;
  *  It must release any resources belonging to the value pointed to by `p`, to
  *  avoid a resource leak when the memory containing the value is deallocated.
  *
- *  The runtime function `__cilkrts_hyperobject_noop_destroy` can be used for
- *  the destructor function if the reducer's values do not need any cleanup.
+ *  A null pointer can be used for the destructor function if the reducer's
+ *  values do not need any cleanup.
  *
  *  @subsection reducers_c_register Tell the Intel Cilk Plus Runtime About the
  *  Reducer
@@ -1631,8 +1499,8 @@ using stub::reducer;
  *  protection is provided for C reducers.  It is entirely the responsibility
  *  of the user to avoid modifying the value in any inappropriate way.
  *
- *  @subsection c_reducers_unregister Tell the Intel Cilk Plus Runtime That You Are
- *  Done with the Reducer
+ *  @subsection c_reducers_unregister Tell the Intel Cilk Plus Runtime That You
+ * Are Done with the Reducer
  *
  *  When the parallel computation is complete, call the @ref
  *  CILK_C_UNREGISTER_REDUCER macro to unregister the reducer with the
@@ -1700,7 +1568,7 @@ using stub::reducer;
  *          CILK_C_INIT_REDUCER(IntList,
  *                              reduce_int_list,
  *                              identity_int_list,
- *                              __cilkrts_hyperobject_noop_destroy);
+ *                              0);
  *                              // Initial value omitted //
  *      ListInt_init(&REDUCER_VIEW(my_int_list_reducer));
  *
@@ -1714,9 +1582,9 @@ using stub::reducer;
  *
  *  @section reducers_c_predefined Predefined C Reducers
  *
- *  Some of the predefined reducer classes in the Intel Cilk Plus library come with
- *  a set of predefined macros to provide the same capabilities in C.
- *  In general, two macros are provided for each predefined reducer family:
+ *  Some of the predefined reducer classes in the Intel Cilk Plus library come
+ * with a set of predefined macros to provide the same capabilities in C. In
+ * general, two macros are provided for each predefined reducer family:
  *
  *  -   `CILK_C_REDUCER_operation(reducer-name, type-name, initial-value)` -
  *      Declares a reducer object named _reducer-name_ with initial value
@@ -1791,14 +1659,13 @@ using stub::reducer;
  *      printf("The sum is %u\n", REDUCER_VIEW(sum));
  */
 
-
- /** @name C language reducer macros
+/** @name C language reducer macros
  *
  *  These macros are used to declare and work with reducers in C code.
  *
  *  @see @ref page_reducers_in_c
  */
- //@{
+//@{
 
 /// @cond internal
 
@@ -1811,22 +1678,22 @@ using stub::reducer;
 
 /** Expand to an identifier formed by concatenating two identifiers.
  */
-#define __CILKRTS_MKIDENT(a,b) __CILKRTS_MKIDENT_IMP(a,b,)
+#define __CILKRTS_MKIDENT(a, b) __CILKRTS_MKIDENT_IMP(a, b, )
 
 /** Expand to an identifier formed by concatenating three identifiers.
  */
-#define __CILKRTS_MKIDENT3(a,b,c) __CILKRTS_MKIDENT_IMP(a,b,c)
+#define __CILKRTS_MKIDENT3(a, b, c) __CILKRTS_MKIDENT_IMP(a, b, c)
 
 /** Helper macro to do the concatenation.
  */
-#define __CILKRTS_MKIDENT_IMP(a,b,c) a ## b ## c
+#define __CILKRTS_MKIDENT_IMP(a, b, c) a##b##c
 
 //@}
 
 /** Compiler-specific keyword for the "type of" operator.
  */
 #if defined(__GNUC__) && !defined(__INTEL_COMPILER)
-# define _Typeof __typeof__
+#define _Typeof __typeof__
 #endif
 
 /** @name Predefined reducer function declaration macros.
@@ -1845,19 +1712,19 @@ using stub::reducer;
  *  @param name The reducer family name.
  *  @param tn   The type name.
  */
-#define __CILKRTS_DECLARE_REDUCER_IDENTITY(name,tn)  CILK_EXPORT         \
-    void __CILKRTS_MKIDENT3(name,_identity_,tn)(void* key, void* v)
+#define __CILKRTS_DECLARE_REDUCER_IDENTITY(name, tn)                           \
+    void __CILKRTS_MKIDENT3(name, _identity_, tn)(void *key, void *v)
 
 /** Create a reduction function header.
  *
  *  @param name The reducer family name.
  *  @param tn   The type name.
  *  @param l    The name to use for the function's left value pointer parameter.
- *  @param r    The name to use for the function's right value pointer 
+ *  @param r    The name to use for the function's right value pointer
  *              parameter.
  */
-#define __CILKRTS_DECLARE_REDUCER_REDUCE(name,tn,l,r) CILK_EXPORT        \
-    void __CILKRTS_MKIDENT3(name,_reduce_,tn)(void* key, void* l, void* r)
+#define __CILKRTS_DECLARE_REDUCER_REDUCE(name, tn, l, r)                       \
+    void __CILKRTS_MKIDENT3(name, _reduce_, tn)(void *key, void *l, void *r)
 
 /** Create a destructor function header.
  *
@@ -1865,13 +1732,12 @@ using stub::reducer;
  *  @param tn   The type name.
  *  @param p    The name to use for the function's value pointer parameter.
  */
-#define __CILKRTS_DECLARE_REDUCER_DESTROY(name,tn,p) CILK_EXPORT         \
-    void __CILKRTS_MKIDENT3(name,_destroy_,tn)(void* key, void* p)
+#define __CILKRTS_DECLARE_REDUCER_DESTROY(name, tn, p)                         \
+    void __CILKRTS_MKIDENT3(name, _destroy_, tn)(void *key, void *p)
 
 //@}
 
 /// @endcond
-
 
 /***************************************************************************
  *              Real implementation
@@ -1889,9 +1755,10 @@ using stub::reducer;
  *
  *  @see @ref reducers_c_creation
  */
-#define CILK_C_DECLARE_REDUCER(Type) struct {                      \
-        __cilkrts_hyperobject_base   __cilkrts_hyperbase;          \
-        __CILKRTS_CACHE_ALIGN Type   value;                        \
+#define CILK_C_DECLARE_REDUCER(Type)                                           \
+    struct {                                                                   \
+        __cilkrts_hyperobject_base __cilkrts_hyperbase;                        \
+        Type __attribute__((aligned(64))) value;                               \
     }
 
 /** Initializer for a C reducer structure.
@@ -1904,7 +1771,7 @@ using stub::reducer;
  *          CILK_C_INIT_REDUCER(int,
  *                              add_int_reduce,
  *                              add_int_identity,
- *                              __cilkrts_hyperobject_noop_destroy,
+ *                              0,
  *                              0);
  *
  *  @param Type     The type of the value contained in the reducer object. Must
@@ -1924,18 +1791,14 @@ using stub::reducer;
  *  @see @ref reducers_c_creation
  */
 
-#define CILK_C_INIT_REDUCER(Type, Reduce, Identity, Destroy, ...)       \
-    {   {   {   Reduce                                                  \
-            ,   Identity                                                \
-            ,   Destroy                                                 \
-            ,   __cilkrts_hyperobject_alloc                             \
-            ,   __cilkrts_hyperobject_dealloc                           \
-            }                                                           \
-        ,   0                                                           \
-        ,   __CILKRTS_CACHE_LINE__                                      \
-        ,   sizeof(Type)                                                \
-        }                                                               \
-    ,   __VA_ARGS__                                                     \
+#define CILK_C_INIT_REDUCER(Type, Reduce, Identity, Destroy, ...)              \
+    {                                                                          \
+        {{Reduce, Identity, Destroy, __cilkrts_hyper_alloc,                    \
+          __cilkrts_hyper_dealloc},                                            \
+         0,                                                                    \
+         64, /* TODO: Assert that this really is 64. */                        \
+         sizeof(Type)},                                                        \
+            __VA_ARGS__                                                        \
     }
 
 /** Register a reducer with the Intel Cilk Plus runtime.
@@ -1952,7 +1815,7 @@ using stub::reducer;
  *
  *  @see @ref page_reducers_in_c
  */
-#define CILK_C_REGISTER_REDUCER(Expr) \
+#define CILK_C_REGISTER_REDUCER(Expr)                                          \
     __cilkrts_hyper_create(&(Expr).__cilkrts_hyperbase)
 
 /** Unregister a reducer with the Intel Cilk Plus runtime.
@@ -1969,7 +1832,7 @@ using stub::reducer;
  *
  *  @see @ref page_reducers_in_c
  */
-#define CILK_C_UNREGISTER_REDUCER(Expr) \
+#define CILK_C_UNREGISTER_REDUCER(Expr)                                        \
     __cilkrts_hyper_destroy(&(Expr).__cilkrts_hyperbase)
 
 /** Get the current view for a reducer.
@@ -1992,9 +1855,12 @@ using stub::reducer;
  *
  *  @see @ref page_reducers_in_c
  */
-#define REDUCER_VIEW(Expr) (*(_Typeof((Expr).value)*)               \
-    __cilkrts_hyper_lookup(&(Expr).__cilkrts_hyperbase))
+#define REDUCER_VIEW(Expr)                                                     \
+    (*(_Typeof((Expr).value) *)__cilkrts_hyper_lookup(                         \
+        &(Expr).__cilkrts_hyperbase))
 
 //@} C language reducer macros
+
+#undef __CILKRTS_STRAND_STALE
 
 #endif // CILK_REDUCER_H_INCLUDED

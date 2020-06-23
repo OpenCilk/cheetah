@@ -1,28 +1,26 @@
 #ifndef _CILK_INTERNAL_H
 #define _CILK_INTERNAL_H
 
-#include <pthread.h>
-#include <stdatomic.h>
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <stdbool.h>
 #include <stdint.h>
 
-// Includes
+#include <cilk/cilk_api.h>
+
 #include "debug.h"
 #include "fiber.h"
 #include "internal-malloc.h"
 #include "jmpbuf.h"
-#include "mutex.h"
 #include "rts-config.h"
 #include "sched_stats.h"
 #include "types.h"
 
-#define NOBODY 0xffffffffu /* type worker_id */
-
-#if CILK_STATS
-#define WHEN_CILK_STATS(ex) ex
-#else
-#define WHEN_CILK_STATS(ex)
-#endif
+struct global_state;
+typedef struct global_state global_state;
+typedef struct local_state local_state;
 
 //===============================================
 // Cilk stack frame related defs
@@ -40,15 +38,11 @@
  */
 struct __cilkrts_stack_frame {
     // Flags is a bitfield with values defined below. Client code
-    // initializes flags to 0 (except for the ABI version field)
-    // before the first Cilk operation.
+    // initializes flags to 0 before the first Cilk operation.
     uint32_t flags;
-
-#ifdef OPENCILK_ABI
+    // The magic number includes the ABI version and a hash of the
+    // layout of this structure.
     uint32_t magic;
-#else
-    /* 32 bit hole here on 64 bit machines */
-#endif
 
     // call_parent points to the __cilkrts_stack_frame of the closest
     // ancestor spawning function, including spawn helpers, of this frame.
@@ -65,35 +59,17 @@ struct __cilkrts_stack_frame {
     jmpbuf ctx;
 
     /**
-     * Architecture-specific floating point state.
-     * mxcsr and fpcsr should be set when setjmp is called in client code.
-     *
-     * They are for linux / x86_64 platforms only.  Note that the Win64
-     * jmpbuf for the Intel64 architecture already contains this information
-     * so there is no need to use these fields on that OS/architecture.
+     * Architecture-specific floating point state that should be carried
+     * along with a context from thread to thread.  On Win64 this is in
+     * jmpbuf.
      */
+#if defined __i386__ || defined __x86_64__
 #ifdef __SSE__
 #define CHEETAH_SAVE_MXCSR
     uint32_t mxcsr;
 #else
     uint32_t reserved1;
 #endif
-#ifndef OPENCILK_ABI /* x87 flags not preserved in OpenCilk */
-#if defined i386 || defined __x86_64__
-#define CHEETAH_SAVE_FPCSR
-    uint16_t fpcsr;
-#else
-    uint16_t reserved2;
-#endif
-#endif
-
-#ifndef OPENCILK_ABI
-    /**
-     * reserved is not used at this time.  Client code should initialize it
-     * to 0 before the first Cilk operation
-     */
-    uint16_t reserved3; // ANGE: leave it to make it 8-byte aligned.
-    uint32_t magic;
 #endif
 };
 
@@ -134,8 +110,8 @@ struct __cilkrts_stack_frame {
 //       function.
 #define CILK_FRAME_SYNC_READY 0x200
 
-#define GET_CILK_FRAME_VERSION(F) (((F) >> 24) & 255)
-#define CILK_FRAME_VERSION (__CILKRTS_ABI_VERSION << 24)
+#define GET_CILK_FRAME_MAGIC(F) ((F)->magic)
+#define CHECK_CILK_FRAME_MAGIC(G, F) ((G)->frame_magic == (F)->magic)
 
 //===========================================================
 // Helper functions for the flags field in cilkrts_stack_frame
@@ -182,65 +158,6 @@ static inline int __cilkrts_not_stolen(__cilkrts_stack_frame *sf) {
 // Worker related definition
 //===============================================
 
-// Forward declaration
-typedef struct global_state global_state;
-typedef struct local_state local_state;
-typedef struct __cilkrts_stack_frame **CilkShadowStack;
-
-// Actual declaration
-struct rts_options {
-    unsigned int nproc;
-    int deqdepth;
-    int64_t stacksize;
-    int fiber_pool_cap;
-};
-
-// clang-format off
-#define DEFAULT_OPTIONS                                            \
-    {                                                              \
-        DEFAULT_NPROC,          /* num of workers to create */     \
-        DEFAULT_DEQ_DEPTH,      /* num of entries in deque */      \
-        DEFAULT_STACK_SIZE,     /* stack size to use for fiber */  \
-        DEFAULT_FIBER_POOL_CAP, /* alloc_batch_size */             \
-    }
-// clang-format on
-
-// Actual declaration
-struct global_state {
-    /* globally-visible options (read-only after init) */
-    struct rts_options options;
-
-    /*
-     * this string is printed when an assertion fails.  If we just inline
-     * it, apparently gcc generates many copies of the string.
-     */
-    const char *assertion_failed_msg;
-    const char *stack_overflow_msg;
-
-    /* dynamically-allocated array of deques, one per processor */
-    struct ReadyDeque *deques;
-    struct __cilkrts_worker **workers;
-    pthread_t *threads;
-    struct Closure *invoke_main;
-
-    struct cilk_fiber_pool fiber_pool __attribute__((aligned(CILK_CACHE_LINE)));
-    struct global_im_pool im_pool __attribute__((aligned(CILK_CACHE_LINE)));
-    struct cilk_im_desc im_desc __attribute__((aligned(CILK_CACHE_LINE)));
-    cilk_mutex im_lock; // lock for accessing global im_desc
-
-    volatile bool invoke_main_initialized;
-    volatile atomic_bool start;
-    volatile atomic_bool done;
-    volatile atomic_int cilk_main_return;
-
-    cilk_mutex print_lock; // global lock for printing messages
-
-    int cilk_main_argc;
-    char **cilk_main_args;
-
-    WHEN_SCHED_STATS(struct global_sched_stats stats;)
-};
-
 // Actual declaration
 
 enum __cilkrts_worker_state {
@@ -262,7 +179,7 @@ struct local_state {
     struct cilk_fiber_pool fiber_pool;
     struct cilk_im_desc im_desc;
     struct cilk_fiber *fiber_to_free;
-    WHEN_SCHED_STATS(struct sched_stats stats;)
+    struct sched_stats stats;
 };
 
 /**
@@ -292,10 +209,22 @@ struct __cilkrts_worker {
     // A slot that points to the currently executing Cilk frame.
     __cilkrts_stack_frame *current_stack_frame;
 
-#ifdef REDUCER_MODULE
     // Map from reducer names to reducer values
     cilkred_map *reducer_map;
-#endif
 };
+
+struct cilkrts_callbacks {
+    unsigned last_init;
+    unsigned last_exit;
+    bool after_init;
+    void (*init[MAX_CALLBACKS])(void);
+    void (*exit[MAX_CALLBACKS])(void);
+};
+
+extern CHEETAH_INTERNAL struct cilkrts_callbacks cilkrts_callbacks;
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // _CILK_INTERNAL_H

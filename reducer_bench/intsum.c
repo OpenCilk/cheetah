@@ -13,7 +13,7 @@ void reduce_longsum(void *reducer, void *left, void *right) {
 
 CILK_C_DECLARE_REDUCER(long)
 my_int_sum_reducer = CILK_C_INIT_REDUCER(long, reduce_longsum, identity_longsum,
-                                         __cilkrts_hyperobject_noop_destroy, 0);
+                                         0, 0);
 
 void compute_sum(long limit, int scale) {
     for (long i = 0; i < limit; i++) {

@@ -1,4 +1,4 @@
-COMPILER_BASE=/project/adams/home/angelee/sandbox/OpenCilk/build/bin/
+COMPILER_BASE=
 CC=$(COMPILER_BASE)clang
 CXX=$(COMPILER_BASE)clang++
 LINK_CC=$(CC)
@@ -8,6 +8,8 @@ ABI_DEF=-DOPENCILK_ABI
 RTS_OPT=-fopencilk
 RTS_DIR=../runtime
 RTS_LIB=libopencilk
+RTS_C_PERSONALITY_LIB=libopencilk-personality-c
+RTS_CXX_PERSONALITY_LIB=libopencilk-personality-cpp
 #RTS_LIB_FLAG=-lcheetah
 #ARCH = -mavx
 OPT = -O3
