@@ -4,13 +4,9 @@
 #include "cilk-internal.h"
 #include <stdlib.h>
 
-// mainly used by invoke-main.c
-CHEETAH_INTERNAL unsigned long cilkrts_zero;
-
-// These functions are mostly inlined by the compiler, except for
-// __cilkrts_leave_frame.  However, their implementations are also
-// provided in cilk2c.c.  The implementations in cilk2c.c are used
-// by invoke-main.c and can be used to "hand compile" cilk code.
+// ABI functions inlined by the compiler (provided as a bitcode file after
+// compiling runtime) are defined in cilk2c_inline.c.
+// ABI functions not inlined by the compiler are defined in cilk2c.c.
 CHEETAH_API void __cilkrts_enter_frame(__cilkrts_stack_frame *sf);
 CHEETAH_API void __cilkrts_enter_frame_fast(__cilkrts_stack_frame *sf);
 CHEETAH_API void __cilkrts_save_fp_ctrl_state(__cilkrts_stack_frame *sf);
@@ -22,5 +18,8 @@ CHEETAH_API void __cilkrts_sync(__cilkrts_stack_frame *sf);
 CHEETAH_API void __cilkrts_pop_frame(__cilkrts_stack_frame *sf);
 CHEETAH_API void __cilkrts_pause_frame(__cilkrts_stack_frame *sf, char *exn);
 CHEETAH_API void __cilkrts_leave_frame(__cilkrts_stack_frame *sf);
-CHEETAH_API unsigned __cilkrts_get_nworkers(void);
+// Not marked as CHEETAH_API as it may be deprecated soon
+unsigned __cilkrts_get_nworkers(void);
+//CHEETAH_API int64_t* __cilkrts_get_pedigree(void);
+//void __cilkrts_pedigree_bump_rank(void);
 #endif

@@ -1,17 +1,23 @@
 // LONG_BIT is defined in limits.h when _GNU_SOURCE is defined.
+#ifndef _GNU_SOURCE
 #define _GNU_SOURCE
+#endif
 #include "reducer_impl.h"
 #include "cilk/hyperobject_base.h"
 #include "global.h"
 #include "init.h"
+#include "internal-malloc.h"
 #include "mutex.h"
 #include "scheduler.h"
 #include <assert.h>
+#include <dlfcn.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
 
 #include <limits.h>
+
+#define USE_INTERNAL_MALLOC 1
 
 #define REDUCER_LIMIT 1024U
 #define GLOBAL_REDUCER_LIMIT 100U
@@ -35,9 +41,6 @@ typedef struct reducer_id_manager {
     __cilkrts_hyperobject_base **global;
 } reducer_id_manager;
 
-/* TODO: Consider how this interacts with multiple Cilks.
-   It could be thread local. */
-static struct reducer_id_manager *id_manager;
 
 static void reducer_id_manager_assert_ownership(reducer_id_manager *m,
                                                 __cilkrts_worker *const w) {
@@ -64,10 +67,12 @@ static void reducer_id_manager_unlock(reducer_id_manager *m,
 
 static reducer_id_manager *init_reducer_id_manager(hyper_id_t cap) {
     size_t align = sizeof(reducer_id_manager) > 32 ? 64 : 32;
-    reducer_id_manager *m =
-        cilk_aligned_alloc(align, sizeof(reducer_id_manager));
+    // To appease tools such as Valgrind and ThreadSanitizer, ensure that the
+    // allocated size matches the alignment.
+    size_t alloc_size = (sizeof(reducer_id_manager) + align - 1) & ~(align - 1);
+    reducer_id_manager *m = cilk_aligned_alloc(align, alloc_size);
     memset(m, 0, sizeof *m);
-    cilkrts_alert(ALERT_BOOT, NULL, "(reducers_init) Initializing reducers");
+    cilkrts_alert(BOOT, NULL, "(reducers_init) Initializing reducers");
     cap = (cap + LONG_BIT - 1) / LONG_BIT * LONG_BIT; /* round up */
     CILK_ASSERT_G(cap > 0 && cap < 9999999);
     pthread_mutex_init(&m->mutex, NULL);
@@ -116,8 +121,7 @@ static hyper_id_t reducer_id_get(reducer_id_manager *m, __cilkrts_worker *w) {
             }
         }
     }
-    cilkrts_alert(ALERT_REDUCE_ID, w, "allocate reducer ID %lu",
-                  (unsigned long)id);
+    cilkrts_alert(REDUCE_ID, w, "allocate reducer ID %lu", (unsigned long)id);
     m->next = id + 1 >= m->spa_cap ? 0 : id + 1;
     if (id >= m->hwm)
         m->hwm = id + 1;
@@ -130,18 +134,11 @@ static hyper_id_t reducer_id_get(reducer_id_manager *m, __cilkrts_worker *w) {
 }
 
 static void reducer_id_free(__cilkrts_worker *const ws, hyper_id_t id) {
-    global_state *g = ws ? ws->g : NULL;
-    reducer_id_manager *m = NULL;
-    if (g) {
-        m = g->id_manager;
-        CILK_ASSERT(ws, !id_manager);
-    } else {
-        m = id_manager;
-        CILK_ASSERT(ws, m);
-    }
+    global_state *g = ws ? ws->g : default_cilkrts;
+    reducer_id_manager *m = g->id_manager;
     reducer_id_manager_lock(m, ws);
-    cilkrts_alert(ALERT_REDUCE_ID, ws, "free reducer ID %lu of %lu",
-                  (unsigned long)id, m->spa_cap);
+    cilkrts_alert(REDUCE_ID, ws, "free reducer ID %lu of %lu",
+                  (unsigned long)id, (unsigned long)m->spa_cap);
     CILK_ASSERT(ws, id < m->spa_cap);
     CILK_ASSERT(ws, m->used[id / LONG_BIT] & (1UL << id % LONG_BIT));
     m->used[id / LONG_BIT] &= ~(1UL << id % LONG_BIT);
@@ -160,22 +157,14 @@ void reducers_init(global_state *g) {
        is single threaded. */
     if (g->id_manager) {
         return;
-    } else if (id_manager) {
-        g->id_manager = id_manager;
-        id_manager = NULL;
     } else {
         g->id_manager = init_reducer_id_manager(REDUCER_LIMIT);
     }
 }
 
 void reducers_deinit(global_state *g) {
-    cilkrts_alert(ALERT_BOOT, NULL, "(reducers_deinit) Cleaning up reducers");
-    CILK_ASSERT_G(!id_manager);
-    if (false) { /* TODO: If the reducer set is empty, discard. */
-        free_reducer_id_manager(g->id_manager);
-    } else {
-        id_manager = g->id_manager;
-    }
+    cilkrts_alert(BOOT, NULL, "(reducers_deinit) Cleaning up reducers");
+    free_reducer_id_manager(g->id_manager);
     g->id_manager = NULL;
 }
 
@@ -213,8 +202,7 @@ static cilkred_map *install_new_reducer_map(__cilkrts_worker *w) {
     h = cilkred_map_make_map(w, m->spa_cap);
     w->reducer_map = h;
 
-    cilkrts_alert(ALERT_REDUCE, w,
-                  "(install_new_reducer_map) installed reducer_map %p", h);
+    cilkrts_alert(REDUCE, w, "installed reducer map %p", (void *)h);
     return h;
 }
 
@@ -224,21 +212,25 @@ static cilkred_map *install_new_reducer_map(__cilkrts_worker *w) {
 void __cilkrts_hyper_destroy(__cilkrts_hyperobject_base *key) {
 
     __cilkrts_worker *w = __cilkrts_get_tls_worker();
+    // If we don't have a worker, use instead the last exiting worker from the
+    // default CilkRTS.
+    if (!w)
+        w = default_cilkrts->workers[default_cilkrts->exiting_worker];
 
     hyper_id_t id = key->__id_num;
+    cilkrts_alert(REDUCE_ID, w, "Destroy reducer %x at %p", (unsigned)id, key);
     if (!__builtin_expect(id & HYPER_ID_VALID, HYPER_ID_VALID)) {
-        cilkrts_bug(w, "unregistering unregistered hyperobject");
+        cilkrts_bug(w, "unregistering unregistered hyperobject %p", key);
         return;
     }
     id &= ~HYPER_ID_VALID;
     key->__id_num = id;
 
     if (w) {
-        const char *UNSYNCED_REDUCER_MSG =
-            "Destroying a reducer while it is visible to unsynced child tasks, "
-            "or\n"
-            "calling CILK_C_UNREGISTER_REDUCER() on an unregistered reducer.\n"
-            "Did you forget a _Cilk_sync or CILK_C_REGISTER_REDUCER()?";
+#define UNSYNCED_REDUCER_MSG                                                   \
+    "Destroying a reducer while it is visible to unsynced child tasks, or\n"   \
+    "calling CILK_C_UNREGISTER_REDUCER() on an unregistered reducer.\n"        \
+    "Did you forget a _Cilk_sync or CILK_C_REGISTER_REDUCER()?"
 
         cilkred_map *h = w->reducer_map;
         if (NULL == h)
@@ -259,18 +251,18 @@ void __cilkrts_hyper_create(__cilkrts_hyperobject_base *key) {
     reducer_id_manager *m = NULL;
 
     if (__builtin_expect(!w, 0)) {
-        m = id_manager;
-        if (__builtin_expect(!m, 0)) {
-            cilkrts_alert(ALERT_BOOT, NULL,
-                          "(reducers_init) Initializing reducers");
-            id_manager = m = init_reducer_id_manager(REDUCER_LIMIT);
-        }
+        // Use the ID manager of the last exiting worker from the default
+        // CilkRTS.
+        m = default_cilkrts->id_manager;
+        w = default_cilkrts->workers[default_cilkrts->exiting_worker];
     } else {
         m = w->g->id_manager;
     }
 
     hyper_id_t id = reducer_id_get(m, w);
     key->__id_num = id | HYPER_ID_VALID;
+
+    cilkrts_alert(REDUCE_ID, w, "Create reducer %x at %p", (unsigned)id, key);
 
     if (__builtin_expect(!w, 0)) {
         if (id >= GLOBAL_REDUCER_LIMIT) {
@@ -312,7 +304,8 @@ void *__cilkrts_hyper_lookup(__cilkrts_hyperobject_base *key) {
     hyper_id_t id = key->__id_num;
 
     if (!__builtin_expect(id & HYPER_ID_VALID, HYPER_ID_VALID)) {
-        cilkrts_bug(w, "User error: reference to unregistered hyperobject");
+        cilkrts_bug(w, "User error: reference to unregistered hyperobject %p",
+                    key);
     }
     id &= ~HYPER_ID_VALID;
 
@@ -323,8 +316,8 @@ void *__cilkrts_hyper_lookup(__cilkrts_hyperobject_base *key) {
     /* TODO: If this is the first reference to a reducer created at
        global scope, install the leftmost view. */
 
-    if(w->g->options.force_reduce) {
-        CILK_ASSERT(w, w->g->options.nproc == 1);
+    if (w->g->options.force_reduce) {
+        CILK_ASSERT(w, w->g->nworkers == 1);
         promote_own_deque(w);
     }
 
@@ -341,10 +334,10 @@ void *__cilkrts_hyper_lookup(__cilkrts_hyperobject_base *key) {
     if (vinfo == NULL) {
         CILK_ASSERT(w, id < h->spa_cap);
         vinfo = &h->vinfo[id];
+        CILK_ASSERT(w, vinfo->key == NULL && vinfo->val == NULL);
 
         void *val = key->__c_monoid.allocate_fn(key, key->__view_size);
         key->__c_monoid.identity_fn(key, val);
-        CILK_ASSERT(w, vinfo->key == NULL && vinfo->val == NULL);
 
         // allocate space for the val and initialize it to identity
         vinfo->key = key;
@@ -354,15 +347,62 @@ void *__cilkrts_hyper_lookup(__cilkrts_hyperobject_base *key) {
     return vinfo->val;
 }
 
-void *__cilkrts_hyper_alloc(void *ignore, size_t bytes) {
-    return cilk_aligned_alloc(16, bytes); /* ??? what is the best alignment? */
+void *__cilkrts_hyper_alloc(__cilkrts_hyperobject_base *key, size_t bytes) {
+    if (USE_INTERNAL_MALLOC) {
+        __cilkrts_worker *w = __cilkrts_get_tls_worker();
+        if (!w)
+            // Use instead the worker from the default CilkRTS that last exited
+            // a Cilkified region
+            w = default_cilkrts->workers[default_cilkrts->exiting_worker];
+        return cilk_internal_malloc(w, bytes, IM_REDUCER_MAP);
+    } else
+        return cilk_aligned_alloc(16, bytes);
 }
 
-void __cilkrts_hyper_dealloc(void *ignore, void *view) { free(view); }
+void __cilkrts_hyper_dealloc(__cilkrts_hyperobject_base *key, void *view) {
+    if (USE_INTERNAL_MALLOC) {
+        __cilkrts_worker *w = __cilkrts_get_tls_worker();
+        if (!w)
+            // Use instead the worker from the default CilkRTS that last exited
+            // a Cilkified region
+            w = default_cilkrts->workers[default_cilkrts->exiting_worker];
+        cilk_internal_free(w, view, key->__view_size, IM_REDUCER_MAP);
+    } else
+        free(view);
+}
 
 // =================================================================
 // Helper function for the scheduler
 // =================================================================
+
+#if DL_INTERPOSE
+#define START_DL_INTERPOSABLE(func, type)                               \
+    if (__builtin_expect(dl_##func == NULL, false)) {                   \
+        dl_##func = (type)dlsym(RTLD_DEFAULT, #func);                   \
+        if (__builtin_expect(dl_##func == NULL, false)) {               \
+            char *error = dlerror();                                    \
+            if (error != NULL) {                                        \
+                fputs(error, stderr);                                   \
+                fflush(stderr);                                         \
+                abort();                                                \
+            }                                                           \
+        }                                                               \
+    }
+
+typedef cilkred_map *(*merge_two_rmaps_t)(__cilkrts_worker *const,
+                                          cilkred_map *,
+                                          cilkred_map *);
+static merge_two_rmaps_t dl___cilkrts_internal_merge_two_rmaps = NULL;
+
+cilkred_map *merge_two_rmaps(__cilkrts_worker *const ws,
+                             cilkred_map *left,
+                             cilkred_map *right) {
+    START_DL_INTERPOSABLE(__cilkrts_internal_merge_two_rmaps,
+                          merge_two_rmaps_t);
+
+    return dl___cilkrts_internal_merge_two_rmaps(ws, left, right);
+}
+#endif // DL_INTERPOSE
 
 cilkred_map *__cilkrts_internal_merge_two_rmaps(__cilkrts_worker *const ws,
                                                 cilkred_map *left,

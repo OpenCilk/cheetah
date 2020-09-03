@@ -12,6 +12,7 @@
 #include "fiber.h"
 #include "global.h"
 #include "jmpbuf.h"
+#include "local.h"
 #include "readydeque.h"
 #include "scheduler.h"
 
@@ -72,7 +73,9 @@ static void decrement_exception_pointer(__cilkrts_worker *const w,
                                         __cilkrts_worker *const victim_w,
                                         Closure *cl) {
     Closure_assert_ownership(w, cl);
-    CILK_ASSERT(w, cl->status == CLOSURE_RUNNING);
+    // It's possible that this steal attempt peeked the root closure from the
+    // top of a deque while a new Cilkified region was starting.
+    CILK_ASSERT(w, cl->status == CLOSURE_RUNNING || cl == w->g->root_closure);
     __cilkrts_stack_frame **exc =
         atomic_load_explicit(&victim_w->exc, memory_order_relaxed);
     if (exc != EXCEPTION_INFINITY) {
@@ -82,9 +85,7 @@ static void decrement_exception_pointer(__cilkrts_worker *const w,
 
 static void reset_exception_pointer(__cilkrts_worker *const w, Closure *cl) {
     Closure_assert_ownership(w, cl);
-    CILK_ASSERT(
-        w, (cl->frame == NULL) || (cl->frame->worker == w) ||
-               (cl == w->g->invoke_main && ((intptr_t)cl->frame->worker & 1)));
+    CILK_ASSERT(w, (cl->frame == NULL) || (cl->frame->worker == w));
     atomic_store_explicit(&w->exc,
                           atomic_load_explicit(&w->head, memory_order_relaxed),
                           memory_order_release);
@@ -92,7 +93,7 @@ static void reset_exception_pointer(__cilkrts_worker *const w, Closure *cl) {
 
 /* Unused for now but may be helpful later
 static void signal_immediate_exception_to_all(__cilkrts_worker *const w) {
-    int i, active_size = w->g->options.nproc;
+    int i, active_size = w->g->nworkers;
     __cilkrts_worker *curr_w;
 
     for(i=0; i<active_size; i++) {
@@ -105,7 +106,7 @@ static void signal_immediate_exception_to_all(__cilkrts_worker *const w) {
 */
 
 static void setup_for_execution(__cilkrts_worker *w, Closure *t) {
-    cilkrts_alert(ALERT_SCHED, w, "(setup_for_execution) closure %p", t);
+    cilkrts_alert(SCHED, w, "(setup_for_execution) closure %p", (void *)t);
     t->frame->worker = w;
     Closure_set_status(w, t, CLOSURE_RUNNING);
 
@@ -133,7 +134,7 @@ static void setup_for_sync(__cilkrts_worker *w, Closure *t) {
     CILK_ASSERT(w, w->l->fiber_to_free == NULL);
     CILK_ASSERT(w, t->fiber != t->fiber_child);
 
-    if(t->simulated_stolen == false) {
+    if (t->simulated_stolen == false) {
         // ANGE: note that in case a) this fiber won't get freed for awhile,
         // since we will longjmp back to the original function's fiber and
         // never go back to the runtime; we will only free it either once
@@ -145,11 +146,12 @@ static void setup_for_sync(__cilkrts_worker *w, Closure *t) {
     }
 
     CILK_ASSERT(w, t->fiber);
-    // __cilkrts_alert(ALERT_STEAL | ALERT_FIBER, w,
-    //         "(setup_for_sync) set t %p and t->fiber %p", t, t->fiber);
+    // __cilkrts_alert(STEAL | ALERT_FIBER, w,
+    //         "(setup_for_sync) set t %p and t->fiber %p", (void *)t,
+    //         (void *)t->fiber);
     __cilkrts_set_synced(t->frame);
 
-    CILK_ASSERT(w, w->current_stack_frame == t->frame);
+    CILK_ASSERT_POINTER_EQUAL(w, w->current_stack_frame, t->frame);
 
     SP(t->frame) = (void *)t->orig_rsp;
     t->orig_rsp = NULL; // unset once we have sync-ed
@@ -186,12 +188,12 @@ static Closure *setup_call_parent_resumption(__cilkrts_worker *const w,
     deque_assert_ownership(w, w->self);
     Closure_assert_ownership(w, t);
 
-    CILK_ASSERT(w, w == __cilkrts_get_tls_worker());
+    CILK_ASSERT_POINTER_EQUAL(w, w, __cilkrts_get_tls_worker());
     CILK_ASSERT(w, __cilkrts_stolen(t->frame) != 0);
     CILK_ASSERT(w, t->frame != NULL);
     CILK_ASSERT(w, ((intptr_t)t->frame->worker) & 1);
-    CILK_ASSERT(w, w->head == w->tail);
-    CILK_ASSERT(w, w->current_stack_frame == t->frame);
+    CILK_ASSERT_POINTER_EQUAL(w, w->head, w->tail);
+    CILK_ASSERT_POINTER_EQUAL(w, w->current_stack_frame, t->frame);
 
     Closure_change_status(w, t, CLOSURE_SUSPENDED, CLOSURE_RUNNING);
     t->frame->worker = w;
@@ -200,12 +202,11 @@ static Closure *setup_call_parent_resumption(__cilkrts_worker *const w,
     return t;
 }
 
-CHEETAH_INTERNAL
 void Cilk_set_return(__cilkrts_worker *const w) {
 
     Closure *t;
 
-    cilkrts_alert(ALERT_RETURN, w, "(Cilk_set_return)");
+    cilkrts_alert(RETURN, w, "(Cilk_set_return)");
 
     deque_lock_self(w);
     t = deque_peek_bottom(w, w->self);
@@ -217,37 +218,32 @@ void Cilk_set_return(__cilkrts_worker *const w) {
     // all rmaps from child or right sibling must have been reduced
     CILK_ASSERT(w, t->child_rmap == (cilkred_map *)NULL &&
                        t->right_rmap == (cilkred_map *)NULL);
+    CILK_ASSERT(w, t->call_parent);
+    CILK_ASSERT(w, t->spawn_parent == NULL);
+    CILK_ASSERT(w, (t->frame->flags & CILK_FRAME_DETACHED) == 0);
+    CILK_ASSERT(w, t->simulated_stolen == false);
 
-    if (t->call_parent != NULL) {
-        CILK_ASSERT(w, t->spawn_parent == NULL);
-        CILK_ASSERT(w, (t->frame->flags & CILK_FRAME_DETACHED) == 0);
-        CILK_ASSERT(w, t->simulated_stolen == false);
+    Closure *call_parent = t->call_parent;
+    Closure *t1 = deque_xtract_bottom(w, w->self);
 
-        Closure *call_parent = t->call_parent;
-        Closure *t1 = deque_xtract_bottom(w, w->self);
+    USE_UNUSED(t1);
+    CILK_ASSERT(w, t == t1);
+    CILK_ASSERT(w, __cilkrts_stolen(t->frame));
 
-        USE_UNUSED(t1);
-        CILK_ASSERT(w, t == t1);
-        CILK_ASSERT(w, __cilkrts_stolen(t->frame));
+    t->frame = NULL;
+    Closure_unlock(w, t);
 
-        t->frame = NULL;
-        Closure_unlock(w, t);
+    Closure_lock(w, call_parent);
+    CILK_ASSERT(w, call_parent->fiber == t->fiber);
+    t->fiber = NULL;
 
-        Closure_lock(w, call_parent);
-        CILK_ASSERT(w, call_parent->fiber == t->fiber);
-        t->fiber = NULL;
+    Closure_remove_callee(w, call_parent);
+    setup_call_parent_resumption(w, call_parent);
+    Closure_unlock(w, call_parent);
 
-        Closure_remove_callee(w, call_parent);
-        setup_call_parent_resumption(w, call_parent);
-        Closure_unlock(w, call_parent);
+    Closure_destroy(w, t);
+    deque_add_bottom(w, call_parent, w->self);
 
-        Closure_destroy(w, t);
-        deque_add_bottom(w, call_parent, w->self);
-
-    } else {
-        CILK_ASSERT(w, t == w->g->invoke_main);
-        Closure_unlock(w, t);
-    }
     deque_unlock_self(w);
 }
 
@@ -258,8 +254,8 @@ void Cilk_set_return(__cilkrts_worker *const w) {
 static Closure *unconditional_steal(__cilkrts_worker *const w,
                                     Closure *parent) {
 
-    cilkrts_alert(ALERT_STEAL, w,
-            "(unconditional_steal) promoted closure %p", parent);
+    cilkrts_alert(STEAL, w, "(unconditional_steal) promoted closure %p",
+                  (void *)parent);
 
     Closure_assert_ownership(w, parent);
     CILK_ASSERT(w, parent->simulated_stolen);
@@ -278,17 +274,16 @@ static Closure *unconditional_steal(__cilkrts_worker *const w,
     return parent;
 }
 
-
 static Closure *provably_good_steal_maybe(__cilkrts_worker *const w,
                                           Closure *parent) {
 
     Closure_assert_ownership(w, parent);
-    // cilkrts_alert(ALERT_STEAL, w, "(provably_good_steal_maybe) cl %p",
-    // parent);
+    // cilkrts_alert(STEAL, w, "(provably_good_steal_maybe) cl %p",
+    //               (void *)parent);
     CILK_ASSERT(w, !w->l->provably_good_steal);
 
     if (!Closure_has_children(parent) && parent->status == CLOSURE_SUSPENDED) {
-        // cilkrts_alert(ALERT_STEAL | ALERT_SYNC, w,
+        // cilkrts_alert(STEAL | ALERT_SYNC, w,
         //      "(provably_good_steal_maybe) completing a sync");
 
         CILK_ASSERT(w, parent->frame != NULL);
@@ -301,8 +296,9 @@ static Closure *provably_good_steal_maybe(__cilkrts_worker *const w,
         CILK_ASSERT(w, parent->owner_ready_deque == NO_WORKER);
         Closure_make_ready(parent);
 
-        cilkrts_alert(ALERT_STEAL | ALERT_SYNC, w,
-                 "(provably_good_steal_maybe) returned %p", parent);
+        cilkrts_alert(STEAL | ALERT_SYNC, w,
+                      "(provably_good_steal_maybe) returned %p",
+                      (void *)parent);
 
         return parent;
     }
@@ -354,8 +350,8 @@ Closure *Closure_return(__cilkrts_worker *const w, Closure *child) {
     CILK_ASSERT(w, child->call_parent == NULL);
     CILK_ASSERT(w, parent != NULL);
 
-    cilkrts_alert(ALERT_RETURN, w, "(Closure_return) child %p, parent %p",
-                  child, parent);
+    cilkrts_alert(RETURN, w, "(Closure_return) child %p, parent %p",
+                  (void *)child, (void *)parent);
 
     /* The frame should have passed a sync successfully meaning it
        has not accumulated any maps from its children and the
@@ -458,10 +454,10 @@ Closure *Closure_return(__cilkrts_worker *const w, Closure *child) {
         Closure_unlock(w, child);
         Closure_unlock(w, parent);
         if (left) {
-            active = __cilkrts_internal_merge_two_rmaps(w, left, active);
+            active = merge_two_rmaps(w, left, active);
         }
         if (right) {
-            active = __cilkrts_internal_merge_two_rmaps(w, active, right);
+            active = merge_two_rmaps(w, active, right);
         }
         w->reducer_map = active;
         Closure_lock(w, parent);
@@ -505,7 +501,7 @@ Closure *Closure_return(__cilkrts_worker *const w, Closure *child) {
 
     --parent->join_counter;
 
-    if(parent->simulated_stolen) {
+    if (parent->simulated_stolen) {
         // parent stolen via simulated steal on worker's own deque
         res = unconditional_steal(w, parent); // must succeed
         CILK_ASSERT(w, parent->fiber && (parent->fiber_child == NULL));
@@ -536,9 +532,9 @@ Closure *Closure_return(__cilkrts_worker *const w, Closure *child) {
         cilkred_map *active = parent->user_rmap;
         atomic_store_explicit(&parent->child_rmap, NULL, memory_order_relaxed);
         parent->user_rmap = NULL;
-        w->reducer_map = __cilkrts_internal_merge_two_rmaps(w, child, active);
+        w->reducer_map = merge_two_rmaps(w, child, active);
 
-        if(parent->simulated_stolen) {
+        if (parent->simulated_stolen) {
             atomic_store_explicit(&parent->child_rmap, w->reducer_map,
                                   memory_order_relaxed);
             // force the continuation to create new views
@@ -560,7 +556,7 @@ Closure *Closure_return(__cilkrts_worker *const w, Closure *child) {
  * CLOSURE_RETURNING
  */
 static Closure *return_value(__cilkrts_worker *const w, Closure *t) {
-    cilkrts_alert(ALERT_RETURN, w, "(return_value) closure %p", t);
+    cilkrts_alert(RETURN, w, "(return_value) closure %p", (void *)t);
 
     Closure *res = NULL;
     CILK_ASSERT(w, t->status == CLOSURE_RETURNING);
@@ -574,7 +570,7 @@ static Closure *return_value(__cilkrts_worker *const w, Closure *t) {
      // Not supported at the moment
      }*/
 
-    cilkrts_alert(ALERT_RETURN, w, "(return_value) returning closure %p", t);
+    cilkrts_alert(RETURN, w, "(return_value) returning closure %p", (void *)t);
 
     return res;
 }
@@ -602,7 +598,7 @@ void Cilk_exception_handler(char *exn) {
     CILK_ASSERT(w, t);
     Closure_lock(w, t);
 
-    cilkrts_alert(ALERT_EXCEPT, w, "(Cilk_exception_handler) closure %p!", t);
+    cilkrts_alert(EXCEPT, w, "(Cilk_exception_handler) closure %p!", (void *)t);
 
     /* ANGE: resetting the E pointer since we are handling the exception */
     reset_exception_pointer(w, t);
@@ -617,8 +613,7 @@ void Cilk_exception_handler(char *exn) {
     __cilkrts_stack_frame **tail =
         atomic_load_explicit(&w->tail, memory_order_relaxed);
     if (head > tail) {
-        cilkrts_alert(ALERT_EXCEPT, w,
-                      "(Cilk_exception_handler) this is a steal!");
+        cilkrts_alert(EXCEPT, w, "(Cilk_exception_handler) this is a steal!");
         if (NULL != exn)
             t->user_exn.exn = exn;
 
@@ -812,8 +807,8 @@ static Closure *promote_child(__cilkrts_worker *const w,
      * stacklet is stolen, and it's call parent is promoted into full and
      * suspended
      */
-    CILK_ASSERT(w,
-                cl == w->g->invoke_main || cl->spawn_parent || cl->call_parent);
+    CILK_ASSERT(w, cl == w->g->root_closure || cl->spawn_parent ||
+                       cl->call_parent);
 
     Closure *spawn_parent = NULL;
     /* JFC: Should this load be relaxed or acquire? */
@@ -971,9 +966,9 @@ static Closure *extract_top_spawning_closure(__cilkrts_worker *const w,
      * and steal the parent
      */
     child = promote_child(w, victim_w, cl, &res);
-    cilkrts_alert(ALERT_STEAL, w,
-            "(Closure_steal) promote gave cl/res/child = %p/%p/%p",
-            cl, res, child);
+    cilkrts_alert(STEAL, w,
+                  "(Closure_steal) promote gave cl/res/child = %p/%p/%p",
+                  (void *)cl, (void *)res, (void *)child);
 
     /* detach the parent */
     if (res == (Closure *)NULL) {
@@ -1008,6 +1003,18 @@ static Closure *Closure_steal(__cilkrts_worker *const w, int victim) {
     Closure *cl;
     Closure *res = (Closure *)NULL;
     __cilkrts_worker *victim_w;
+    victim_w = w->g->workers[victim];
+
+    // Fast test for an unsuccessful steal attempt using only read operations.
+    // This fast test seems to improve parallel performance.
+    {
+        __cilkrts_stack_frame **head =
+            atomic_load_explicit(&victim_w->head, memory_order_relaxed);
+        __cilkrts_stack_frame **tail =
+            atomic_load_explicit(&victim_w->tail, memory_order_relaxed);
+        if (head >= tail)
+            return NULL;
+    }
 
     //----- EVENT_STEAL_ATTEMPT
     if (deque_trylock(w, victim) == 0) {
@@ -1022,18 +1029,17 @@ static Closure *Closure_steal(__cilkrts_worker *const w, int victim) {
             return NULL;
         }
 
-        // cilkrts_alert(ALERT_STEAL, "[%d]: trying steal from W%d; cl=%p",
-        // victim, cl);
-        victim_w = w->g->workers[victim];
+        // cilkrts_alert(STEAL, "[%d]: trying steal from W%d; cl=%p",
+        // (void *)victim, (void *)cl);
 
         switch (cl->status) {
         case CLOSURE_RUNNING:
 
             /* send the exception to the worker */
             if (do_dekker_on(w, victim_w, cl)) {
-                cilkrts_alert(ALERT_STEAL, w,
-                        "(Closure_steal) can steal from W%d; cl=%p",
-                        victim, cl);
+                cilkrts_alert(STEAL, w,
+                              "(Closure_steal) can steal from W%d; cl=%p",
+                              victim, (void *)cl);
                 res = extract_top_spawning_closure(w, victim_w, cl);
 
                 // at this point, more steals can happen from the victim.
@@ -1049,11 +1055,12 @@ static Closure *Closure_steal(__cilkrts_worker *const w, int victim) {
                 // ANGE: finish the promotion process in finish_promote
                 finish_promote(w, victim_w, res, has_frames_to_promote);
 
-                cilkrts_alert(ALERT_STEAL, w,
-                        "(Closure_steal) success; res %p has "
-                        "fiber %p; child %p has fiber %p",
-                        res, res->fiber, res->right_most_child, 
-                        res->right_most_child->fiber);
+                cilkrts_alert(STEAL, w,
+                              "(Closure_steal) success; res %p has "
+                              "fiber %p; child %p has fiber %p",
+                              (void *)res, (void *)res->fiber,
+                              (void *)res->right_most_child,
+                              (void *)res->right_most_child->fiber);
                 CILK_ASSERT(w, res->frame->worker == victim_w);
                 Closure_unlock(w, res);
             } else {
@@ -1070,8 +1077,12 @@ static Closure *Closure_steal(__cilkrts_worker *const w, int victim) {
             break;
 
         default:
-            cilkrts_bug(victim_w, "Bug: %s closure in ready deque",
-                        Closure_status_to_str(cl->status));
+            // It's possible that this steal attempt peeked the root closure
+            // from the top of a deque while a new Cilkified region was
+            // starting.
+            if (cl != w->g->root_closure)
+                cilkrts_bug(victim_w, "Bug: %s closure in ready deque",
+                            Closure_status_to_str(cl->status));
         }
     } else {
         deque_unlock(w, victim);
@@ -1094,25 +1105,26 @@ static Closure *Closure_steal(__cilkrts_worker *const w, int victim) {
  ***/
 void promote_own_deque(__cilkrts_worker *w) {
 
-    if(deque_trylock(w, w->self) == 0) {
-        cilkrts_bug(w,
-            "Bug: failed to acquire deque lock when promoting own deque");
+    if (deque_trylock(w, w->self) == 0) {
+        cilkrts_bug(
+            w, "Bug: failed to acquire deque lock when promoting own deque");
         return;
     }
 
     bool done = false;
-    while(!done) {
+    while (!done) {
         Closure *cl = deque_peek_top(w, w->self);
         CILK_ASSERT(w, cl);
-        CILK_ASSERT(w, cl->status== CLOSURE_RUNNING);
+        CILK_ASSERT(w, cl->status == CLOSURE_RUNNING);
 
-        if(Closure_trylock(w, cl) == 0) {
+        if (Closure_trylock(w, cl) == 0) {
             deque_unlock(w, w->self);
-            cilkrts_bug(w,
+            cilkrts_bug(
+                w,
                 "Bug: failed to acquire deque lock when promoting own deque");
             return;
         }
-        if(do_dekker_on(w, w, cl)) {
+        if (do_dekker_on(w, w, cl)) {
             // unfortunately this function releases both locks
             Closure *res = extract_top_spawning_closure(w, w, cl);
             CILK_ASSERT(w, res);
@@ -1133,7 +1145,7 @@ void promote_own_deque(__cilkrts_worker *w) {
         } else {
             Closure_unlock(w, cl);
             deque_unlock(w, w->self);
-            done = true; // we can break out; no more frames to promote 
+            done = true; // we can break out; no more frames to promote
         }
     }
 }
@@ -1160,24 +1172,21 @@ void longjmp_to_user_code(__cilkrts_worker *w, Closure *t) {
         // only set in the personality function.)
         if ((sf->flags & CILK_FRAME_EXCEPTING) == 0) {
             CILK_ASSERT(w, t->orig_rsp == NULL);
-            CILK_ASSERT(w, ((char *)FP(sf) > fiber->m_stack) &&
-                               ((char *)FP(sf) < fiber->m_stack_base));
-            CILK_ASSERT(w, ((char *)SP(sf) > fiber->m_stack) &&
-                               ((char *)SP(sf) < fiber->m_stack_base));
+            CILK_ASSERT(w, (sf->flags & CILK_FRAME_LAST) ||
+                               in_fiber(fiber, (char *)FP(sf)));
+            CILK_ASSERT(w, in_fiber(fiber, (char *)SP(sf)));
         }
         sf->flags &= ~CILK_FRAME_EXCEPTING;
 
         w->l->provably_good_steal = false;
     } else { // this is stolen work; the fiber is a new fiber
-        // This is the first time we run the root frame, invoke_main
-        // init_fiber_run is going to setup the fiber for unning user code
-        // and "longjmp" into invoke_main (at the very beginning of the
-        // function) after user fiber is set up.
-        volatile bool *initialized = &w->g->invoke_main_initialized;
-        if (t == w->g->invoke_main && *initialized == 0) {
+        // This is the first time we run the root closure in this Cilkified
+        // region.  The closure has been completely setup at this point by
+        // invoke_cilkified_root().  We just need jump to the user code.
+        volatile bool *initialized = &w->g->root_closure_initialized;
+        if (t == w->g->root_closure && *initialized == 0) {
             *initialized = true;
-            init_fiber_run(w, fiber, sf);
-        } else if(!t->simulated_stolen) {
+        } else if (!t->simulated_stolen) {
             void *new_rsp = sysdep_reset_stack_for_resume(fiber, sf);
             USE_UNUSED(new_rsp);
             CILK_ASSERT(w, SP(sf) == new_rsp);
@@ -1189,7 +1198,7 @@ void longjmp_to_user_code(__cilkrts_worker *w, Closure *t) {
 }
 
 __attribute__((noreturn)) void longjmp_to_runtime(__cilkrts_worker *w) {
-    cilkrts_alert(ALERT_SCHED | ALERT_FIBER, w, "(longjmp_to_runtime)");
+    cilkrts_alert(SCHED | ALERT_FIBER, w, "(longjmp_to_runtime)");
 
     CILK_STOP_TIMING(w, INTERVAL_WORK);
     CILK_START_TIMING(w, INTERVAL_SCHED);
@@ -1205,7 +1214,7 @@ __attribute__((noreturn)) void longjmp_to_runtime(__cilkrts_worker *w) {
    SYNC_NOT_READY to suspend the frame. */
 int Cilk_sync(__cilkrts_worker *const w, __cilkrts_stack_frame *frame) {
 
-    // cilkrts_alert(ALERT_SYNC, w, "(Cilk_sync) frame %p", frame);
+    // cilkrts_alert(SYNC, w, "(Cilk_sync) frame %p", (void *)frame);
 
     Closure *t;
     int res = SYNC_READY;
@@ -1246,16 +1255,19 @@ int Cilk_sync(__cilkrts_worker *const w, __cilkrts_stack_frame *frame) {
     }
 
     if (Closure_has_children(t)) {
-        cilkrts_alert(ALERT_SYNC, w,
-                 "(Cilk_sync) Closure %p has outstanding children", t);
+        cilkrts_alert(SYNC, w,
+                      "(Cilk_sync) Closure %p has outstanding children",
+                      (void *)t);
 
         // if we are syncing from the personality function (i.e. if an
         // exception in the continuation was thrown), we still need this
         // fiber for unwinding.
         if (t->user_exn.exn == NULL) {
             w->l->fiber_to_free = t->fiber;
+        } else {
+            t->saved_throwing_fiber = t->fiber;
         }
-        t->fiber = NULL; /* JFC: is this a leak? */
+        t->fiber = NULL;
         // place holder for reducer map; the view in tlmm (if any) are
         // updated by the last strand in Closure t before sync; need to
         // reduce these when successful provably good steal occurs
@@ -1265,8 +1277,8 @@ int Cilk_sync(__cilkrts_worker *const w, __cilkrts_stack_frame *frame) {
         t->user_rmap = reducers; /* set this after state change to suspended */
         res = SYNC_NOT_READY;
     } else {
-        cilkrts_alert(ALERT_SYNC, w,
-                 "(Cilk_sync) closure %p sync successfully", t);
+        cilkrts_alert(SYNC, w, "(Cilk_sync) closure %p sync successfully",
+                      (void *)t);
         setup_for_sync(w, t);
     }
 
@@ -1289,10 +1301,10 @@ int Cilk_sync(__cilkrts_worker *const w, __cilkrts_stack_frame *frame) {
         if (child_rmap) {
             atomic_store_explicit(&t->child_rmap, NULL, memory_order_relaxed);
             /* reducer_map may be accessed without lock */
-            w->reducer_map = __cilkrts_internal_merge_two_rmaps(w, child_rmap,
-                                                                w->reducer_map);
+            w->reducer_map = merge_two_rmaps(w, child_rmap, w->reducer_map);
         }
-        if(t->simulated_stolen) t->simulated_stolen = false;
+        if (t->simulated_stolen)
+            t->simulated_stolen = false;
     }
 
     return res;
@@ -1303,7 +1315,7 @@ static Closure *do_what_it_says(__cilkrts_worker *w, Closure *t) {
     Closure *res = NULL;
     __cilkrts_stack_frame *f;
 
-    cilkrts_alert(ALERT_SCHED, w, "(do_what_it_says) closure %p", t);
+    cilkrts_alert(SCHED, w, "(do_what_it_says) closure %p", (void *)t);
     Closure_lock(w, t);
 
     switch (t->status) {
@@ -1311,12 +1323,12 @@ static Closure *do_what_it_says(__cilkrts_worker *w, Closure *t) {
         // ANGE: anything we need to free must have been freed at this point
         CILK_ASSERT(w, w->l->fiber_to_free == NULL);
 
-        cilkrts_alert(ALERT_SCHED, w, "(do_what_it_says) CLOSURE_READY");
+        cilkrts_alert(SCHED, w, "(do_what_it_says) CLOSURE_READY");
         /* just execute it */
         setup_for_execution(w, t);
         f = t->frame;
         // t->fiber->resume_sf = f; // I THINK this works
-        cilkrts_alert(ALERT_SCHED, w, "(do_what_it_says) resume_sf = %p", f);
+        cilkrts_alert(SCHED, w, "(do_what_it_says) resume_sf = %p", (void *)f);
         CILK_ASSERT(w, f);
         USE_UNUSED(f);
         Closure_unlock(w, t);
@@ -1328,18 +1340,21 @@ static Closure *do_what_it_says(__cilkrts_worker *w, Closure *t) {
         deque_unlock_self(w);
 
         /* now execute it */
-        cilkrts_alert(ALERT_SCHED, w, "(do_what_it_says) Jump into user code");
+        cilkrts_alert(SCHED, w, "(do_what_it_says) Jump into user code");
 
         // CILK_ASSERT(w, w->l->runtime_fiber != t->fiber);
         // cilk_fiber_suspend_self_and_resume_other(w->l->runtime_fiber,
         // t->fiber);
-        // cilkrts_alert(ALERT_SCHED, w, "(do_what_it_says) Back from user
+        // cilkrts_alert(SCHED, w, "(do_what_it_says) Back from user
         // code");
+        // longjmp invalidates non-volatile variables
+        __cilkrts_worker *volatile w_save = w;
         if (__builtin_setjmp(w->l->rts_ctx) == 0) {
             worker_change_state(w, WORKER_RUN);
             longjmp_to_user_code(w, t);
         } else {
-            CILK_ASSERT(w, w == __cilkrts_get_tls_worker());
+            w = w_save;
+            CILK_ASSERT_POINTER_EQUAL(w, w, __cilkrts_get_tls_worker());
             worker_change_state(w, WORKER_SCHED);
             // CILK_ASSERT(w, t->fiber == w->l->fiber_to_free);
             if (w->l->fiber_to_free) {
@@ -1351,7 +1366,7 @@ static Closure *do_what_it_says(__cilkrts_worker *w, Closure *t) {
         break; // ?
 
     case CLOSURE_RETURNING:
-        cilkrts_alert(ALERT_SCHED, w, "(do_what_it_says) CLOSURE_RETURNING");
+        cilkrts_alert(SCHED, w, "(do_what_it_says) CLOSURE_RETURNING");
         // the return protocol assumes t is not locked, and everybody
         // will respect the fact that t is returning
         Closure_unlock(w, t);
@@ -1360,9 +1375,9 @@ static Closure *do_what_it_says(__cilkrts_worker *w, Closure *t) {
         break; // ?
 
     default:
-        cilkrts_alert(ALERT_SCHED, w, "(do_what_it_says) got status %d",
-                      t->status);
-        cilkrts_bug(w, "BUG in do_what_it_says()");
+        cilkrts_bug(w, "do_what_it_says invalid status %d", t->status);
+        cilkrts_bug(w, "do_what_it_says() closure status %s",
+                    Closure_status_to_str(t->status));
         break;
     }
 
@@ -1396,7 +1411,7 @@ void worker_scheduler(__cilkrts_worker *w, Closure *t) {
         while (!t && !atomic_load_explicit(&w->g->done, memory_order_acquire)) {
             CILK_START_TIMING(w, INTERVAL_SCHED);
             CILK_START_TIMING(w, INTERVAL_IDLE);
-            unsigned int victim = rts_rand(w) % w->g->options.nproc;
+            unsigned int victim = rts_rand(w) % w->g->nworkers;
             if (victim != w->self) {
                 t = Closure_steal(w, victim);
             }
@@ -1437,7 +1452,10 @@ void worker_scheduler(__cilkrts_worker *w, Closure *t) {
             }
         }
         CILK_START_TIMING(w, INTERVAL_SCHED);
-        if (!atomic_load_explicit(&w->g->done, memory_order_acquire)) {
+        // If one Cilkified region stops and another one starts, then a worker
+        // can reach this point with t == NULL and w->g->done == false.  Check
+        // that t is not NULL before calling do_what_it_says.
+        if (t) {
             // if provably-good steal happens, do_what_it_says will return
             // the next closure to execute
             t = do_what_it_says(w, t);

@@ -9,13 +9,15 @@
 extern "C" {
 #endif
 
+struct __cilkrts_hyperobject_base;
+
 /* Callback function signatures.  The first argument always points to the
  * reducer itself and is commonly ignored. */
 typedef void (*cilk_reduce_fn_t)(void *r, void *lhs, void *rhs);
 typedef void (*cilk_identity_fn_t)(void *r, void *view);
 typedef void (*cilk_destroy_fn_t)(void *r, void *view);
-typedef void *(*cilk_allocate_fn_t)(void *r, size_t bytes);
-typedef void (*cilk_deallocate_fn_t)(void *r, void *view);
+typedef void *(*cilk_allocate_fn_t)(struct __cilkrts_hyperobject_base *r, size_t bytes);
+typedef void (*cilk_deallocate_fn_t)(struct __cilkrts_hyperobject_base *r, void *view);
 
 /** Representation of the monoid */
 typedef struct cilk_c_monoid {
@@ -38,9 +40,12 @@ typedef struct __cilkrts_hyperobject_base {
    TODO: Add optimization hints like "strand pure" as in Cilk Plus. */
 void __cilkrts_hyper_create(__cilkrts_hyperobject_base *key);
 void __cilkrts_hyper_destroy(__cilkrts_hyperobject_base *key);
+#if defined __clang__ && defined __cilk && __cilk >= 300
+__attribute__((strand_pure, strand_malloc))
+#endif
 void *__cilkrts_hyper_lookup(__cilkrts_hyperobject_base *key);
-void *__cilkrts_hyper_alloc(void *ignore, size_t bytes);
-void __cilkrts_hyper_dealloc(void *ignore, void *view);
+void *__cilkrts_hyper_alloc(__cilkrts_hyperobject_base *key, size_t bytes);
+void __cilkrts_hyper_dealloc(__cilkrts_hyperobject_base *key, void *view);
 
 #ifdef __cplusplus
 } /* end extern "C" */

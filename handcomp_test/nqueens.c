@@ -7,9 +7,11 @@
 #include <string.h>
 
 #include "../runtime/cilk2c.h"
+#include "../runtime/cilk2c_inlined.c"
 #include "ktiming.h"
 
 extern size_t ZERO;
+void __attribute__((weak)) dummy(void *p) { return; }
 
 // int * count;
 
@@ -66,7 +68,7 @@ static int nqueens(int n, int j, char *a) {
     count = (int *) alloca(n * sizeof(int));
     (void) memset(count, 0, n * sizeof (int));
 
-    alloca(ZERO);
+    dummy(alloca(ZERO));
     __cilkrts_stack_frame sf;
     __cilkrts_enter_frame(&sf);
 
@@ -104,7 +106,8 @@ static int nqueens(int n, int j, char *a) {
     }
 
     __cilkrts_pop_frame(&sf);
-    __cilkrts_leave_frame(&sf);
+    if (0 != sf.flags)
+        __cilkrts_leave_frame(&sf);
 
     return solNum;
 }
@@ -120,7 +123,7 @@ nqueens_spawn_helper(int *count, int n, int j, char *a) {
     __cilkrts_leave_frame(&sf); 
 }
 
-int cilk_main(int argc, char *argv[]) { 
+int main(int argc, char *argv[]) {
 
   int n = 13;
   char *a;
@@ -146,7 +149,7 @@ int cilk_main(int argc, char *argv[]) {
       begin = ktiming_getmark();
       res = nqueens(n, 0, a);
       end = ktiming_getmark();
-      elapsed[i] = ktiming_diff_usec(&begin, &end);
+      elapsed[i] = ktiming_diff_nsec(&begin, &end);
   }
   print_runtime(elapsed, TIMING_COUNT);
 #else

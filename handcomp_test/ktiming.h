@@ -28,7 +28,7 @@
 typedef uint64_t clockmark_t;
 
 uint64_t 
-ktiming_diff_usec(const clockmark_t* const start, const clockmark_t* const end);
+ktiming_diff_nsec(const clockmark_t* const start, const clockmark_t* const end);
 double
 ktiming_diff_sec(const clockmark_t* const start, const clockmark_t* const end);
 clockmark_t ktiming_getmark(void);

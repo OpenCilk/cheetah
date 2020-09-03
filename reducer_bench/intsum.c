@@ -22,6 +22,7 @@ void compute_sum(long limit, int scale) {
 }
 
 void test_reducer(long limit) {
+    #pragma GCC diagnostic ignored "-Wpass-failed"
     for (int t = 1; t < 100; ++t) {
         cilk_spawn compute_sum(limit, t);
     }

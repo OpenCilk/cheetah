@@ -61,7 +61,7 @@ screensaver: $(OBJS) graphic_stuff.o
 #	$(CXX) $(CXXFLAGS) $(EXTRA_CXXFLAGS) -o $@ -c $<
 
 check: screensaver
-	./screensaver --nproc 2 1000
+	./screensaver --cheetah-nproc 2 1000
 
 clean:
 	rm -f screensaver *.o *.out *~ core.*

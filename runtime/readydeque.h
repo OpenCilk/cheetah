@@ -54,13 +54,4 @@ CHEETAH_INTERNAL void deque_add_bottom(__cilkrts_worker *const w, Closure *cl,
 
 CHEETAH_INTERNAL void deque_assert_is_bottom(__cilkrts_worker *const w,
                                              Closure *t);
-
-/* ANGE: remove closure for frame f from bottom of pn's deque and _really_
- *       free them (i.e. not internal-free).  As far as I can tell.
- *       This is called only in invoke_main_slow in invoke-main.c.
- */
-CHEETAH_INTERNAL
-void Cilk_remove_and_free_closure_and_frame(__cilkrts_worker *const w,
-                                            __cilkrts_stack_frame *f,
-                                            worker_id pn);
 #endif

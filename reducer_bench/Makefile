@@ -42,29 +42,29 @@ $(DIRTESTS):
 
 check:
 	$(MAKE) TIMING_COUNT=5 $(TOPASS)
-	./intlist --cheetah-nproc 2 40000000
-	./serialsum --cheetah-nproc 1 200000000
-	./intsum --cheetah-nproc 1 200000000
-	./intsum --cheetah-nproc $(MANY) 200000000
-	./multispawnsum --cheetah-nproc 2 100000000
-	./cppsum --cheetah-nproc 2 200000000
+	CILK_NWORKERS=2 ./intlist 40000000
+	CILK_NWORKERS=1 ./serialsum 200000000
+	CILK_NWORKERS=1 ./intsum 200000000
+	CILK_NWORKERS=$(MANY) ./intsum 200000000
+	CILK_NWORKERS=2 ./multispawnsum 100000000
+	CILK_NWORKERS=2 ./cppsum 200000000
 	$(MAKE) -C nqueens check $(TOPASS)
 	if $(ENABLE_X11); then $(MAKE) -C quad_tree check $(TOPASS) ; else : ; fi
 
 stress:
 	$(MAKE) TIMING_COUNT=5 $(TOPASS)
-	./intlist --cheetah-nproc $(MANY) 40000000
-	./intsum --cheetah-nproc $(MANY) 200000000
+	CILK_NWORKERS=$(MANY) ./intlist 40000000
+	CILK_NWORKERS=$(MANY) ./intsum 200000000
 	if $(ENABLE_X11); then $(MAKE) -C quad_tree check $(TOPASS) ; else : ; fi
 #	 Assertion failure: SPA resize not supported yet!
-#	./repeatedintsum --cheetah-nproc $(MANY) 10000000
+#	CILK_NWORKERS=$(MANY) ./repeatedintsum 10000000
 
 #redcheck:
 #	$(MAKE) clean; $(MAKE) TIMING_COUNT=1 $(TOPASS) > /dev/null 2>&1
-#	./intlist --cheetah-nproc 2 2048
+#	CILK_NWORKERS=2 ./intlist 2048
 #redgdb:
 #	$(MAKE) clean; $(MAKE) TIMING_COUNT=1 $(TOPASS) > /dev/null 2>&1
-#	gdb --args ./intlist --cheetah-nproc 2 2048
+#	CILK_NWORKERS=2 gdb --args ./intlist 2048
 
 clean:
 	rm -f *.o *~ $(CTESTS) $(CXXTESTS) core.*
