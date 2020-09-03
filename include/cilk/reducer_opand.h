@@ -282,7 +282,6 @@ public:
      *  @see rhs_proxy
      */
     op_and_view& operator=(const rhs_proxy& rhs) {
-        __CILKRTS_ASSERT(this == rhs.m_view);
         this->m_value &= rhs.m_value;
         return *this;
     }

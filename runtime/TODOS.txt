@@ -1,3 +1,62 @@
+Questions for TB / John: 
+
+Q: Where is __default_cilkrts_startup and __default_cilkrts_shutdown inserted?
+    Is it inserted by the compiler as a global constructor / destructor?
+A: No __default_cilkrts_startup/shutdown are not implicitly inserted by the
+compiler.  because those functions are marked with __attribute__((constructor))/
+__attribute__((destructor)), the linker and loader know to run those functions
+before/after the execution of main (just standard linker / loader features)
+
+Q: Is __cilkrts_atinit and __cilkrts_atexit currently used?  
+A: No.  Plan to remove.
+
+Q: using cmake in the runtime didn't work for me
+
+Q: Why is there a __cilk_personality_c_v0 and a __cilk_personality_cpp_v0?
+They all seem to call __cilk_personality_internal anyway?
+
+Q: There are various ifdef used: CPU_SETSIZE, _SC_NPROCESSORS_ONLN, CHEETAH_SAVE_MXCSR,
+Assume compiler generates this:  __i386__, __BSD__, __SSE__, __AVX__
+
+Q: IS CHECK_CILK_FRAME_MAGIC still necessary now that we have moved to bitcode
+based approach?
+
+Q: What is the purpose of #undef Closure_assert_ownership / Closure_assert_alienation
+
+Q: Why do we need worker_state_change?  Isn't that similar to the sched_state code?
+
+Q: The cilkified thread, after woken up by the last worker leaving cilkified region,
+will execute leave_frame and Cilk_set_return ... why is this OK?
+
+Q: Do we want to improve the support for reducer? i.e., remove cap limit and
+also incur less overhead if the lookup succeeds (need to inline lookup in the
+reducer header file), also make the vinfo and log array part of the cilkred_map
+and make the map itself a linked list of pages (4K each)
+
+Q: In the reducer_impl.c, there is a comment that says:
+"Special case, if left is leftmost, then always merge into it.
+ For C reducers this forces lazy creation of the leftmost views."
+What's that comment about?  (is_leftmost always returns false).
+If the leftmost is just a pointer anyway why does it matter?
+
+Q: Besides LONG_BIT, what else do we need from GNU_SOURCE?  Should
+we depend on GNU_SOURCE? (How does that work on Mac / Windows?)
+(Maybe also __builtin_ctzl?)
+
+NOTE:
+- Remove invoke-main.c entirely (or 'make' won't work)
+- Remove cmdline.c entirely (deprecating cmdline arg)
+- Currently need to copy over libopencilk-abi.bc into the build ... ideally
+it would be nice to provide a compiler flag to specify the right ABI
+- Tim is working on Pedigree
+
+
+Check:
+- Does __cilkrts_check_excpetion_raise only raises the exception from
+a frame where the exception will be handled?  (It retrieves t->user_exn
+and raises that.)  No it doesn't seem so.  It seems that this is always
+called after a successful non-trivial sync.
+
 - Change max_fibers to per worker max fibers
 - Rethink fiber stats
 - Incorporate the timing stats into scheduler

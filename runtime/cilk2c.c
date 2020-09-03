@@ -19,6 +19,21 @@ CHEETAH_INTERNAL unsigned cilkg_nproc = 0;
 CHEETAH_INTERNAL struct cilkrts_callbacks cilkrts_callbacks = {
     0, 0, false, {NULL}, {NULL}};
 
+// Internal method to get the Cilk worker ID.  Intended for debugging purposes.
+//
+// TODO: Figure out how we want to support worker-local storage.
+unsigned __cilkrts_get_worker_number(void) {
+    __cilkrts_worker *w = __cilkrts_get_tls_worker();
+    if (w)
+        return w->self;
+    // Use the last exiting worker from default_cilkrts instead
+    return default_cilkrts->exiting_worker;
+}
+
+// Test if the Cilk runtime has been initialized.  This method is intended to
+// help initialization of libraries that depend on the OpenCilk runtime.
+int __cilkrts_is_initialized(void) { return NULL != default_cilkrts; }
+
 // These callback-registration methods can run before the runtime system has
 // started.
 //
@@ -44,78 +59,6 @@ int __cilkrts_atexit(void (*callback)(void)) {
 
     cilkrts_callbacks.exit[cilkrts_callbacks.last_exit++] = callback;
     return 0;
-}
-
-// Internal method to get the Cilk worker ID.  Intended for debugging purposes.
-//
-// TODO: Figure out how we want to support worker-local storage.
-unsigned __cilkrts_get_worker_number(void) {
-    return __cilkrts_get_tls_worker()->self;
-}
-
-#ifdef __linux__ /* This feature requires the GNU linker */
-CHEETAH_INTERNAL
-const char get_workerwarn_msg[]
-    __attribute__((section(".gnu.warning.__cilkrts_get_worker_number"))) =
-        "__cilkrts_get_worker_number is deprecated";
-#endif
-
-// ================================================================
-// This file contains the compiler ABI, which corresponds to
-// conceptually what the compiler generates to implement Cilk code.
-// They are included here in part as documentation, and in part
-// allow one to write and run "hand-compiled" Cilk code.
-// ================================================================
-
-// inlined by the compiler
-void __cilkrts_enter_frame(__cilkrts_stack_frame *sf) {
-    __cilkrts_worker *w = __cilkrts_get_tls_worker();
-    cilkrts_alert(ALERT_CFRAME, w, "__cilkrts_enter_frame %p", sf);
-
-    sf->flags = 0;
-    sf->magic = w->g->frame_magic;
-    sf->call_parent = w->current_stack_frame;
-    sf->worker = w;
-    w->current_stack_frame = sf;
-    // WHEN_CILK_DEBUG(sf->magic = CILK_STACKFRAME_MAGIC);
-}
-
-// inlined by the compiler; this implementation is only used in invoke-main.c
-void __cilkrts_enter_frame_fast(__cilkrts_stack_frame *sf) {
-    __cilkrts_worker *w = __cilkrts_get_tls_worker();
-    cilkrts_alert(ALERT_CFRAME, w, "__cilkrts_enter_frame_fast %p", sf);
-
-    sf->flags = 0;
-    sf->magic = w->g->frame_magic;
-    sf->call_parent = w->current_stack_frame;
-    sf->worker = w;
-    w->current_stack_frame = sf;
-}
-
-// inlined by the compiler; this implementation is only used in invoke-main.c
-void __cilkrts_detach(__cilkrts_stack_frame *sf) {
-    struct __cilkrts_worker *w = sf->worker;
-    cilkrts_alert(ALERT_CFRAME, w, "__cilkrts_detach %p", sf);
-
-    CILK_ASSERT(w, CHECK_CILK_FRAME_MAGIC(w->g, sf));
-    CILK_ASSERT(w, sf->worker == __cilkrts_get_tls_worker());
-    CILK_ASSERT(w, w->current_stack_frame == sf);
-
-    struct __cilkrts_stack_frame *parent = sf->call_parent;
-    struct __cilkrts_stack_frame **tail =
-        atomic_load_explicit(&w->tail, memory_order_relaxed);
-    CILK_ASSERT(w, (tail + 1) < w->ltq_limit);
-
-    // store parent at *tail, and then increment tail
-    *tail++ = parent;
-    sf->flags |= CILK_FRAME_DETACHED;
-    /* Release ordering ensures the two preceding stores are visible. */
-    atomic_store_explicit(&w->tail, tail, memory_order_release);
-}
-
-// inlined by the compiler; this implementation is only used in invoke-main.c
-void __cilkrts_save_fp_ctrl_state(__cilkrts_stack_frame *sf) {
-    sysdep_save_fp_ctrl_state(sf);
 }
 
 // Called after a normal cilk_sync (i.e. not the cilk_sync called in the
@@ -199,6 +142,11 @@ void __cilkrts_cleanup_fiber(__cilkrts_stack_frame *sf, int32_t sel) {
     SP(sf) = (void *)t->parent_rsp;
     t->parent_rsp = NULL;
 
+    if (t->saved_throwing_fiber) {
+        cilk_fiber_deallocate_to_pool(w, t->saved_throwing_fiber);
+        t->saved_throwing_fiber = NULL;
+    }
+
     deque_unlock_self(w);
     __builtin_longjmp(sf->ctx, 1); // Does not return
     return;
@@ -221,26 +169,10 @@ void __cilkrts_sync(__cilkrts_stack_frame *sf) {
     }
 }
 
-// inlined by the compiler; this implementation is only used in invoke-main.c
-void __cilkrts_pop_frame(__cilkrts_stack_frame *sf) {
-    __cilkrts_worker *w = sf->worker;
-    cilkrts_alert(ALERT_CFRAME, w, "__cilkrts_pop_frame %p", sf);
-
-    CILK_ASSERT(w, CHECK_CILK_FRAME_MAGIC(w->g, sf));
-    CILK_ASSERT(w, sf->worker == __cilkrts_get_tls_worker());
-    /* The inlined version in the Tapir compiler uses release
-       semantics for the store to call_parent, but relaxed
-       order may be acceptable for both.  A thief can't see
-       these operations until the Dekker protocol with a
-       memory barrier has run. */
-    w->current_stack_frame = sf->call_parent;
-    sf->call_parent = 0;
-}
-
 void __cilkrts_pause_frame(__cilkrts_stack_frame *sf, char *exn) {
 
     __cilkrts_worker *w = sf->worker;
-    cilkrts_alert(ALERT_CFRAME, w, "__cilkrts_pause_frame %p", sf);
+    cilkrts_alert(CFRAME, w, "__cilkrts_pause_frame %p", (void *)sf);
 
     CILK_ASSERT(w, CHECK_CILK_FRAME_MAGIC(w->g, sf));
     CILK_ASSERT(w, sf->worker == __cilkrts_get_tls_worker());
@@ -267,9 +199,8 @@ void __cilkrts_pause_frame(__cilkrts_stack_frame *sf, char *exn) {
 }
 
 void __cilkrts_leave_frame(__cilkrts_stack_frame *sf) {
-
     __cilkrts_worker *w = sf->worker;
-    cilkrts_alert(ALERT_CFRAME, w, "__cilkrts_leave_frame %p", sf);
+    cilkrts_alert(CFRAME, w, "__cilkrts_leave_frame %p", (void *)sf);
 
     CILK_ASSERT(w, CHECK_CILK_FRAME_MAGIC(w->g, sf));
     CILK_ASSERT(w, sf->worker == __cilkrts_get_tls_worker());
@@ -301,7 +232,7 @@ void __cilkrts_leave_frame(__cilkrts_stack_frame *sf) {
         // frame returning is done via a different protocol, which is
         // triggered in Cilk_exception_handler.
         if (sf->flags & CILK_FRAME_STOLEN) { // if this frame has a full frame
-            cilkrts_alert(ALERT_RETURN, w,
+            cilkrts_alert(RETURN, w,
                           "__cilkrts_leave_frame parent is call_parent!");
             // leaving a full frame; need to get the full frame of its call
             // parent back onto the deque

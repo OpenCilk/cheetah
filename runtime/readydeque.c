@@ -2,6 +2,7 @@
 #include "closure.h"
 #include "debug.h"
 #include "global.h"
+#include "local.h"
 
 /*********************************************************
  * Management of ReadyDeques
@@ -96,7 +97,12 @@ Closure *deque_peek_top(__cilkrts_worker *const w, worker_id pn) {
     /* ANGE: return the top but does not unlink it from the rest */
     cl = w->g->deques[pn].top;
     if (cl) {
-        CILK_ASSERT(w, cl->owner_ready_deque == pn);
+        // If w is stealing, then it may peek the top of the deque of the worker
+        // who is in the midst of exiting a Cilkified region.  In that case, cl
+        // will be the root closure, and cl->owner_ready_deque is not
+        // necessarily pn.  The steal will subsequently fail do_dekker_on.
+        CILK_ASSERT(w, cl->owner_ready_deque == pn ||
+                           (w->self != pn && cl == w->g->root_closure));
     } else {
         CILK_ASSERT(w, w->g->deques[pn].bottom == (Closure *)NULL);
     }
@@ -175,25 +181,4 @@ void deque_add_bottom(__cilkrts_worker *const w, Closure *cl, worker_id pn) {
     } else {
         w->g->deques[pn].top = cl;
     }
-}
-
-/* ANGE: remove closure for frame f from bottom of pn's deque and _really_
- *       free them (i.e. not internal-free).  As far as I can tell.
- *       This is called only in invoke_main_slow in invoke-main.c.
- */
-void Cilk_remove_and_free_closure_and_frame(__cilkrts_worker *const w,
-                                            __cilkrts_stack_frame *f,
-                                            worker_id pn) {
-    Closure *t;
-
-    deque_lock(w, pn);
-    t = deque_xtract_bottom(w, pn);
-
-    CILK_ASSERT(w, t->frame == f);
-    USE_UNUSED(t);
-    deque_unlock(w, pn);
-
-    /* ANGE: there is no splitter logging in the invoke_main frame */
-    // Cilk_free(f);
-    // Closure_destroy_malloc(w, t);
 }

@@ -59,10 +59,12 @@
 #include <string.h>
 
 #include "../runtime/cilk2c.h"
+#include "../runtime/cilk2c_inlined.c"
 #include "ktiming.h"
 #include "getoptions.h"
 
 extern size_t ZERO;
+void __attribute__((weak)) dummy(void *p) { return; }
 
 #ifndef TIMING_COUNT
 #define TIMING_COUNT 0
@@ -346,7 +348,7 @@ void cilkmerge(ELM *low1, ELM *high1,
         return;
     }
 
-    alloca(ZERO);
+    dummy(alloca(ZERO));
     __cilkrts_stack_frame sf;
     __cilkrts_enter_frame(&sf);
 
@@ -383,7 +385,8 @@ void cilkmerge(ELM *low1, ELM *high1,
     }
 
     __cilkrts_pop_frame(&sf);
-    __cilkrts_leave_frame(&sf);
+    if (0 != sf.flags)
+        __cilkrts_leave_frame(&sf);
 
     return;
 }
@@ -421,7 +424,7 @@ void cilksort(ELM *low, ELM *tmp, long size) {
         return;
     }
 
-    alloca(ZERO);
+    dummy(alloca(ZERO));
     __cilkrts_stack_frame sf;
     __cilkrts_enter_frame(&sf);
 
@@ -479,7 +482,8 @@ void cilksort(ELM *low, ELM *tmp, long size) {
     cilkmerge(tmpA, tmpC - 1, tmpC, tmpA + size - 1, A);
 
     __cilkrts_pop_frame(&sf);
-    __cilkrts_leave_frame(&sf);
+    if (0 != sf.flags)
+        __cilkrts_leave_frame(&sf);
 
     return;
 }
@@ -527,7 +531,7 @@ int usage(void) {
 const char *specifiers[] = {"-n", "-c", "-h", 0};
 int opt_types[] = {LONGARG, BOOLARG, BOOLARG, 0};
 
-int cilk_main(int argc, char **argv) {
+int main(int argc, char **argv) {
 
     long size;
     ELM *array, *tmp;
@@ -553,7 +557,7 @@ int cilk_main(int argc, char **argv) {
         begin = ktiming_getmark();
         cilksort(array, tmp, size);
         end = ktiming_getmark();
-        elapsed[i] = ktiming_diff_usec(&begin, &end);
+        elapsed[i] = ktiming_diff_nsec(&begin, &end);
     }
     print_runtime(elapsed, TIMING_COUNT);
 

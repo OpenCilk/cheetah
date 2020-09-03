@@ -2,6 +2,7 @@
 #include <stdlib.h>
 
 #include "../runtime/cilk2c.h"
+#include "../runtime/cilk2c_inlined.c"
 #include "ktiming.h"
 
 
@@ -31,6 +32,7 @@ int fib(int n) {
 */
 
 extern size_t ZERO;
+void __attribute__((weak)) dummy(void *p) { return; }
 
 static void __attribute__ ((noinline)) fib_spawn_helper(int *x, int n); 
 
@@ -40,7 +42,7 @@ int fib(int n) {
     if(n < 2)
         return n;
 
-    alloca(ZERO);
+    dummy(alloca(ZERO));
     __cilkrts_stack_frame sf;
     __cilkrts_enter_frame(&sf);
 
@@ -62,7 +64,8 @@ int fib(int n) {
     _tmp = x + y;
 
     __cilkrts_pop_frame(&sf);
-    __cilkrts_leave_frame(&sf);
+    if (0 != sf.flags)
+        __cilkrts_leave_frame(&sf);
 
     return _tmp;
 }
@@ -77,7 +80,7 @@ static void __attribute__ ((noinline)) fib_spawn_helper(int *x, int n) {
     __cilkrts_leave_frame(&sf); 
 }
 
-int cilk_main(int argc, char * args[]) {
+int main(int argc, char * args[]) {
     int i;
     int n, res;
     clockmark_t begin, end; 
@@ -94,7 +97,7 @@ int cilk_main(int argc, char * args[]) {
         begin = ktiming_getmark();
         res = fib(n);
         end = ktiming_getmark();
-        running_time[i] = ktiming_diff_usec(&begin, &end);
+        running_time[i] = ktiming_diff_nsec(&begin, &end);
     }
     printf("Result: %d\n", res);
     print_runtime(running_time, TIMING_COUNT); 

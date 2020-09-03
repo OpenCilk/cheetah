@@ -29,6 +29,25 @@ void Closure_checkmagic(__cilkrts_worker *const w, Closure *t) {
     }
 }
 
+const char *Closure_status_to_str(enum ClosureStatus status) {
+    switch (status) {
+    case CLOSURE_RUNNING:
+        return "running";
+    case CLOSURE_SUSPENDED:
+        return "suspended";
+    case CLOSURE_RETURNING:
+        return "returning";
+    case CLOSURE_READY:
+        return "ready";
+    case CLOSURE_PRE_INVALID:
+        return "pre-invalid";
+    case CLOSURE_POST_INVALID:
+        return "post-invalid";
+    default:
+        return "unknown";
+    }
+}
+
 void clear_closure_exception(struct closure_exception *exn) { exn->exn = NULL; }
 
 void Closure_change_status(__cilkrts_worker *const w, Closure *t,
@@ -98,8 +117,8 @@ static inline void Closure_init(Closure *t) {
     t->status = CLOSURE_PRE_INVALID;
     t->lock_wait = false;
     t->has_cilk_callee = false;
-    t->join_counter = 0;
     t->simulated_stolen = false;
+    t->join_counter = 0;
 
     t->frame = NULL;
     t->fiber = NULL;
@@ -124,6 +143,7 @@ static inline void Closure_init(Closure *t) {
     clear_closure_exception(&(t->user_exn));
     t->reraise_cfa = NULL;
     t->parent_rsp = NULL;
+    t->saved_throwing_fiber = NULL;
 
     atomic_store_explicit(&t->child_rmap, NULL, memory_order_relaxed);
     atomic_store_explicit(&t->right_rmap, NULL, memory_order_relaxed);
@@ -132,10 +152,13 @@ static inline void Closure_init(Closure *t) {
 
 Closure *Closure_create(__cilkrts_worker *const w) {
     /* cilk_internal_malloc returns sufficiently aligned memory */
-    Closure *new_closure = cilk_internal_malloc(w, sizeof(*new_closure));
+    Closure *new_closure =
+        cilk_internal_malloc(w, sizeof(*new_closure), IM_CLOSURE);
     CILK_ASSERT(w, new_closure != NULL);
 
     Closure_init(new_closure);
+
+    cilkrts_alert(CLOSURE, w, "Allocate closure %p", (void *)new_closure);
 
     return new_closure;
 }
@@ -305,7 +328,7 @@ void Closure_suspend_victim(__cilkrts_worker *thief, __cilkrts_worker *victim,
     Closure_assert_ownership(thief, cl);
     deque_assert_ownership(thief, victim->self);
 
-    CILK_ASSERT(thief, cl == thief->g->invoke_main || cl->spawn_parent ||
+    CILK_ASSERT(thief, cl == thief->g->root_closure || cl->spawn_parent ||
                            cl->call_parent);
 
     Closure_change_status(thief, cl, CLOSURE_RUNNING, CLOSURE_SUSPENDED);
@@ -321,14 +344,14 @@ void Closure_suspend(__cilkrts_worker *const w, Closure *cl) {
 
     CILK_ASSERT(w, !cl->user_rmap);
 
-    cilkrts_alert(ALERT_SCHED, w, "Closure_suspend %p", cl);
+    cilkrts_alert(SCHED, w, "Closure_suspend %p", (void *)cl);
 
     Closure_checkmagic(w, cl);
     Closure_assert_ownership(w, cl);
     deque_assert_ownership(w, w->self);
 
-    CILK_ASSERT(w,
-                cl == w->g->invoke_main || cl->spawn_parent || cl->call_parent);
+    CILK_ASSERT(w, cl == w->g->root_closure || cl->spawn_parent ||
+                       cl->call_parent);
     CILK_ASSERT(w, cl->frame != NULL);
     CILK_ASSERT(w, __cilkrts_stolen(cl->frame));
     CILK_ASSERT(w, cl->frame->worker->self == w->self);
@@ -380,8 +403,19 @@ void Closure_destroy_main(Closure *t) {
  * pool)
  */
 void Closure_destroy(struct __cilkrts_worker *const w, Closure *t) {
+    cilkrts_alert(CLOSURE, w, "Deallocate closure %p", (void *)t);
     Closure_checkmagic(w, t);
     t->status = CLOSURE_POST_INVALID;
     Closure_clean(w, t);
-    cilk_internal_free(w, t, sizeof(*t));
+    cilk_internal_free(w, t, sizeof(*t), IM_CLOSURE);
+}
+
+/* Destroy the closure and internally free it (put back to global pool), after
+   workers have been terminated.
+ */
+void Closure_destroy_global(struct global_state *const g, Closure *t) {
+    cilkrts_alert(CLOSURE, NULL, "Deallocate closure %p", (void *)t);
+    t->status = CLOSURE_POST_INVALID;
+    Closure_clean(NULL, t);
+    cilk_internal_free_global(g, t, sizeof(*t), IM_CLOSURE);
 }

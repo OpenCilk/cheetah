@@ -1,5 +1,7 @@
 #include "cilkred_map.h"
 
+#include <stdatomic.h>
+
 // =================================================================
 // small helper functions
 // =================================================================
@@ -99,22 +101,20 @@ ViewInfo *cilkred_map_lookup(cilkred_map *this_map,
 cilkred_map *cilkred_map_make_map(__cilkrts_worker *w, size_t size) {
     CILK_ASSERT_G(w);
     CILK_ASSERT(w, size > 0 && (hyper_id_t)size == size);
-    cilkrts_alert(ALERT_REDUCE, w,
-                  "(cilkred_map_make_map) creating a cilkred_map size %u",
-                  (unsigned int)size);
 
-    cilkred_map *h = (cilkred_map *)malloc(sizeof(*h));
+    cilkred_map *h =
+        (cilkred_map *)cilk_internal_malloc(w, sizeof(*h), IM_REDUCER_MAP);
 
     // MAK: w is not NULL
     h->spa_cap = size;
     h->num_of_vinfo = 0;
     h->num_of_logs = 0;
+    h->merging = false;
     h->vinfo = (ViewInfo *)calloc(size, sizeof(ViewInfo));
     h->log = (hyper_id_t *)calloc(size / 2, sizeof(hyper_id_t));
-    h->merging = false;
 
-    cilkrts_alert(ALERT_REDUCE, w,
-                  "(cilkred_map_make_map) created cilkred_map %p", h);
+    cilkrts_alert(REDUCE, w, "created reducer map size %zu %p", size,
+                  (void *)h);
 
     return h;
 }
@@ -130,23 +130,24 @@ void cilkred_map_destroy_map(__cilkrts_worker *w, cilkred_map *h) {
     if (!h) {
         return;
     }
-    cilkrts_alert(ALERT_REDUCE, w,
-                  "(cilkred_map_destroy_map) freeing cilkred_map %p", h);
+    if (DEBUG_ENABLED(REDUCER)) {
+        for (hyper_id_t i = 0; i < h->spa_cap; ++i)
+            CILK_ASSERT(w, !h->vinfo[i].val);
+    }
     free(h->vinfo);
     h->vinfo = NULL;
     free(h->log);
     h->log = NULL;
-    free(h);
+    cilk_internal_free(w, h, sizeof(*h), IM_REDUCER_MAP);
 
-    cilkrts_alert(ALERT_REDUCE, w,
-                  "(cilkred_map_destroy_map) freed cilkred_map %p\n", h);
+    cilkrts_alert(REDUCE, w, "freed reducer map %p", (void *)h);
 }
 
+/* This function is responsible for freeing other_map. */
 void cilkred_map_merge(cilkred_map *this_map, __cilkrts_worker *w,
                        cilkred_map *other_map, merge_kind kind) {
-    cilkrts_alert(ALERT_REDUCE, w,
-                  "(cilkred_map_merge) merging %p into %p, order %d", other_map,
-                  this_map, kind);
+    cilkrts_alert(REDUCE, w, "merging reducer map %p into %p, order %d",
+                  (void *)other_map, (void *)this_map, kind);
     // Remember the current stack frame.
     // __cilkrts_stack_frame *current_sf = w->current_stack_frame;
     this_map->merging = true;
@@ -157,8 +158,10 @@ void cilkred_map_merge(cilkred_map *this_map, __cilkrts_worker *w,
     // CILK_ASSERT(w, !other_map->is_leftmost /* || kind == MERGE_UNORDERED */);
     // bool merge_to_leftmost = (this_map->is_leftmost);
 
-    if (other_map->num_of_vinfo == 0)
-        return; // A no-op
+    if (other_map->num_of_vinfo == 0) {
+        cilkred_map_destroy_map(w, other_map);
+        return;
+    }
 
     if (other_map->num_of_logs <= (other_map->spa_cap / 2)) {
         hyper_id_t i;
@@ -214,7 +217,7 @@ void cilkred_map_merge(cilkred_map *this_map, __cilkrts_worker *w,
     // this_map->is_leftmost = this_map->is_leftmost || other_map->is_leftmost;
     this_map->merging = false;
     other_map->merging = false;
-    // cilkred_map_destroy_map(w, other_map);
+    cilkred_map_destroy_map(w, other_map);
     return;
 }
 

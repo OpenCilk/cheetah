@@ -75,6 +75,9 @@ cilkred_map *cilkred_map_make_map(__cilkrts_worker *w, size_t size);
 CHEETAH_INTERNAL
 void cilkred_map_destroy_map(__cilkrts_worker *w, cilkred_map *h);
 
+/**
+ * Merge other_map into this_map and destroy other_map.
+ */
 CHEETAH_INTERNAL
 void cilkred_map_merge(cilkred_map *this_map, __cilkrts_worker *w,
                        cilkred_map *other_map, merge_kind kind);

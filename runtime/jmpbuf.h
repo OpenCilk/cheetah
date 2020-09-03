@@ -31,9 +31,9 @@ typedef void *jmpbuf[JMPBUF_SIZE];
 
 /* These macros are only for debugging. */
 #if defined __i386__
-#define ASM_GET_SP(osp) asm volatile("movl %%esp, %0" : "=r"(osp))
+#define ASM_GET_SP(osp) __asm__ volatile("movl %%esp, %0" : "=r"(osp))
 #elif defined __x86_64__
-#define ASM_GET_SP(osp) asm volatile("movq %%rsp, %0" : "=r"(osp))
+#define ASM_GET_SP(osp) __asm__ volatile("movq %%rsp, %0" : "=r"(osp))
 #else
 #define ASM_GET_SP(osp) (osp) = 0
 #endif

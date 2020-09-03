@@ -16,11 +16,11 @@ set(CMAKE_MODULE_PATH
 
 # Check if cheetah is built as a standalone project.
 if (CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR OR CHEETAH_STANDALONE_BUILD)
-  project(cheetah CXX C)
+  project(Cheetah CXX C)
   set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
-  set(PACKAGE_NAME cheetah)
-  set(PACKAGE_VERSION 9.0.1)
+  set(PACKAGE_NAME Cheetah)
+  set(PACKAGE_VERSION 10.0.1)
   set(PACKAGE_STRING "${PACKAGE_NAME} ${PACKAGE_VERSION}")
   set(PACKAGE_BUGREPORT "bugs@opencilk.org")
 
@@ -56,6 +56,7 @@ set(CHEETAH_SYSROOT "" CACHE PATH "Sysroot for cross compiling.")
 
 option(CHEETAH_ENABLE_SHARED "Build cheetah as a shared library." ON)
 option(CHEETAH_ENABLE_STATIC "Build cheetah as a static library." ON)
+option(CHEETAH_ENABLE_BITCODE_ABI "Build cheetah ABI as LLVM bitcode." ON)
 
 cmake_dependent_option(CHEETAH_INSTALL_STATIC_LIBRARY
   "Install the static cheetah library." ON
@@ -63,6 +64,9 @@ cmake_dependent_option(CHEETAH_INSTALL_STATIC_LIBRARY
 cmake_dependent_option(CHEETAH_INSTALL_SHARED_LIBRARY
   "Install the shared cheetah library." ON
   "CHEETAH_ENABLE_SHARED;CHEETAH_INSTALL_LIBRARY" OFF)
+cmake_dependent_option(CHEETAH_INSTALL_BITCODE_ABI
+  "Install the cheetah ABI LLVM bitcode." ON
+  "CHEETAH_ENABLE_BITCODE_ABI;CHEETAH_INSTALL_LIBRARY" OFF)
 
 set(CHEETAH_ABI_VERSION "1" CACHE STRING "ABI version of cheetah. Defaults to 1.")
 
@@ -71,8 +75,6 @@ if (NOT CHEETAH_ENABLE_SHARED AND NOT CHEETAH_ENABLE_STATIC)
 endif()
 
 # Target options --------------------------------------------------------------
-set(CHEETAH_SYSROOT "" CACHE STRING "Use alternate sysroot.")
-set(CHEETAH_GCC_TOOLCHAIN "" CACHE STRING "Use alternate GCC toolchain.")
 set(CHEETAH_MIN_OSX_VERSION 10.9)
 
 #===============================================================================

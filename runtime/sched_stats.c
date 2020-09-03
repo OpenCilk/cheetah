@@ -2,6 +2,8 @@
 
 #include "cilk-internal.h"
 #include "debug.h"
+#include "internal-malloc-impl.h"
+#include "local.h"
 #include "sched_stats.h"
 
 #if SCHED_STATS
@@ -89,6 +91,17 @@ void cilk_drop_timing(__cilkrts_worker *w, enum timing_type t) {
     }
 }
 
+static void sched_stats_print_worker(__cilkrts_worker *w, void *data) {
+    FILE *fp = (FILE *)data;
+    fprintf(fp, WORKER_HDR_DESC, "Worker", w->self);
+    for (int t = 0; t < NUMBER_OF_STATS; t++) {
+        double tmp = cycles_to_micro_sec(w->l->stats.time[t]);
+        g->stats.time[t] += (double)tmp;
+        fprintf(fp, FIELD_DESC, micro_sec_to_sec(tmp));
+    }
+    fprintf(fp, "\n");
+}
+
 void cilk_sched_stats_print(struct global_state *g) {
 #define HDR_DESC "%15s"
 #define WORKER_HDR_DESC "%10s %3u:"
@@ -101,16 +114,8 @@ void cilk_sched_stats_print(struct global_state *g) {
     }
     fprintf(stderr, "\n");
 
-    for (int i = 0; i < g->options.nproc; i++) {
-        __cilkrts_worker *w = g->workers[i];
-        fprintf(stderr, WORKER_HDR_DESC, "Worker", w->self);
-        for (int t = 0; t < NUMBER_OF_STATS; t++) {
-            double tmp = cycles_to_micro_sec(w->l->stats.time[t]);
-            g->stats.time[t] += (double)tmp;
-            fprintf(stderr, FIELD_DESC, micro_sec_to_sec(tmp));
-        }
-        fprintf(stderr, "\n");
-    }
+    for_each_worker(g, &sched_stats_print_worker, stderr);
+
     fprintf(stderr, HDR_DESC, "Total:");
     for (int t = 0; t < NUMBER_OF_STATS; t++) {
         fprintf(stderr, FIELD_DESC, micro_sec_to_sec(g->stats.time[t]));

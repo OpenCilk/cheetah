@@ -26,15 +26,12 @@ typedef struct local_state local_state;
 // Cilk stack frame related defs
 //===============================================
 
+
+
 /**
  * Every spawning function has a frame descriptor.  A spawning function
  * is a function that spawns or detaches.  Only spawning functions
  * are visible to the Cilk runtime.
- *
- * NOTE: if you are using the Tapir compiler, you should not change
- * these fields; ok to change for hand-compiled code.
- * See Tapir compiler ABI:
- * https://github.com/wsmoses/Tapir-LLVM/blob/cilkr/lib/Transforms/Tapir/CilkRABI.cpp
  */
 struct __cilkrts_stack_frame {
     // Flags is a bitfield with values defined below. Client code
@@ -52,7 +49,7 @@ struct __cilkrts_stack_frame {
     // The client copies the worker from TLS here when initializing
     // the structure.  The runtime ensures that the field always points
     // to the __cilkrts_worker which currently "owns" the frame.
-    __cilkrts_worker *worker;
+    _Atomic(__cilkrts_worker *) worker;
 
     // Before every spawn and nontrivial sync the client function
     // saves its continuation here.
@@ -70,6 +67,13 @@ struct __cilkrts_stack_frame {
 #else
     uint32_t reserved1;
 #endif
+#endif
+
+#ifdef ENABLE_CILKRTS_PEDIGREE
+    __cilkrts_pedigree pedigree; // Fields for pedigrees.
+    int64_t rank;
+    uint64_t dprng_dotproduct;
+    int64_t dprng_depth;
 #endif
 };
 
@@ -110,8 +114,30 @@ struct __cilkrts_stack_frame {
 //       function.
 #define CILK_FRAME_SYNC_READY 0x200
 
-#define GET_CILK_FRAME_MAGIC(F) ((F)->magic)
-#define CHECK_CILK_FRAME_MAGIC(G, F) ((G)->frame_magic == (F)->magic)
+static const uint32_t frame_magic =
+    ((((((((((((__CILKRTS_ABI_VERSION * 13) +
+               offsetof(struct __cilkrts_stack_frame, worker)) *
+              13) +
+             offsetof(struct __cilkrts_stack_frame, ctx)) *
+            13) +
+           offsetof(struct __cilkrts_stack_frame, magic)) *
+          13) +
+         offsetof(struct __cilkrts_stack_frame, flags)) *
+        13) +
+       offsetof(struct __cilkrts_stack_frame, call_parent))
+#if defined __i386__ || defined __x86_64__
+      * 13)
+#ifdef __SSE__
+     + offsetof(struct __cilkrts_stack_frame, mxcsr))
+#else
+     + offsetof(struct __cilkrts_stack_frame, reserved1))
+#endif
+#else
+          ))
+#endif
+    ;
+
+#define CHECK_CILK_FRAME_MAGIC(G, F) (frame_magic == (F)->magic)
 
 //===========================================================
 // Helper functions for the flags field in cilkrts_stack_frame
@@ -165,21 +191,6 @@ enum __cilkrts_worker_state {
     WORKER_SCHED,
     WORKER_STEAL,
     WORKER_RUN
-};
-
-struct local_state {
-    __cilkrts_stack_frame **shadow_stack;
-
-    unsigned short state; /* __cilkrts_worker_state */
-    bool lock_wait;
-    bool provably_good_steal;
-    unsigned int rand_next;
-
-    jmpbuf rts_ctx;
-    struct cilk_fiber_pool fiber_pool;
-    struct cilk_im_desc im_desc;
-    struct cilk_fiber *fiber_to_free;
-    struct sched_stats stats;
 };
 
 /**

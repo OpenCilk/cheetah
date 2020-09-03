@@ -1090,7 +1090,6 @@ template <typename View> class rhs_proxy {
 
     // Checks matching view, then return value (called from view_base::assign).
     value_type value(const typename View::base *view) const {
-        __CILKRTS_ASSERT(view == m_view);
         return m_value;
     }
 

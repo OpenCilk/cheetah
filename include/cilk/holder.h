@@ -542,7 +542,6 @@ namespace cilk {
         {
             // Called only by delete_self, which deleted the exemplar using an
             // allocator.
-            __CILKRTS_ASSERT(0 == m_exemplar);
         }
 
         template <typename Type, typename Allocator>
@@ -699,7 +698,6 @@ namespace cilk {
         {
             // Called only by delete_self, which deleted the functor using an
             // allocator.
-            __CILKRTS_ASSERT(0 == m_functor);
         }
 
         template <typename Func, typename Allocator>
@@ -917,7 +915,6 @@ namespace cilk {
 
         /// Return a pointer to size bytes of raw memory
         void* allocate(std::size_t s) const {
-            __CILKRTS_ASSERT(sizeof(Type) == s);
             return m_allocator.allocate(1);
         }
 
@@ -931,7 +928,6 @@ namespace cilk {
         }
 
         void swap(holder_monoid& other) {
-            __CILKRTS_ASSERT(m_allocator == other.m_allocator);
             std::swap(m_initializer, other.m_initializer);
         }
 

@@ -51,9 +51,9 @@ _Unwind_Reason_Code __cilk_personality_internal(
         return std_lib_personality(version, actions, exception_class, ue_header,
                                    context);
     } else if (actions & _UA_CLEANUP_PHASE) {
-        cilkrts_alert(ALERT_EXCEPT, sf->worker,
-                      "cilk_personality called %p  CFA %p\n", sf,
-                      (char *)get_cfa(context));
+        cilkrts_alert(EXCEPT, sf->worker,
+                      "cilk_personality called %p  CFA %p\n", (void *)sf,
+                      (void *)get_cfa(context));
 
         if (sf->flags & CILK_FRAME_UNSYNCHED) {
             // save floating point state
@@ -96,9 +96,9 @@ _Unwind_Reason_Code __cilk_personality_internal(
             t->reraise_cfa = NULL;
 
         if (t->user_exn.exn != NULL && t->user_exn.exn != (char *)ue_header) {
-            cilkrts_alert(ALERT_EXCEPT, sf->worker,
+            cilkrts_alert(EXCEPT, sf->worker,
                           "cilk_personality calling RaiseException %p\n",
-                          sf->worker->self, sf);
+                          (void *)sf);
 
             // Remember the CFA from which we raised the new exception.
             t->reraise_cfa = (char *)get_cfa(context);
