@@ -48,9 +48,9 @@ cilkify(global_state *g, __cilkrts_stack_frame *sf) {
     void *orig_rsp = NULL;
     ASM_GET_SP(orig_rsp);
 
-    #ifdef ENABLE_CILKRTS_PEDIGREE
+#ifdef ENABLE_CILKRTS_PEDIGREE
     __cilkrts_init_dprng();
-    #endif
+#endif
 
     // After inlining, the setjmp saves the processor state, including the frame
     // pointer, of the Cilk function.
@@ -87,33 +87,31 @@ uncilkify(global_state *g, __cilkrts_stack_frame *sf) {
     }
 }
 
-
 #ifdef ENABLE_CILKRTS_PEDIGREE
-__attribute__((always_inline))
-__cilkrts_pedigree __cilkrts_get_pedigree(void) {
-  __cilkrts_worker *w = __cilkrts_get_tls_worker();
-  if (w == NULL) {
-    return cilkrts_root_pedigree_node;
-  } else {
-    __cilkrts_pedigree ret_ped;
-    ret_ped.parent = &(w->current_stack_frame->pedigree);
-    ret_ped.rank = w->current_stack_frame->rank;
-    return ret_ped;
-  }
-}
-
-__attribute__((always_inline))
-void __cilkrts_bump_worker_rank(void) {
+__attribute__((always_inline)) __cilkrts_pedigree __cilkrts_get_pedigree(void) {
     __cilkrts_worker *w = __cilkrts_get_tls_worker();
     if (w == NULL) {
-      cilkrts_root_pedigree_node.rank++;
+        return cilkrts_root_pedigree_node;
     } else {
-      w->current_stack_frame->rank++;
+        __cilkrts_pedigree ret_ped;
+        ret_ped.parent = &(w->current_stack_frame->pedigree);
+        ret_ped.rank = w->current_stack_frame->rank;
+        return ret_ped;
     }
-    w->current_stack_frame->dprng_dotproduct = __cilkrts_dprng_sum_mod_p(w->current_stack_frame->dprng_dotproduct, dprng_m_array[w->current_stack_frame->dprng_depth]);
+}
+
+__attribute__((always_inline)) void __cilkrts_bump_worker_rank(void) {
+    __cilkrts_worker *w = __cilkrts_get_tls_worker();
+    if (w == NULL) {
+        cilkrts_root_pedigree_node.rank++;
+    } else {
+        w->current_stack_frame->rank++;
+    }
+    w->current_stack_frame->dprng_dotproduct = __cilkrts_dprng_sum_mod_p(
+        w->current_stack_frame->dprng_dotproduct,
+        dprng_m_array[w->current_stack_frame->dprng_depth]);
 }
 #endif
-
 
 // Enter a new Cilk function, i.e., a function that contains a cilk_spawn.  This
 // function must be inlined for correctness.
@@ -133,13 +131,15 @@ __cilkrts_enter_frame(__cilkrts_stack_frame *sf) {
     w->current_stack_frame = sf;
     // WHEN_CILK_DEBUG(sf->magic = CILK_STACKFRAME_MAGIC);
 
-    #ifdef ENABLE_CILKRTS_PEDIGREE
+#ifdef ENABLE_CILKRTS_PEDIGREE
     // Pedigree maintenance.
     if (sf->call_parent != NULL && !(sf->flags & CILK_FRAME_LAST)) {
         sf->pedigree.rank = sf->call_parent->rank++;
         sf->pedigree.parent = &(sf->call_parent->pedigree);
-        sf->dprng_depth = sf->call_parent->dprng_depth+1;
-        sf->call_parent->dprng_dotproduct = __cilkrts_dprng_sum_mod_p(sf->call_parent->dprng_dotproduct, dprng_m_array[sf->call_parent->dprng_depth]);
+        sf->dprng_depth = sf->call_parent->dprng_depth + 1;
+        sf->call_parent->dprng_dotproduct = __cilkrts_dprng_sum_mod_p(
+            sf->call_parent->dprng_dotproduct,
+            dprng_m_array[sf->call_parent->dprng_depth]);
         sf->dprng_dotproduct = sf->call_parent->dprng_dotproduct;
     } else {
         sf->pedigree.rank = 0;
@@ -148,7 +148,7 @@ __cilkrts_enter_frame(__cilkrts_stack_frame *sf) {
         sf->dprng_dotproduct = dprng_m_X;
     }
     sf->rank = 0;
-    #endif
+#endif
 }
 
 // Enter a spawn helper, i.e., a fucntion containing code that was cilk_spawn'd.
@@ -166,13 +166,15 @@ __cilkrts_enter_frame_fast(__cilkrts_stack_frame *sf) {
     atomic_store_explicit(&sf->worker, w, memory_order_relaxed);
     w->current_stack_frame = sf;
 
-    #ifdef ENABLE_CILKRTS_PEDIGREE
+#ifdef ENABLE_CILKRTS_PEDIGREE
     // Pedigree maintenance.
     if (sf->call_parent != NULL && !(sf->flags & CILK_FRAME_LAST)) {
         sf->pedigree.rank = sf->call_parent->rank++;
         sf->pedigree.parent = &(sf->call_parent->pedigree);
-        sf->dprng_depth = sf->call_parent->dprng_depth+1;
-        sf->call_parent->dprng_dotproduct = __cilkrts_dprng_sum_mod_p(sf->call_parent->dprng_dotproduct, dprng_m_array[sf->call_parent->dprng_depth]);
+        sf->dprng_depth = sf->call_parent->dprng_depth + 1;
+        sf->call_parent->dprng_dotproduct = __cilkrts_dprng_sum_mod_p(
+            sf->call_parent->dprng_dotproduct,
+            dprng_m_array[sf->call_parent->dprng_depth]);
         sf->dprng_dotproduct = sf->call_parent->dprng_dotproduct;
     } else {
         sf->pedigree.rank = 0;
@@ -181,7 +183,7 @@ __cilkrts_enter_frame_fast(__cilkrts_stack_frame *sf) {
         sf->dprng_dotproduct = dprng_m_X;
     }
     sf->rank = 0;
-    #endif
+#endif
 }
 
 // Detach the given Cilk stack frame, allowing other Cilk workers to steal the

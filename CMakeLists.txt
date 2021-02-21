@@ -1,6 +1,6 @@
 # CMake build for Cheetah.
 
-cmake_minimum_required(VERSION 3.4.3)
+cmake_minimum_required(VERSION 3.9)
 
 if(POLICY CMP0068)
   cmake_policy(SET CMP0068 NEW)
@@ -75,7 +75,7 @@ if (NOT CHEETAH_ENABLE_SHARED AND NOT CHEETAH_ENABLE_STATIC)
 endif()
 
 # Target options --------------------------------------------------------------
-set(CHEETAH_MIN_OSX_VERSION 10.9)
+set(CHEETAH_MIN_OSX_VERSION 10.14)
 
 #===============================================================================
 # Configure System
