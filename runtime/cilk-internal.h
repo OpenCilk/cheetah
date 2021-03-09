@@ -18,6 +18,12 @@ extern "C" {
 #include "sched_stats.h"
 #include "types.h"
 
+#if defined __i386__ || defined __x86_64__
+#ifdef __SSE__
+#define CHEETAH_SAVE_MXCSR
+#endif
+#endif
+
 struct global_state;
 typedef struct global_state global_state;
 typedef struct local_state local_state;
@@ -49,25 +55,16 @@ struct __cilkrts_stack_frame {
     // The client copies the worker from TLS here when initializing
     // the structure.  The runtime ensures that the field always points
     // to the __cilkrts_worker which currently "owns" the frame.
+    //
+    // TODO: Remove this pointer?  This pointer only seems to be needed for
+    // debugging purposes.  When the worker structure is genuinely needed, it
+    // seems to be accessible by calling __cilkrts_get_tls_worker(), which will
+    // be inlined and optimized to a simple move from TLS.
     _Atomic(__cilkrts_worker *) worker;
 
     // Before every spawn and nontrivial sync the client function
     // saves its continuation here.
     jmpbuf ctx;
-
-    /**
-     * Architecture-specific floating point state that should be carried
-     * along with a context from thread to thread.  On Win64 this is in
-     * jmpbuf.
-     */
-#if defined __i386__ || defined __x86_64__
-#ifdef __SSE__
-#define CHEETAH_SAVE_MXCSR
-    uint32_t mxcsr;
-#else
-    uint32_t reserved1;
-#endif
-#endif
 
 #ifdef ENABLE_CILKRTS_PEDIGREE
     __cilkrts_pedigree pedigree; // Fields for pedigrees.
@@ -125,16 +122,7 @@ static const uint32_t frame_magic =
          offsetof(struct __cilkrts_stack_frame, flags)) *
         13) +
        offsetof(struct __cilkrts_stack_frame, call_parent))
-#if defined __i386__ || defined __x86_64__
-      * 13)
-#ifdef __SSE__
-     + offsetof(struct __cilkrts_stack_frame, mxcsr))
-#else
-     + offsetof(struct __cilkrts_stack_frame, reserved1))
-#endif
-#else
           ))
-#endif
     ;
 
 #define CHECK_CILK_FRAME_MAGIC(G, F) (frame_magic == (F)->magic)
@@ -193,12 +181,6 @@ enum __cilkrts_worker_state {
     WORKER_RUN
 };
 
-/**
- * NOTE: if you are using the Tapir compiler, you should not change
- * these fields; ok to change for hand-compiled code.
- * See Tapir compiler ABI:
- * https://github.com/OpenCilk/opencilk-project/blob/release/9.x/llvm/lib/Transforms/Tapir/CilkRABI.cpp
- **/
 struct __cilkrts_worker {
     // T and H pointers in the THE protocol
     _Atomic(__cilkrts_stack_frame **) tail;
@@ -222,7 +204,9 @@ struct __cilkrts_worker {
 
     // Map from reducer names to reducer values
     cilkred_map *reducer_map;
-};
+} __attribute__((aligned(256))); // This alignment reduces false sharing induced
+                                 // by hardware prefetchers on some systems,
+                                 // such as Intel CPUs.
 
 struct cilkrts_callbacks {
     unsigned last_init;
@@ -233,6 +217,13 @@ struct cilkrts_callbacks {
 };
 
 extern CHEETAH_INTERNAL struct cilkrts_callbacks cilkrts_callbacks;
+
+extern __thread __cilkrts_worker *tls_worker;
+
+static inline __attribute__((always_inline)) __cilkrts_worker *
+__cilkrts_get_tls_worker(void) {
+    return tls_worker;
+}
 
 #ifdef __cplusplus
 }

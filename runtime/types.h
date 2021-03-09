@@ -12,4 +12,7 @@ typedef struct cilkred_map cilkred_map;
 
 #define NO_WORKER 0xffffffffu /* type worker_id */
 
+// Constant representing invalid worker.
+#define INVALID (__cilkrts_worker *)0xbfbfbfbfbf
+
 #endif /* _CILK_TYPES_H */

@@ -27,11 +27,11 @@
 #include "readydeque.h"
 #include "sched_stats.h"
 #include "scheduler.h"
+#include "worker_coord.h"
 
 #include "reducer_impl.h"
 
-CHEETAH_INTERNAL
-extern void cleanup_invoke_main(Closure *invoke_main);
+extern __thread bool is_boss_thread;
 
 #ifdef __FreeBSD__
 typedef cpuset_t cpu_set_t;
@@ -49,6 +49,8 @@ static local_state *worker_local_init(global_state *g) {
     l->lock_wait = false;
     l->provably_good_steal = false;
     l->rand_next = 0; /* will be reset in scheduler loop */
+    l->index_to_worker =
+        (worker_id *)calloc(g->options.nproc, sizeof(worker_id));
     cilk_sched_stats_init(&(l->stats));
 
     return l;
@@ -84,63 +86,11 @@ static void workers_init(global_state *g) {
         w->reducer_map = NULL;
         // initialize internal malloc first
         cilk_internal_malloc_per_worker_init(w);
-        cilk_fiber_pool_per_worker_init(w);
+
+        // Initialize index-to-worker map entry for this worker.
+        g->index_to_worker[i] = i;
+        g->worker_to_index[i] = i;
     }
-}
-
-static void *scheduler_thread_proc(void *arg) {
-    __cilkrts_worker *w = (__cilkrts_worker *)arg;
-    cilkrts_alert(BOOT, w, "scheduler_thread_proc");
-    __cilkrts_set_tls_worker(w);
-
-    worker_id self = w->self;
-
-    do {
-        // Wait for g->start == 1 to start executing the work-stealing loop.  We
-        // use a condition variable to wait on g->start, because this approach
-        // seems to result in better performance.
-        pthread_mutex_lock(&w->g->start_lock);
-        while (!atomic_load_explicit(&w->g->start, memory_order_acquire)) {
-            pthread_cond_wait(&w->g->start_cond_var, &w->g->start_lock);
-        }
-        pthread_mutex_unlock(&w->g->start_lock);
-
-        // Check if we should exit this scheduling function.
-        if (w->g->terminate) {
-            return 0;
-        }
-
-        /* TODO: Maybe import reducers here?  They must be imported
-           before user code runs. */
-
-        // Start the new Cilkified region using the last worker that finished a
-        // Cilkified region.  This approach ensures that the new Cilkified
-        // region starts on an available worker with the worker state that was
-        // updated by any operations that occurred outside of Cilkified regions.
-        // Such operations, for example might have updated the left-most view of
-        // a reducer.
-        if (self == w->g->exiting_worker) {
-            worker_scheduler(w, w->g->root_closure);
-        } else {
-            worker_scheduler(w, NULL);
-        }
-
-        // At this point, some worker will have finished the Cilkified region,
-        // meaning it recordied its ID in g->exiting_worker and set g->done = 1.
-        // That worker's state accurately reflects the execution of the
-        // Cilkified region, including all updates to reducers.  Wait for that
-        // worker to exit the work-stealing loop, and use it to wake-up the
-        // original Cilkifying thread.
-        if (self == w->g->exiting_worker) {
-            // Mark the computation as no longer cilkified, to signal the thread
-            // that originally cilkified the execution.
-            pthread_mutex_lock(&(w->g->cilkified_lock));
-            atomic_store_explicit(&w->g->cilkified, 0, memory_order_release);
-            pthread_cond_signal(&w->g->cilkified_cond_var);
-            pthread_mutex_unlock(&(w->g->cilkified_lock));
-        }
-
-    } while (true);
 }
 
 #ifdef CPU_SETSIZE
@@ -176,6 +126,9 @@ static void threads_init(global_state *g) {
        which is in a format compatible with cpulist_parse().
        FreeBSD exports sysctl kern.sched.topology_spec, an XML representation
        of the processor topology. */
+    /* TODO: Fix pinning strategy to better utilize cpu architecture.  For
+       example, we probably do not want to pin a worker to cpus on different
+       NUMA nodes. */
 #ifdef __FreeBSD__
     int pin_strategy = 1; /* (0, 1), (2, 3), ... */
 #else
@@ -219,12 +172,18 @@ static void threads_init(global_state *g) {
             step_out = group_size;
         } else {
             step_out = 1;
-            step_in = group_size;
+            step_in = n_threads;
         }
     }
 #endif
-
-    for (int w = 0; w < n_threads; w++) {
+    int worker_start =
+#if BOSS_THIEF
+            1
+#else
+            0
+#endif
+            ;
+    for (int w = worker_start; w < n_threads; w++) {
         int status = pthread_create(&g->threads[w], NULL, scheduler_thread_proc,
                                     g->workers[w]);
 
@@ -260,7 +219,6 @@ static void threads_init(global_state *g) {
         }
 #endif
     }
-    usleep(10);
 }
 
 global_state *__cilkrts_startup(int argc, char *argv[]) {
@@ -312,19 +270,29 @@ static void __cilkrts_start_workers(global_state *g) {
 
 // Stop the Cilk workers in g, for example, by joining their underlying Pthreads.
 static void __cilkrts_stop_workers(global_state *g) {
-    CILK_ASSERT_G(!atomic_load_explicit(&g->start, memory_order_acquire));
-    CILK_ASSERT_G(CLOSURE_READY != g->root_closure->status);
+    /* CILK_ASSERT_G( */
+    /*     !atomic_load_explicit(&g->start_thieves, memory_order_acquire)); */
 
     // Set g->start and g->terminate, to allow the workers to exit their
-    // outermost scheduling loop.  Wake up any workers waiting on g->start.
+    // outermost scheduling loop.
     g->terminate = true;
-    pthread_mutex_lock(&(g->start_lock));
-    atomic_store_explicit(&g->start, 1, memory_order_release);
-    pthread_cond_broadcast(&g->start_cond_var);
-    pthread_mutex_unlock(&(g->start_lock));
+
+    // Wake up all the workers.
+    // We call wake_all_disengaged, rather than wake_thieves, to properly
+    // terminate all thieves, whether they're disengaged inside or outside the
+    // work-stealing loop.
+    wake_all_disengaged(g);
+    wake_root_worker(g, (uint32_t)(-1));
 
     // Join the worker pthreads
-    for (unsigned int i = 0; i < g->nworkers; i++) {
+    unsigned int worker_start =
+#if BOSS_THIEF
+            1
+#else
+            0
+#endif
+            ;
+    for (unsigned int i = worker_start; i < g->nworkers; i++) {
         int status = pthread_join(g->threads[i], NULL);
         if (status != 0)
             cilkrts_bug(NULL, "Cilk runtime error: thread join (%u) failed: %d",
@@ -334,14 +302,91 @@ static void __cilkrts_stop_workers(global_state *g) {
     g->workers_started = false;
 }
 
+// Block until signaled the Cilkified region is done.  Executed by the Cilkfying
+// thread.
+void wait_until_cilk_done(global_state *g) {
+    wait_while_cilkified(g);
+}
+
+// Helper method to make the boss thread wait for the cilkified region
+// to complete.
+static inline __attribute__((noinline)) void boss_wait_helper(void) {
+    // The setjmp/longjmp to and from user code can invalidate the
+    // function arguments and local variables in this function.  Get
+    // fresh copies of these arguments from the runtime's global
+    // state.
+    global_state *g = tls_worker->g;
+    __cilkrts_stack_frame *sf = g->root_closure->frame;
+    CILK_BOSS_START_TIMING(g);
+
+#if !BOSS_THIEF
+    worker_id self = tls_worker->self;
+#endif
+    tls_worker = NULL;
+
+#if !BOSS_THIEF
+    // Wake up the worker the boss was impersonating, to let it take
+    // over the computation.
+    try_wake_root_worker(g, &self, (uint32_t)(-1));
+#endif
+
+    // Wait until the cilkified region is done executing.
+    wait_until_cilk_done(g);
+
+#if BOSS_THIEF
+    g->workers[0]->reducer_map = g->workers[g->exiting_worker]->reducer_map;
+    g->workers[g->exiting_worker]->reducer_map = NULL;
+    g->exiting_worker = 0;
+#endif
+
+    // At this point, some Cilk worker must have completed the
+    // Cilkified region and executed uncilkify at the end of the Cilk
+    // function.  The longjmp will therefore jump to the end of the
+    // Cilk function.  We need only restore the stack pointer to its
+    // original value on the Cilkifying thread's stack.
+
+    CILK_BOSS_STOP_TIMING(g);
+
+    // Restore the boss's original rsp, so the boss completes the Cilk
+    // function on its original stack.
+    SP(sf) = g->orig_rsp;
+    sysdep_restore_fp_state(sf);
+    sanitizer_start_switch_fiber(NULL);
+    __builtin_longjmp(sf->ctx, 1);
+}
+
 // Setup runtime structures to start a new Cilkified region.  Executed by the
 // Cilkifying thread in cilkify().
-void invoke_cilkified_root(global_state *g, __cilkrts_stack_frame *sf) {
+void __cilkrts_internal_invoke_cilkified_root(global_state *g,
+                                              __cilkrts_stack_frame *sf) {
     CILK_ASSERT_G(!__cilkrts_get_tls_worker());
+    /* CILK_ASSERT_G( */
+    /*     !atomic_load_explicit(&g->start_thieves, memory_order_acquire)); */
+    /* CILK_ASSERT_G( */
+    /*     !atomic_load_explicit(&g->start_thieves_futex, memory_order_acquire)); */
 
     // Start the workers if necessary
-    if (!g->workers_started)
+    if (__builtin_expect(!g->workers_started, false)) {
         __cilkrts_start_workers(g);
+    }
+
+    if (!is_boss_thread) {
+#if BOSS_THIEF
+        cilk_fiber_pool_per_worker_init(g->workers[0]);
+        // rts_srand(g->workers[0], (0 + 1) * 162347);
+        g->workers[0]->l->rand_next = 162347;
+#endif
+        is_boss_thread = true;
+    }
+
+    // The boss thread will impersonate the last exiting worker until it tries
+    // to become a thief.
+#if BOSS_THIEF
+    tls_worker = g->workers[0];
+#else
+    tls_worker = g->workers[g->exiting_worker];
+#endif
+    CILK_START_TIMING(tls_worker, INTERVAL_CILKIFY_ENTER);
 
     // Mark the root closure as not initialized
     g->root_closure_initialized = false;
@@ -350,6 +395,7 @@ void invoke_cilkified_root(global_state *g, __cilkrts_stack_frame *sf) {
     Closure_make_ready(g->root_closure);
 
     // Setup the stack pointer to point at the root closure's fiber.
+    g->orig_rsp = SP(sf);
     void *new_rsp =
         (void *)sysdep_reset_stack_for_resume(g->root_closure->fiber, sf);
     USE_UNUSED(new_rsp);
@@ -363,67 +409,78 @@ void invoke_cilkified_root(global_state *g, __cilkrts_stack_frame *sf) {
     // Associate sf with this root closure
     g->root_closure->frame = sf;
 
-    // Now we kick off execution of the Cilkified region by setting appropriate
-    // flags:
+    // Now kick off execution of the Cilkified region by setting appropriate
+    // flags.
 
-    // Set g->cilkified = 1, so the Cilkifying thread will wait for the
-    // Cilkified region to finish.
-    atomic_store_explicit(&g->cilkified, 1, memory_order_release);
+    /* reset_disengaged_var(g); */
+    set_cilkified(g);
+
     // Set g->done = 0, so Cilk workers will continue trying to steal.
     atomic_store_explicit(&g->done, 0, memory_order_release);
-    // Set g->start = 1 to unleash workers to enter the work-stealing loop.
-    // Wake up any workers waiting for this flag.
-    pthread_mutex_lock(&(g->start_lock));
-    atomic_store_explicit(&g->start, 1, memory_order_release);
-    pthread_cond_broadcast(&g->start_cond_var);
-    pthread_mutex_unlock(&(g->start_lock));
-}
 
-// Block until signaled the Cilkified region is done.  Executed by the Cilkfying
-// thread.
-void wait_until_cilk_done(global_state *g) {
-    // Wait on g->cilkified to be set to 0, indicating the end of the Cilkified
-    // region.  We use a condition variable to wait on g->cilkified, because
-    // this approach seems to result in better performance.
+    // Wake up the thieves, to allow them to begin work stealing.
+    //
+    // NOTE: We might want to wake thieves gradually, as successful steals
+    // occur, rather than all at once.  Initial testing of this approach did not
+    // seem to perform well, however.  One possible reason why could be because
+    // of the extra kernel interactions involved in waking workers gradually.
+    wake_thieves(g);
+    /* request_more_thieves(g, g->nworkers); */
 
-    // TODO: Convert pthread_mutex_lock, pthread_mutex_unlock, and
-    // pthread_cond_wait to cilk_* equivalents.
-    pthread_mutex_lock(&(g->cilkified_lock));
-
-    // There may be a *very unlikely* scenario where the Cilk computation has
-    // already been completed before even starting to wait.  In that case, do
-    // not wait and continue directly.  Also handle spurious wakeups with a
-    // 'while' instead of an 'if'.
-    while (atomic_load_explicit(&g->cilkified, memory_order_acquire)) {
-        pthread_cond_wait(&(g->cilkified_cond_var), &(g->cilkified_lock));
+    if (__builtin_setjmp(g->boss_ctx) == 0) {
+        CILK_SWITCH_TIMING(tls_worker, INTERVAL_CILKIFY_ENTER, INTERVAL_SCHED);
+        do_what_it_says_boss(tls_worker, g->root_closure);
+    } else {
+        // The stack on which
+        // __cilkrts_internal_invoke_cilkified_root() was called may
+        // be corrupted at this point, so we call this helper method,
+        // marked noinline, to ensure the compiler does not try to use
+        // any data from the stack.
+        boss_wait_helper();
     }
-
-    pthread_mutex_unlock(&(g->cilkified_lock));
 }
 
 // Finish the execution of a Cilkified region.  Executed by a worker in g.
-void exit_cilkified_root(global_state *g, __cilkrts_stack_frame *sf) {
-    __cilkrts_worker *w = sf->worker;
-
+void __cilkrts_internal_exit_cilkified_root(global_state *g,
+                                            __cilkrts_stack_frame *sf) {
+    __cilkrts_worker *w = __cilkrts_get_tls_worker();
+    CILK_ASSERT(w, w->l->state == WORKER_RUN);
+    CILK_SWITCH_TIMING(w, INTERVAL_WORK, INTERVAL_CILKIFY_EXIT);
     // Record this worker as the exiting worker.  We keep track of this exiting
     // worker so that code outside of Cilkified regions can use this worker's
     // state, specifically, its reducer_map.  We make sure to do this before
     // setting done, so that other workers will properly observe the new
     // exiting_worker.
-    g->exiting_worker = w->self;
+    worker_id self = w->self;
+    g->exiting_worker = self;
 
-    // Mark the computation as done.  Also set start to false, so workers who
-    // exit the work-stealing loop will return to waiting for the start of the
-    // next Cilkified region.
-    atomic_store_explicit(&g->start, 0, memory_order_release);
+    // Mark the computation as done.  Also "sleep" the workers: update global
+    // flags so workers who exit the work-stealing loop will return to waiting
+    // for the start of the next Cilkified region.
+    sleep_thieves(g);
     atomic_store_explicit(&g->done, 1, memory_order_release);
+    /* wake_all_disengaged(g); */
+
+#if !BOSS_THIEF
+    if (!is_boss_thread && self != atomic_load_explicit(&g->start_root_worker,
+                                                        memory_order_acquire)) {
+        // If a thread other than the boss thread finishes the cilkified region,
+        // make sure that the previous root worker is awake, so that it can
+        // become a thief and this worker can become the new root worker.
+        wake_root_worker(g, self);
+    }
+#endif
 
     // Clear this worker's deque.  Nobody can successfully steal from this deque
     // at this point, because head == tail, but we still want any subsequent
-    // Cilkified region to start with an empty deque.
+    // Cilkified region to start with an empty deque.  We go ahead and grab the
+    // deque lock to make sure no other worker has a lingering pointer to the
+    // closure.
+    deque_lock_self(w);
     g->deques[w->self].bottom = (Closure *)NULL;
     g->deques[w->self].top = (Closure *)NULL;
     WHEN_CILK_DEBUG(g->root_closure->owner_ready_deque = NO_WORKER);
+    deque_unlock_self(w);
 
     // Clear the flags in sf.  This routine runs before leave_frame in a Cilk
     // function, but leave_frame is executed conditionally in Cilk functions
@@ -432,8 +489,30 @@ void exit_cilkified_root(global_state *g, __cilkrts_stack_frame *sf) {
     CILK_ASSERT(w, __cilkrts_synced(sf));
     sf->flags = 0;
 
-    // done; go back to runtime
-    longjmp_to_runtime(w);
+    CILK_STOP_TIMING(w, INTERVAL_CILKIFY_EXIT);
+    if (is_boss_thread) {
+        // We finished the computation on the boss thread.  No need to jump to
+        // the runtime in this case; just return normally.
+        /* CILK_ASSERT(w, w->l->fiber_to_free == NULL); */
+        if (w->l->fiber_to_free) {
+            cilk_fiber_deallocate_to_pool(w, w->l->fiber_to_free);
+        }
+        w->l->fiber_to_free = NULL;
+        atomic_store_explicit(&g->cilkified, 0, memory_order_release);
+        w->l->state = WORKER_IDLE;
+        tls_worker = NULL;
+
+        // Restore the boss's original rsp, so the boss completes the Cilk
+        // function on its original stack.
+        SP(sf) = g->orig_rsp;
+        sysdep_restore_fp_state(sf);
+        sanitizer_start_switch_fiber(NULL);
+        __builtin_longjmp(sf->ctx, 1);
+    } else {
+        // done; go back to runtime
+        CILK_START_TIMING(w, INTERVAL_WORK);
+        longjmp_to_runtime(w);
+    }
 }
 
 static void global_state_terminate(global_state *g) {
@@ -448,11 +527,16 @@ static void global_state_deinit(global_state *g) {
     cilk_fiber_pool_global_destroy(g);
     cilk_internal_malloc_global_destroy(g); // internal malloc last
     cilk_mutex_destroy(&(g->print_lock));
+    cilk_mutex_destroy(&(g->index_lock));
     // TODO: Convert to cilk_* equivalents
     pthread_mutex_destroy(&g->cilkified_lock);
     pthread_cond_destroy(&g->cilkified_cond_var);
-    pthread_mutex_destroy(&g->start_lock);
-    pthread_cond_destroy(&g->start_cond_var);
+    /* pthread_mutex_destroy(&g->start_thieves_lock); */
+    /* pthread_cond_destroy(&g->start_thieves_cond_var); */
+    pthread_mutex_destroy(&g->start_root_worker_lock);
+    pthread_cond_destroy(&g->start_root_worker_cond_var);
+    pthread_mutex_destroy(&g->disengaged_lock);
+    pthread_cond_destroy(&g->disengaged_cond_var);
     free(g->workers);
     g->workers = NULL;
     g->nworkers = 0;
@@ -460,6 +544,10 @@ static void global_state_deinit(global_state *g) {
     g->deques = NULL;
     free(g->threads);
     g->threads = NULL;
+    free(g->index_to_worker);
+    g->index_to_worker = NULL;
+    free(g->worker_to_index);
+    g->worker_to_index = NULL;
     free(g->id_manager); /* XXX Should export this back to global */
     g->id_manager = NULL;
     free(g);
@@ -520,6 +608,8 @@ static void workers_deinit(global_state *g) {
         cilk_internal_malloc_per_worker_destroy(w); // internal malloc last
         free(w->l->shadow_stack);
         w->l->shadow_stack = NULL;
+        free(w->l->index_to_worker);
+        w->l->index_to_worker = NULL;
         free(w->l);
         w->l = NULL;
         free(w);

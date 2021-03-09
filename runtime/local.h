@@ -10,6 +10,8 @@ struct local_state {
     bool lock_wait;
     bool provably_good_steal;
     unsigned int rand_next;
+    // Local copy of the index-to-worker map.
+    worker_id *index_to_worker;
 
     jmpbuf rts_ctx;
     struct cilk_fiber_pool fiber_pool;

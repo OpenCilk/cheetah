@@ -343,6 +343,7 @@ struct cilk_fiber *cilk_fiber_allocate_from_pool(__cilkrts_worker *w) {
  */
 void cilk_fiber_deallocate_to_pool(__cilkrts_worker *w,
                                    struct cilk_fiber *fiber_to_return) {
+    sanitizer_fiber_deallocate(fiber_to_return);
     struct cilk_fiber_pool *pool = &(w->l->fiber_pool);
     if (pool->size == pool->capacity) {
         fiber_pool_free_batch(w, pool, pool->capacity / BATCH_FRACTION);

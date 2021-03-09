@@ -43,7 +43,7 @@ static inline __attribute__((always_inline)) void
 sysdep_save_fp_ctrl_state(__cilkrts_stack_frame *sf) {
 #ifdef CHEETAH_SAVE_MXCSR
 #if 1
-    __asm__("stmxcsr %0" : "=m"(sf->mxcsr));
+    __asm__("stmxcsr %0" : "=m"(MXCSR(sf)));
 #else
     /* Disabled because LLVM's implementation is bad. */
     sf->mxcsr = __builtin_ia32_stmxcsr(); /* aka _mm_setcsr */
@@ -62,7 +62,7 @@ void sysdep_restore_fp_state(__cilkrts_stack_frame *sf) {
     /* TODO: Find a way to do this only when using floating point. */
 #ifdef CHEETAH_SAVE_MXCSR
 #if 1
-    __asm__ volatile("ldmxcsr %0" : : "m"(sf->mxcsr));
+    __asm__ volatile("ldmxcsr %0" : : "m"(MXCSR(sf)));
 #else
     /* Disabled because LLVM's implementation is bad. */
     __builtin_ia32_ldmxcsr(sf->mxcsr); /* aka _mm_getcsr */
@@ -97,11 +97,6 @@ CHEETAH_INTERNAL
 void cilk_fiber_deallocate(__cilkrts_worker *w, struct cilk_fiber *fiber);
 CHEETAH_INTERNAL
 void cilk_fiber_deallocate_global(global_state *, struct cilk_fiber *fiber);
-// allocate / deallocate fiber from / back to OS for the invoke-main
-CHEETAH_INTERNAL
-struct cilk_fiber *cilk_main_fiber_allocate();
-CHEETAH_INTERNAL
-void cilk_main_fiber_deallocate(struct cilk_fiber *fiber);
 // allocate / deallocate one fiber from / back to per-worker pool
 CHEETAH_INTERNAL
 struct cilk_fiber *cilk_fiber_allocate_from_pool(__cilkrts_worker *w);
@@ -111,4 +106,15 @@ void cilk_fiber_deallocate_to_pool(__cilkrts_worker *w,
 
 CHEETAH_INTERNAL int in_fiber(struct cilk_fiber *, void *);
 
+#if CILK_ENABLE_ASAN_HOOKS
+void sanitizer_start_switch_fiber(struct cilk_fiber *fiber);
+void sanitizer_finish_switch_fiber();
+CHEETAH_INTERNAL void sanitizer_unpoison_fiber(struct cilk_fiber *fiber);
+CHEETAH_INTERNAL void sanitizer_fiber_deallocate(struct cilk_fiber *fiber);
+#else
+static inline void sanitizer_start_switch_fiber(struct cilk_fiber *fiber) {}
+static inline void sanitizer_finish_switch_fiber() {}
+static inline void sanitizer_unpoison_fiber(struct cilk_fiber *fiber) {}
+static inline void sanitizer_fiber_deallocate(struct cilk_fiber *fiber) {}
+#endif // CILK_ENABLE_ASAN_HOOKS
 #endif

@@ -16,7 +16,7 @@
 
 global_state *default_cilkrts;
 
-extern CHEETAH_INTERNAL unsigned cilkg_nproc;
+unsigned cilkg_nproc = 0;
 
 static void set_alert_debug_level() {
     /* Only the bits also set in ALERT_LVL are used. */
@@ -33,13 +33,20 @@ static global_state *global_state_allocate() {
     memset(g, 0, sizeof *g);
 
     cilk_mutex_init(&g->im_lock);
+    cilk_mutex_init(&g->index_lock);
     cilk_mutex_init(&g->print_lock);
+
+    atomic_store_explicit(&g->start_root_worker, 0, memory_order_relaxed);
+    atomic_store_explicit(&g->cilkified_futex, 0, memory_order_relaxed);
 
     // TODO: Convert to cilk_* equivalents
     pthread_mutex_init(&g->cilkified_lock, NULL);
     pthread_cond_init(&g->cilkified_cond_var, NULL);
-    pthread_mutex_init(&g->start_lock, NULL);
-    pthread_cond_init(&g->start_cond_var, NULL);
+    pthread_mutex_init(&g->start_root_worker_lock, NULL);
+    pthread_cond_init(&g->start_root_worker_cond_var, NULL);
+
+    pthread_mutex_init(&g->disengaged_lock, NULL);
+    pthread_cond_init(&g->disengaged_cond_var, NULL);
 
     return g;
 }
@@ -64,7 +71,7 @@ static void set_deqdepth(global_state *g, unsigned int deqdepth) {
 static void set_fiber_pool_cap(global_state *g, unsigned int fiber_pool_cap) {
     // TODO: Verify that g has not yet been initialized.
     CILK_ASSERT_G(!g->workers_started);
-    CILK_ASSERT_G(fiber_pool_cap >= 8);
+    CILK_ASSERT_G(fiber_pool_cap >= 2);
     CILK_ASSERT_G(fiber_pool_cap <= 999999);
     g->options.fiber_pool_cap = fiber_pool_cap;
 }
@@ -152,7 +159,7 @@ global_state *global_state_init(int argc, char *argv[]) {
 #ifdef DEBUG
     setlinebuf(stderr);
 #endif
-    
+
     set_alert_debug_level(); // alert / debug used by global_state_allocate
     global_state *g = global_state_allocate();
 
@@ -166,18 +173,20 @@ global_state *global_state_init(int argc, char *argv[]) {
 
     g->workers_started = false;
     g->root_closure_initialized = false;
-    atomic_store_explicit(&g->start, 0, memory_order_relaxed);
     atomic_store_explicit(&g->done, 0, memory_order_relaxed);
     atomic_store_explicit(&g->cilkified, 0, memory_order_relaxed);
+    atomic_store_explicit(&g->disengaged_deprived, 0, memory_order_relaxed);
+
     g->terminate = false;
     g->exiting_worker = 0;
-    atomic_store_explicit(&g->reducer_map_count, 0, memory_order_relaxed);
 
     g->workers =
         (__cilkrts_worker **)calloc(active_size, sizeof(__cilkrts_worker *));
     g->deques = (ReadyDeque *)cilk_aligned_alloc(
         __alignof__(ReadyDeque), active_size * sizeof(ReadyDeque));
     g->threads = (pthread_t *)calloc(active_size, sizeof(pthread_t));
+    g->index_to_worker = (worker_id *)calloc(active_size, sizeof(worker_id));
+    g->worker_to_index = (worker_id *)calloc(active_size, sizeof(worker_id));
     cilk_internal_malloc_global_init(g); // initialize internal malloc first
     cilk_fiber_pool_global_init(g);
     cilk_global_sched_stats_init(&(g->stats));
