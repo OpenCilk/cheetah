@@ -57,7 +57,7 @@ _Unwind_Reason_Code __cilk_personality_internal(
 
         if (sf->flags & CILK_FRAME_UNSYNCHED) {
             // save floating point state
-            __cilkrts_save_fp_ctrl_state(sf);
+            sysdep_save_fp_ctrl_state(sf);
 
             if (__builtin_setjmp(sf->ctx) == 0) {
                 deque_lock_self(w);
@@ -69,10 +69,6 @@ _Unwind_Reason_Code __cilk_personality_internal(
 
                 // set closure_exception
                 t->user_exn.exn = (char *)ue_header;
-                /*
-                t->user_exn.frame = sf;
-                t->user_exn.fiber = t->fiber;
-                */
 
                 deque_unlock_self(w);
 
@@ -104,8 +100,6 @@ _Unwind_Reason_Code __cilk_personality_internal(
             t->reraise_cfa = (char *)get_cfa(context);
             // Raise the new exception.
             __cilkrts_check_exception_raise(sf);
-            // Calling Resume instead of RaiseException also appears to work,
-            // and is a bit faster.
             // NOTE: Calling resume does not seem to work on MacOSX.
             // __cilkrts_check_exception_resume(sf);
         }
@@ -124,11 +118,9 @@ _Unwind_Reason_Code __cilk_personality_internal(
         _Unwind_Reason_Code cleanup_res = std_lib_personality(
             version, actions, exception_class, ue_header, context);
 
-        // if we need to continue unwinding the stack, pop_frame + leave_frame
-        // here
+        // if we need to continue unwinding the stack, leave_frame here
         if ((cleanup_res == _URC_CONTINUE_UNWIND) && !isSpawnHelper &&
             !skip_leaveframe) {
-            __cilkrts_pop_frame(sf);
             __cilkrts_leave_frame(sf);
         }
 

@@ -125,7 +125,11 @@ CHEETAH_INTERNAL extern const char *const __cilkrts_assertion_failed;
 
 #else
 #define CILK_ASSERT(w, ex)
+#define CILK_ASSERT_POINTER_EQUAL(w, P1, P2)
+#define CILK_ASSERT_ZERO(w, ex, FMT)
+#define CILK_ASSERT_INDEX_ZERO(w, LEFT, I, RIGHT, FMT)
 #define CILK_ASSERT_G(ex)
+#define CILK_ASSERT_G_LE(A, B, FMT)
 #define CILK_ABORT(w, msg)
 #define CILK_ABORT_G(msg)
 #define WHEN_CILK_DEBUG(ex)

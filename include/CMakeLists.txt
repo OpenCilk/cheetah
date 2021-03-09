@@ -21,7 +21,7 @@ set(cilk_header_files
   cilk/reducer_vector.h
 )
 
-set(output_dir ${CHEETAH_HEADER_DIR})
+set(output_dir ${CHEETAH_OUTPUT_DIR}/include)
 set(out_files)
 
 function(copy_header_to_output_dir src_dir file)
@@ -43,7 +43,7 @@ endforeach( f )
 add_custom_target(cilk-headers ALL DEPENDS ${out_files})
 set_target_properties(cilk-headers PROPERTIES FOLDER "Cheetah Misc")
 
-set(header_install_dir ${CHEETAH_HEADER_INSTALL_DIR})
+set(header_install_dir ${CHEETAH_INSTALL_PATH}/include)
 
 install(
   FILES ${cilk_header_files}

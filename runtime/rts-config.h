@@ -22,8 +22,17 @@
 
 #ifndef CILK_DEBUG
 #define CILK_DEBUG 1
-#endif 
+#endif
+
+#ifndef CILK_ENABLE_ASAN_HOOKS
+#define CILK_ENABLE_ASAN_HOOKS 0
+#endif
+
+#ifndef CILK_STATS
 #define CILK_STATS 0
+#endif
+
+#define BOSS_THIEF 1
 
 #define CILK_CACHE_LINE 64
 
@@ -39,7 +48,6 @@
 
 #define MIN_NUM_PAGES_PER_STACK 4
 #define MAX_NUM_PAGES_PER_STACK 2000
-#define DEFAULT_STACKSIZE 0x100000 // 1 MBytes
 
 /* The largest known stack alignment requirement is for AVX-512
    which may access memory in aligned 64 byte units. */
@@ -48,7 +56,7 @@
 #define DEFAULT_NPROC 0 // 0 for # of cores available
 #define DEFAULT_DEQ_DEPTH 1024
 #define DEFAULT_STACK_SIZE 0x100000 // 1 MBytes
-#define DEFAULT_FIBER_POOL_CAP 128  // initial per-worker fiber pool capacity
+#define DEFAULT_FIBER_POOL_CAP 3  // initial per-worker fiber pool capacity
 #define DEFAULT_REDUCER_LIMIT 1024
 #define DEFAULT_FORCE_REDUCE 0 // do not self steal to force reduce
 

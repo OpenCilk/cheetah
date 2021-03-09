@@ -17,6 +17,8 @@ CHEETAH_INTERNAL int cheetah_page_shift = 0;
 #define SIZE_THRESH bucket_sizes[NUM_BUCKETS - 1]
 
 /* TODO: Use sizeof(fiber), sizeof(closure), etc. */
+/* NOTE: Allocator does not currently work with non-power-of-2 bucket sizes in
+ * the mix. */
 static const unsigned int bucket_sizes[NUM_BUCKETS] = {32,  64,   128, 256,
                                                        512, 1024, 2048};
 static const unsigned int bucket_capacity[NUM_BUCKETS] = {
@@ -323,9 +325,13 @@ static void extend_global_pool(__cilkrts_worker *w) {
     im_pool->mem_list_index++;
 
     if (im_pool->mem_list_index >= im_pool->mem_list_size) {
-        size_t new_list_size = im_pool->mem_list_size + MEM_LIST_SIZE;
+        CILK_ASSERT(w, im_pool->mem_list_size > 0);
+        size_t new_list_size = 2 * im_pool->mem_list_size;
         im_pool->mem_list = realloc(im_pool->mem_list,
                                     new_list_size * sizeof(*im_pool->mem_list));
+        for (size_t i = im_pool->mem_list_size; i < new_list_size; ++i) {
+            im_pool->mem_list[i] = 0;
+        }
         im_pool->mem_list_size = new_list_size;
         CILK_CHECK(w->g, im_pool->mem_list,
                    "Failed to extend global memory list by %zu bytes",

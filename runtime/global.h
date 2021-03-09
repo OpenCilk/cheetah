@@ -10,10 +10,13 @@
 #include "debug.h"
 #include "fiber.h"
 #include "internal-malloc-impl.h"
+#include "jmpbuf.h"
 #include "mutex.h"
 #include "rts-config.h"
 #include "sched_stats.h"
 #include "types.h"
+
+extern unsigned cilkg_nproc;
 
 struct __cilkrts_worker;
 struct reducer_id_manager;
@@ -56,21 +59,50 @@ struct global_state {
     struct cilk_im_desc im_desc __attribute__((aligned(CILK_CACHE_LINE)));
     cilk_mutex im_lock; // lock for accessing global im_desc
 
+    // These fields are accessed exclusively by the boss thread.
+
+    jmpbuf boss_ctx __attribute__((aligned(CILK_CACHE_LINE)));
+    void *orig_rsp;
     volatile bool workers_started;
-    volatile bool root_closure_initialized;
-    volatile atomic_bool start;
-    volatile atomic_bool done;
-    volatile atomic_bool cilkified;
-    volatile bool terminate;
+
+    // These fields are shared between the boss thread and a couple workers.
+
+    _Atomic uint32_t start_root_worker __attribute__((aligned(CILK_CACHE_LINE)));
+    // NOTE: We can probably update the runtime system so that, when it uses
+    // cilkified_futex, it does not also use the cilkified field.  But the
+    // cilkified field is helpful for debugging, and it seems unlikely that this
+    // optimization would improve performance.
+    _Atomic uint32_t cilkified_futex;
     volatile worker_id exiting_worker;
-    volatile atomic_uint reducer_map_count;
+    volatile atomic_bool cilkified;
 
-    cilk_mutex print_lock; // global lock for printing messages
-
+    pthread_mutex_t start_root_worker_lock;
+    pthread_cond_t start_root_worker_cond_var;
     pthread_mutex_t cilkified_lock;
     pthread_cond_t cilkified_cond_var;
-    pthread_mutex_t start_lock;
-    pthread_cond_t start_cond_var;
+
+    // These fields are shared among all workers in the work-stealing loop.
+
+    volatile atomic_bool done __attribute__((aligned(CILK_CACHE_LINE)));
+    volatile bool terminate;
+    volatile bool root_closure_initialized;
+
+    worker_id *index_to_worker __attribute__((aligned(CILK_CACHE_LINE)));
+    worker_id *worker_to_index;
+    cilk_mutex index_lock;
+
+    // Count of number of disengaged and deprived workers.  Upper 32 bits count
+    // the disengaged workers.  Lower 32 bits count the deprived workers.  These
+    // two counts are stored in a single word to make it easier to update both
+    // counts atomically.
+    _Atomic uint64_t disengaged_deprived __attribute__((aligned(CILK_CACHE_LINE)));
+
+    _Atomic uint32_t disengaged_thieves_futex __attribute__((aligned(CILK_CACHE_LINE)));
+
+    pthread_mutex_t disengaged_lock;
+    pthread_cond_t disengaged_cond_var;
+
+    cilk_mutex print_lock; // global lock for printing messages
 
     struct reducer_id_manager *id_manager; /* null while Cilk is running */
 

@@ -104,73 +104,54 @@ static void mm_dac(int *C, const int *A, const int *B, int n, int length) {
     int const *B11 = B + n*mid + mid;
 
     /* cilk_spawn mm_dac(C00, A00, B00, n, mid); */
-    __cilkrts_save_fp_ctrl_state(&sf);
-    if(!__builtin_setjmp(sf.ctx)) {
+    if (!__cilk_prepare_spawn(&sf)) {
         mm_dac_spawn_helper(C00, A00, B00, n, mid);
     }
 
     /* cilk_spawn mm_dac(C01, A00, B01, n, mid); */
-    __cilkrts_save_fp_ctrl_state(&sf);
-    if(!__builtin_setjmp(sf.ctx)) {
+    if (!__cilk_prepare_spawn(&sf)) {
         mm_dac_spawn_helper(C01, A00, B01, n, mid);
     }
 
     /* cilk_spawn mm_dac(C10, A10, B00, n, mid); */
-    __cilkrts_save_fp_ctrl_state(&sf);
-    if(!__builtin_setjmp(sf.ctx)) {
+    if (!__cilk_prepare_spawn(&sf)) {
         mm_dac_spawn_helper(C10, A10, B00, n, mid);
     }
     mm_dac(C11, A10, B01, n, mid);
 
     /* cilk_sync */
-    if(sf.flags & CILK_FRAME_UNSYNCHED) {
-        __cilkrts_save_fp_ctrl_state(&sf);
-        if(!__builtin_setjmp(sf.ctx)) {
-            __cilkrts_sync(&sf);
-        }
-    }
+    __cilk_sync_nothrow(&sf);
 
     /* cilk_spawn mm_dac(C00, A01, B10, n, mid); */
-    __cilkrts_save_fp_ctrl_state(&sf);
-    if(!__builtin_setjmp(sf.ctx)) {
+    if (!__cilk_prepare_spawn(&sf)) {
         mm_dac_spawn_helper(C00, A01, B10, n, mid);
     }
 
     /* cilk_spawn mm_dac(C01, A01, B11, n, mid); */
-    __cilkrts_save_fp_ctrl_state(&sf);
-    if(!__builtin_setjmp(sf.ctx)) {
+    if (!__cilk_prepare_spawn(&sf)) {
         mm_dac_spawn_helper(C01, A01, B11, n, mid);
     }
 
     /* cilk_spawn mm_dac(C10, A11, B10, n, mid); */
-    __cilkrts_save_fp_ctrl_state(&sf);
-    if(!__builtin_setjmp(sf.ctx)) {
+    if (!__cilk_prepare_spawn(&sf)) {
         mm_dac_spawn_helper(C10, A11, B10, n, mid);
     }
     mm_dac(C11, A11, B11, n, mid);
 
     /* cilk_sync */
-    if(sf.flags & CILK_FRAME_UNSYNCHED) {
-        __cilkrts_save_fp_ctrl_state(&sf);
-        if(!__builtin_setjmp(sf.ctx)) {
-            __cilkrts_sync(&sf);
-        }
-    }
+    __cilk_sync_nothrow(&sf);
 
-    __cilkrts_pop_frame(&sf);
-    if (0 != sf.flags)
-        __cilkrts_leave_frame(&sf);
+    __cilk_parent_epilogue(&sf);
 }
 
 __attribute__((noinline))
 static void mm_dac_spawn_helper(int *C, const int *A, const int *B, int n, int length) {
 
     __cilkrts_stack_frame sf;
-    __cilkrts_enter_frame_fast(&sf);
+    __cilkrts_enter_frame_helper(&sf);
     __cilkrts_detach(&sf);
     mm_dac(C, A, B, n, length);
-    __cilkrts_pop_frame(&sf);
-    __cilkrts_leave_frame(&sf); 
+    __cilk_helper_epilogue(&sf);
 }
 
 static void rand_matrix(int *dest, int n) {

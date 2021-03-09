@@ -1,8 +1,7 @@
 # HandleCheetahFlags - A set of macros used to setup the flags used to compile
 # and link cheetah. These macros add flags to the following CMake variables.
-# - CHEETAH_COMPILE_FLAGS: flags used to compile libc++abi
-# - CHEETAH_LINK_FLAGS: flags used to link libc++abi
-# - CHEETAH_LIBRARIES: libraries to link libc++abi to.
+# - CHEETAH_COMPILE_FLAGS: flags used to compile cheetah
+# - CHEETAH_LINK_FLAGS: flags used to link cheetah
 
 include(CheckCXXCompilerFlag)
 
@@ -185,21 +184,6 @@ macro(add_link_flags_if_supported)
     check_cxx_compiler_flag("${flag}" "CHEETAH_SUPPORTS_${flagname}_FLAG")
     add_link_flags_if(CHEETAH_SUPPORTS_${flagname}_FLAG ${flag})
   endforeach()
-endmacro()
-
-# Add a list of libraries or link flags to 'CHEETAH_LIBRARIES'.
-macro(add_library_flags)
-  foreach(lib ${ARGN})
-    list(APPEND CHEETAH_LIBRARIES ${lib})
-  endforeach()
-endmacro()
-
-# if 'condition' is true then add the specified list of libraries and flags
-# to 'CHEETAH_LIBRARIES'.
-macro(add_library_flags_if condition)
-  if(${condition})
-    add_library_flags(${ARGN})
-  endif()
 endmacro()
 
 # Turn a comma separated CMake list into a space separated string.
