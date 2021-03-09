@@ -370,23 +370,15 @@ void cilkmerge(ELM *low1, ELM *high1,
     *(lowdest + lowsize + 1) = *split1;
 
     /* cilk_spawn cilkmerge(low1, split1 - 1, low2, split2, lowdest); */
-    __cilkrts_save_fp_ctrl_state(&sf);
-    if(!__builtin_setjmp(sf.ctx)) {
+    if (!__cilk_prepare_spawn(&sf)) {
         cilkmerge_spawn_helper(low1, split1 - 1, low2, split2, lowdest);
     }
     cilkmerge(split1 + 1, high1, split2 + 1, high2, lowdest + lowsize + 2);
 
     /* cilk_sync; */
-    if(sf.flags & CILK_FRAME_UNSYNCHED) {
-        __cilkrts_save_fp_ctrl_state(&sf);
-        if(!__builtin_setjmp(sf.ctx)) {
-            __cilkrts_sync(&sf);
-        }
-    }
+    __cilk_sync_nothrow(&sf);
 
-    __cilkrts_pop_frame(&sf);
-    if (0 != sf.flags)
-        __cilkrts_leave_frame(&sf);
+    __cilk_parent_epilogue(&sf);
 
     return;
 }
@@ -396,11 +388,10 @@ cilkmerge_spawn_helper(ELM *low1, ELM *high1,
                        ELM *low2, ELM *high2, ELM *lowdest) {
 
     __cilkrts_stack_frame sf;
-    __cilkrts_enter_frame_fast(&sf);
+    __cilkrts_enter_frame_helper(&sf);
     __cilkrts_detach(&sf);
     cilkmerge(low1, high1, low2, high2, lowdest);
-    __cilkrts_pop_frame(&sf);
-    __cilkrts_leave_frame(&sf); 
+    __cilk_helper_epilogue(&sf);
 }
 
 static void __attribute__ ((noinline)) cilksort_spawn_helper(ELM *low, ELM *tmp, long size); 
@@ -438,52 +429,36 @@ void cilksort(ELM *low, ELM *tmp, long size) {
     tmpD = tmpC + quarter;
 
     /* cilk_spawn cilksort(A, tmpA, quarter); */
-    __cilkrts_save_fp_ctrl_state(&sf);
-    if(!__builtin_setjmp(sf.ctx)) {
+    if (!__cilk_prepare_spawn(&sf)) {
         cilksort_spawn_helper(A, tmpA, quarter);
     }
 
     /* cilk_spawn cilksort(B, tmpB, quarter); */
-    __cilkrts_save_fp_ctrl_state(&sf);
-    if(!__builtin_setjmp(sf.ctx)) {
+    if (!__cilk_prepare_spawn(&sf)) {
         cilksort_spawn_helper(B, tmpB, quarter);
     }
 
     /* cilk_spawn cilksort(C, tmpC, quarter); */
-    __cilkrts_save_fp_ctrl_state(&sf);
-    if(!__builtin_setjmp(sf.ctx)) {
+    if (!__cilk_prepare_spawn(&sf)) {
         cilksort_spawn_helper(C, tmpC, quarter);
     }
     cilksort(D, tmpD, size - 3 * quarter);
 
     /* cilk_sync */
-    if(sf.flags & CILK_FRAME_UNSYNCHED) {
-        __cilkrts_save_fp_ctrl_state(&sf);
-        if(!__builtin_setjmp(sf.ctx)) {
-            __cilkrts_sync(&sf);
-        }
-    }
+    __cilk_sync_nothrow(&sf);
 
     /* cilk_spawn cilkmerge(A, A + quarter - 1, B, B + quarter - 1, tmpA); */
-    __cilkrts_save_fp_ctrl_state(&sf);
-    if(!__builtin_setjmp(sf.ctx)) {
+    if (!__cilk_prepare_spawn(&sf)) {
         cilkmerge_spawn_helper(A, A + quarter - 1, B, B + quarter - 1, tmpA);
     }
     cilkmerge(C, C + quarter - 1, D, low + size - 1, tmpC);
 
     /* cilk_sync */
-    if(sf.flags & CILK_FRAME_UNSYNCHED) {
-        __cilkrts_save_fp_ctrl_state(&sf);
-        if(!__builtin_setjmp(sf.ctx)) {
-            __cilkrts_sync(&sf);
-        }
-    }
+    __cilk_sync_nothrow(&sf);
 
     cilkmerge(tmpA, tmpC - 1, tmpC, tmpA + size - 1, A);
 
-    __cilkrts_pop_frame(&sf);
-    if (0 != sf.flags)
-        __cilkrts_leave_frame(&sf);
+    __cilk_parent_epilogue(&sf);
 
     return;
 }
@@ -491,11 +466,10 @@ void cilksort(ELM *low, ELM *tmp, long size) {
 static void __attribute__ ((noinline)) cilksort_spawn_helper(ELM *low, ELM *tmp, long size) {
 
     __cilkrts_stack_frame sf;
-    __cilkrts_enter_frame_fast(&sf);
+    __cilkrts_enter_frame_helper(&sf);
     __cilkrts_detach(&sf);
     cilksort(low, tmp, size);
-    __cilkrts_pop_frame(&sf);
-    __cilkrts_leave_frame(&sf); 
+    __cilk_helper_epilogue(&sf);
 }
 
 void scramble_array(ELM *arr, unsigned long size) {

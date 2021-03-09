@@ -1,7 +1,6 @@
 #ifndef _JMPBUF_H
 #define _JMPBUF_H
 
-#include <setjmp.h>
 #include <stddef.h>
 
 #include "debug.h"
@@ -27,7 +26,16 @@ typedef void *jmpbuf[JMPBUF_SIZE];
  * @brief Get stack pointer from jump buffer in__cilkrts_stack_frame.
  */
 #define SP(SF) JMPBUF_SP((SF)->ctx)
-// typedef void *__CILK_JUMP_BUFFER[8];
+
+#if defined __i386__ || defined __x86_64__
+// We use an otherwise unused entry in the jmpbuf to store MXCSR
+#define JMPBUF_MXCSR(ctx) (ctx)[3]
+/**
+ * @brief Get MXCSR from jump buffer in__cilkrts_stack_frame.  X86 and X86_64
+ * only.
+ */
+#define MXCSR(SF) JMPBUF_MXCSR((SF)->ctx)
+#endif
 
 /* These macros are only for debugging. */
 #if defined __i386__

@@ -12,7 +12,8 @@ OPTIONS = $(OPT) $(ARCH) $(DBG) -Wall $(DEFINES) -fno-omit-frame-pointer
 # RTS_DLIBS = -L../runtime -Wl,-rpath -Wl,../runtime -lopencilk
 # RTS_LIBS = ../runtime/$(RTS_LIB).so
 # static linking
-RTS_LIBS = ../runtime/$(RTS_LIB).a
+RESOURCE_DIR=$(realpath ..)
+RTS_LIBS = $(RTS_LIBDIR)/$(RTS_LIB).a
 TIMING_COUNT := 1
 
 .PHONY: all check memcheck clean
