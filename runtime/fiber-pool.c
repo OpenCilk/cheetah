@@ -9,7 +9,7 @@
 #include "local.h"
 #include "mutex.h"
 
-// Whent the pool becomes full (empty), free (allocate) this fraction
+// When the pool becomes full (empty), free (allocate) this fraction
 // of the pool back to (from) parent / the OS.
 #define BATCH_FRACTION 2
 #define GLOBAL_POOL_RATIO 10 // make global pool this much larger
@@ -90,6 +90,10 @@ static void fiber_pool_init(struct cilk_fiber_pool *pool, size_t stacksize,
 static void fiber_pool_destroy(struct cilk_fiber_pool *pool) {
     CILK_ASSERT_G(pool->size == 0);
     cilk_mutex_destroy(&pool->lock);
+    // pool->fibers might be NULL if the fiber pool was never actually
+    // initialized, e.g., because no Cilk code was run.
+    if (pool->fibers == NULL)
+        return;
     free(pool->fibers);
     pool->parent = NULL;
     pool->fibers = NULL;
@@ -283,6 +287,20 @@ void cilk_fiber_pool_global_destroy(global_state *g) {
 }
 
 /**
+ * Per-worker fiber pool zero initialization.  Initializes the fiber pool to a
+ * safe zero state, in case that worker is created by
+ * cilk_fiber_pool_per_worker_init() never gets called on that worker.  Should
+ * initialize the fiber bool sufficiently for calls to
+ * cilk_fiber_pool_per_worker_terminate() and
+ * cilk_fiber_pool_per_worker_destroy() to succeed.
+ */
+void cilk_fiber_pool_per_worker_zero_init(__cilkrts_worker *w) {
+    struct cilk_fiber_pool *pool = &(w->l->fiber_pool);
+    pool->size = 0;
+    pool->fibers = NULL;
+}
+
+/**
  * Per-worker fiber pool initialization: should be called per worker so
  * so that fiber comes from the core on which the worker is running on.
  */
@@ -295,8 +313,8 @@ void cilk_fiber_pool_per_worker_init(__cilkrts_worker *w) {
     CILK_ASSERT(w, NULL != pool->fibers);
     CILK_ASSERT(w, w->g->fiber_pool.stack_size == pool->stack_size);
 
-    fiber_pool_allocate_batch(w, pool, bufsize / BATCH_FRACTION);
     fiber_pool_stat_init(pool);
+    fiber_pool_allocate_batch(w, pool, bufsize / BATCH_FRACTION);
 }
 
 /* This does not yet destroy the fiber pool; merely collects

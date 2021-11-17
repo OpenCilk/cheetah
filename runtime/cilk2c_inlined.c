@@ -17,40 +17,25 @@
 #include "readydeque.h"
 #include "scheduler.h"
 
-#ifdef ENABLE_CILKRTS_PEDIGREE
-extern __cilkrts_pedigree cilkrts_root_pedigree_node;
-extern uint64_t DPRNG_PRIME;
-extern uint64_t* dprng_m_array;
-extern uint64_t dprng_m_X;
+#include "pedigree_ext.c"
 
-uint64_t __cilkrts_dprng_swap_halves(uint64_t x);
-uint64_t __cilkrts_dprng_mix(uint64_t x);
-uint64_t __cilkrts_dprng_mix_mod_p(uint64_t x);
-uint64_t __cilkrts_dprng_sum_mod_p(uint64_t a, uint64_t b);
-void __cilkrts_init_dprng(void);
-
-uint64_t __cilkrts_get_dprand(void) {
-    __cilkrts_worker *w = __cilkrts_get_tls_worker();
-    __cilkrts_bump_worker_rank();
-    return __cilkrts_dprng_mix_mod_p(w->current_stack_frame->dprng_dotproduct);
-}
-
-#endif
+// This variable encodes the alignment of a __cilkrts_stack_frame, both in its
+// value and in its own alignment.  Because LLVM IR does not associate
+// alignments with types, this variable communicates the desired alignment to
+// the compiler instead.
+_Alignas(__cilkrts_stack_frame)
+size_t __cilkrts_stack_frame_align = __alignof__(__cilkrts_stack_frame);
 
 // Begin a Cilkified region.  The routine runs on a Cilkifying thread to
 // transfer the execution of this function to the workers in global_state g.
 // This routine must be inlined for correctness.
 static inline __attribute__((always_inline)) void
-cilkify(global_state *g, __cilkrts_stack_frame *sf) {
-#ifdef ENABLE_CILKRTS_PEDIGREE
-    __cilkrts_init_dprng();
-#endif
-
+cilkify(__cilkrts_stack_frame *sf) {
     // After inlining, the setjmp saves the processor state, including the frame
     // pointer, of the Cilk function.
     if (__builtin_setjmp(sf->ctx) == 0) {
         sysdep_save_fp_ctrl_state(sf);
-        __cilkrts_internal_invoke_cilkified_root(g, sf);
+        __cilkrts_internal_invoke_cilkified_root(sf);
     } else {
         sanitizer_finish_switch_fiber();
     }
@@ -74,32 +59,6 @@ uncilkify(global_state *g, __cilkrts_stack_frame *sf) {
     }
 }
 
-#ifdef ENABLE_CILKRTS_PEDIGREE
-__attribute__((always_inline)) __cilkrts_pedigree __cilkrts_get_pedigree(void) {
-    __cilkrts_worker *w = __cilkrts_get_tls_worker();
-    if (w == NULL) {
-        return cilkrts_root_pedigree_node;
-    } else {
-        __cilkrts_pedigree ret_ped;
-        ret_ped.parent = &(w->current_stack_frame->pedigree);
-        ret_ped.rank = w->current_stack_frame->rank;
-        return ret_ped;
-    }
-}
-
-__attribute__((always_inline)) void __cilkrts_bump_worker_rank(void) {
-    __cilkrts_worker *w = __cilkrts_get_tls_worker();
-    if (w == NULL) {
-        cilkrts_root_pedigree_node.rank++;
-    } else {
-        w->current_stack_frame->rank++;
-    }
-    w->current_stack_frame->dprng_dotproduct = __cilkrts_dprng_sum_mod_p(
-        w->current_stack_frame->dprng_dotproduct,
-        dprng_m_array[w->current_stack_frame->dprng_depth]);
-}
-#endif
-
 // Enter a new Cilk function, i.e., a function that contains a cilk_spawn.  This
 // function must be inlined for correctness.
 __attribute__((always_inline)) void
@@ -107,7 +66,7 @@ __cilkrts_enter_frame(__cilkrts_stack_frame *sf) {
     __cilkrts_worker *w = __cilkrts_get_tls_worker();
     sf->flags = 0;
     if (NULL == w) {
-        cilkify(default_cilkrts, sf);
+        cilkify(sf);
         w = __cilkrts_get_tls_worker();
     }
     cilkrts_alert(CFRAME, w, "__cilkrts_enter_frame %p", (void *)sf);
@@ -117,25 +76,6 @@ __cilkrts_enter_frame(__cilkrts_stack_frame *sf) {
     atomic_store_explicit(&sf->worker, w, memory_order_relaxed);
     w->current_stack_frame = sf;
     // WHEN_CILK_DEBUG(sf->magic = CILK_STACKFRAME_MAGIC);
-
-#ifdef ENABLE_CILKRTS_PEDIGREE
-    // Pedigree maintenance.
-    if (sf->call_parent != NULL && !(sf->flags & CILK_FRAME_LAST)) {
-        sf->pedigree.rank = sf->call_parent->rank++;
-        sf->pedigree.parent = &(sf->call_parent->pedigree);
-        sf->dprng_depth = sf->call_parent->dprng_depth + 1;
-        sf->call_parent->dprng_dotproduct = __cilkrts_dprng_sum_mod_p(
-            sf->call_parent->dprng_dotproduct,
-            dprng_m_array[sf->call_parent->dprng_depth]);
-        sf->dprng_dotproduct = sf->call_parent->dprng_dotproduct;
-    } else {
-        sf->pedigree.rank = 0;
-        sf->pedigree.parent = NULL;
-        sf->dprng_depth = 0;
-        sf->dprng_dotproduct = dprng_m_X;
-    }
-    sf->rank = 0;
-#endif
 }
 
 // Enter a spawn helper, i.e., a fucntion containing code that was cilk_spawn'd.
@@ -152,25 +92,6 @@ __cilkrts_enter_frame_helper(__cilkrts_stack_frame *sf) {
     sf->call_parent = w->current_stack_frame;
     atomic_store_explicit(&sf->worker, w, memory_order_relaxed);
     w->current_stack_frame = sf;
-
-#ifdef ENABLE_CILKRTS_PEDIGREE
-    // Pedigree maintenance.
-    if (sf->call_parent != NULL && !(sf->flags & CILK_FRAME_LAST)) {
-        sf->pedigree.rank = sf->call_parent->rank++;
-        sf->pedigree.parent = &(sf->call_parent->pedigree);
-        sf->dprng_depth = sf->call_parent->dprng_depth + 1;
-        sf->call_parent->dprng_dotproduct = __cilkrts_dprng_sum_mod_p(
-            sf->call_parent->dprng_dotproduct,
-            dprng_m_array[sf->call_parent->dprng_depth]);
-        sf->dprng_dotproduct = sf->call_parent->dprng_dotproduct;
-    } else {
-        sf->pedigree.rank = 0;
-        sf->pedigree.parent = NULL;
-        sf->dprng_depth = 0;
-        sf->dprng_dotproduct = dprng_m_X;
-    }
-    sf->rank = 0;
-#endif
 }
 
 __attribute__((always_inline)) int
@@ -183,7 +104,8 @@ __cilk_prepare_spawn(__cilkrts_stack_frame *sf) {
     return res;
 }
 
-static inline __cilkrts_worker *get_tls_worker(__cilkrts_stack_frame *sf) {
+static inline
+__cilkrts_worker *get_worker_from_stack(__cilkrts_stack_frame *sf) {
     // In principle, we should be able to get the worker efficiently by calling
     // __cilkrts_get_tls_worker().  But code-generation on many systems assumes
     // that the thread on which a function runs never changes.  As a result, it
@@ -200,7 +122,7 @@ static inline __cilkrts_worker *get_tls_worker(__cilkrts_stack_frame *sf) {
 // parent frame.
 __attribute__((always_inline)) void
 __cilkrts_detach(__cilkrts_stack_frame *sf) {
-    __cilkrts_worker *w = get_tls_worker(sf);
+    __cilkrts_worker *w = get_worker_from_stack(sf);
     cilkrts_alert(CFRAME, w, "__cilkrts_detach %p", (void *)sf);
 
     CILK_ASSERT(w, CHECK_CILK_FRAME_MAGIC(w->g, sf));
@@ -208,6 +130,11 @@ __cilkrts_detach(__cilkrts_stack_frame *sf) {
     CILK_ASSERT(w, w->current_stack_frame == sf);
 
     struct __cilkrts_stack_frame *parent = sf->call_parent;
+
+    if (USE_EXTENSION) {
+        __cilkrts_extend_spawn(w, &parent->extension, &w->extension);
+    }
+
     sf->flags |= CILK_FRAME_DETACHED;
     struct __cilkrts_stack_frame **tail =
         atomic_load_explicit(&w->tail, memory_order_relaxed);
@@ -220,44 +147,58 @@ __cilkrts_detach(__cilkrts_stack_frame *sf) {
 }
 
 __attribute__((always_inline)) void __cilk_sync(__cilkrts_stack_frame *sf) {
-    if (sf->flags & CILK_FRAME_UNSYNCHED) {
-        if (__builtin_setjmp(sf->ctx) == 0) {
-            sysdep_save_fp_ctrl_state(sf);
-            __cilkrts_sync(sf);
-        } else {
-            sanitizer_finish_switch_fiber();
-            if (sf->flags & CILK_FRAME_EXCEPTION_PENDING) {
-                __cilkrts_check_exception_raise(sf);
+    if (sf->flags & CILK_FRAME_UNSYNCHED || USE_EXTENSION) {
+        if (sf->flags & CILK_FRAME_UNSYNCHED) {
+            if (__builtin_setjmp(sf->ctx) == 0) {
+                sysdep_save_fp_ctrl_state(sf);
+                __cilkrts_sync(sf);
+            } else {
+                sanitizer_finish_switch_fiber();
+                if (sf->flags & CILK_FRAME_EXCEPTION_PENDING) {
+                    __cilkrts_check_exception_raise(sf);
+                }
             }
+        }
+        if (USE_EXTENSION) {
+            __cilkrts_worker *w = get_worker_from_stack(sf);
+            __cilkrts_extend_sync(&w->extension);
         }
     }
 }
 
 __attribute__((always_inline)) void
 __cilk_sync_nothrow(__cilkrts_stack_frame *sf) {
-    if (sf->flags & CILK_FRAME_UNSYNCHED) {
-        if (__builtin_setjmp(sf->ctx) == 0) {
-            sysdep_save_fp_ctrl_state(sf);
-            __cilkrts_sync(sf);
-        } else {
-            sanitizer_finish_switch_fiber();
+    if (sf->flags & CILK_FRAME_UNSYNCHED || USE_EXTENSION) {
+        if (sf->flags & CILK_FRAME_UNSYNCHED) {
+            if (__builtin_setjmp(sf->ctx) == 0) {
+                sysdep_save_fp_ctrl_state(sf);
+                __cilkrts_sync(sf);
+            } else {
+                sanitizer_finish_switch_fiber();
+            }
+        }
+        if (USE_EXTENSION) {
+            __cilkrts_worker *w = get_worker_from_stack(sf);
+            __cilkrts_extend_sync(&w->extension);
         }
     }
 }
 
 __attribute__((always_inline)) void
 __cilkrts_leave_frame(__cilkrts_stack_frame *sf) {
-    __cilkrts_worker *w = get_tls_worker(sf);
+    __cilkrts_worker *w = get_worker_from_stack(sf);
     cilkrts_alert(CFRAME, w, "__cilkrts_leave_frame %p", (void *)sf);
 
     CILK_ASSERT(w, CHECK_CILK_FRAME_MAGIC(w->g, sf));
     CILK_ASSERT(w, sf->worker == __cilkrts_get_tls_worker());
     // WHEN_CILK_DEBUG(sf->magic = ~CILK_STACKFRAME_MAGIC);
 
+    __cilkrts_stack_frame *parent = sf->call_parent;
+
     // Pop this frame off the cactus stack.  This logic used to be in
     // __cilkrts_pop_frame, but has been manually inlined to avoid reloading the
     // worker unnecessarily.
-    w->current_stack_frame = sf->call_parent;
+    w->current_stack_frame = parent;
     sf->call_parent = NULL;
 
     // Check if sf is the final stack frame, and if so, terminate the Cilkified
@@ -290,7 +231,7 @@ __cilkrts_leave_frame(__cilkrts_stack_frame *sf) {
 
 __attribute__((always_inline)) void
 __cilkrts_leave_frame_helper(__cilkrts_stack_frame *sf) {
-    __cilkrts_worker *w = get_tls_worker(sf);
+    __cilkrts_worker *w = get_worker_from_stack(sf);
     cilkrts_alert(CFRAME, w, "__cilkrts_leave_frame_helper %p", (void *)sf);
 
     CILK_ASSERT(w, CHECK_CILK_FRAME_MAGIC(w->g, sf));
@@ -300,7 +241,12 @@ __cilkrts_leave_frame_helper(__cilkrts_stack_frame *sf) {
     // Pop this frame off the cactus stack.  This logic used to be in
     // __cilkrts_pop_frame, but has been manually inlined to avoid reloading the
     // worker unnecessarily.
-    w->current_stack_frame = sf->call_parent;
+    __cilkrts_stack_frame *parent = sf->call_parent;
+    w->current_stack_frame = parent;
+    if (USE_EXTENSION) {
+        __cilkrts_extend_return_from_spawn(w, &w->extension);
+        w->extension = parent->extension;
+    }
     sf->call_parent = NULL;
 
     CILK_ASSERT(w, sf->flags & CILK_FRAME_DETACHED);
@@ -347,21 +293,27 @@ void __cilkrts_enter_landingpad(__cilkrts_stack_frame *sf, int32_t sel) {
 
 __attribute__((always_inline))
 void __cilkrts_pause_frame(__cilkrts_stack_frame *sf, char *exn) {
-    __cilkrts_worker *w = get_tls_worker(sf);
+    __cilkrts_worker *w = get_worker_from_stack(sf);
     cilkrts_alert(CFRAME, w, "__cilkrts_pause_frame %p", (void *)sf);
 
     CILK_ASSERT(w, CHECK_CILK_FRAME_MAGIC(w->g, sf));
     CILK_ASSERT(w, sf->worker == __cilkrts_get_tls_worker());
 
+    __cilkrts_stack_frame *parent = sf->call_parent;
+
     // Pop this frame off the cactus stack.  This logic used to be in
     // __cilkrts_pop_frame, but has been manually inlined to avoid reloading the
     // worker unnecessarily.
-    w->current_stack_frame = sf->call_parent;
+    w->current_stack_frame = parent;
     sf->call_parent = NULL;
 
     // A __cilkrts_pause_frame may be reached before the spawn-helper frame has
     // detached.  In that case, THE is not required.
     if (sf->flags & CILK_FRAME_DETACHED) {
+        if (USE_EXTENSION) {
+            __cilkrts_extend_return_from_spawn(w, &w->extension);
+            w->extension = parent->extension;
+        }
         __cilkrts_stack_frame **tail =
             atomic_load_explicit(&w->tail, memory_order_relaxed);
         --tail;

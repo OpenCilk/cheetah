@@ -45,6 +45,7 @@ _Unwind_Reason_Code __cilk_personality_internal(
 
     __cilkrts_worker *w = __cilkrts_get_tls_worker();
     __cilkrts_stack_frame *sf = w->current_stack_frame;
+    ReadyDeque *deques = w->g->deques;
 
     if (actions & _UA_SEARCH_PHASE) {
         // don't do anything out of the ordinary during search phase.
@@ -60,8 +61,9 @@ _Unwind_Reason_Code __cilk_personality_internal(
             sysdep_save_fp_ctrl_state(sf);
 
             if (__builtin_setjmp(sf->ctx) == 0) {
-                deque_lock_self(w);
-                Closure *t = deque_peek_bottom(w, w->self);
+
+                deque_lock_self(deques, w);
+                Closure *t = deque_peek_bottom(deques, w, w->self);
 
                 // ensure that we return here after a cilk_sync.
                 t->parent_rsp = t->orig_rsp;
@@ -70,7 +72,7 @@ _Unwind_Reason_Code __cilk_personality_internal(
                 // set closure_exception
                 t->user_exn.exn = (char *)ue_header;
 
-                deque_unlock_self(w);
+                deque_unlock_self(deques, w);
 
                 // For now, use this flag to indicate that we are setjmping from
                 // the personality function. This will "disable" some asserts in
@@ -83,9 +85,9 @@ _Unwind_Reason_Code __cilk_personality_internal(
 
         // after longjmping back, the worker may have changed.
         w = __cilkrts_get_tls_worker();
-        deque_lock_self(w);
-        Closure *t = deque_peek_bottom(w, w->self);
-        deque_unlock_self(w);
+        deque_lock_self(deques, w);
+        Closure *t = deque_peek_bottom(deques, w, w->self);
+        deque_unlock_self(deques, w);
         bool in_reraised_cfa = (t->reraise_cfa == (char *)get_cfa(context));
         bool skip_leaveframe = ((t->reraise_cfa != NULL) && !in_reraised_cfa);
         if (in_reraised_cfa)

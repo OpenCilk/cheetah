@@ -43,11 +43,14 @@ struct rts_options {
     unsigned int force_reduce;   /* can be set via env variable CILK_FORCE_REDUCE */
 };
 
+struct worker_args;
+
 struct global_state {
     /* globally-visible options (read-only after init) */
     struct rts_options options;
 
-    unsigned int nworkers; /* size of next 3 arrays */
+    unsigned int nworkers; /* size of next 4 arrays */
+    struct worker_args *worker_args;
     struct __cilkrts_worker **workers;
     /* dynamically-allocated array of deques, one per processor */
     struct ReadyDeque *deques;
@@ -91,11 +94,14 @@ struct global_state {
     worker_id *worker_to_index;
     cilk_mutex index_lock;
 
-    // Count of number of disengaged and deprived workers.  Upper 32 bits count
-    // the disengaged workers.  Lower 32 bits count the deprived workers.  These
+    // Count of number of disengaged and sentinel workers.  Upper 32 bits count
+    // the disengaged workers.  Lower 32 bits count the sentinel workers.  These
     // two counts are stored in a single word to make it easier to update both
     // counts atomically.
-    _Atomic uint64_t disengaged_deprived __attribute__((aligned(CILK_CACHE_LINE)));
+    _Atomic uint64_t disengaged_sentinel __attribute__((aligned(CILK_CACHE_LINE)));
+#define GET_DISENGAGED(D) ((D) >> 32)
+#define GET_SENTINEL(D) ((D) & 0xffffffff)
+#define DISENGAGED_SENTINEL(A, B) (((uint64_t)(A) << 32) | (uint32_t)(B))
 
     _Atomic uint32_t disengaged_thieves_futex __attribute__((aligned(CILK_CACHE_LINE)));
 
@@ -106,11 +112,20 @@ struct global_state {
 
     struct reducer_id_manager *id_manager; /* null while Cilk is running */
 
+    struct hyper_table *hyper_table;
+
     struct global_sched_stats stats;
 };
 
-extern global_state *default_cilkrts;
+CHEETAH_INTERNAL extern global_state *default_cilkrts;
 
+struct worker_args {
+    worker_id id;
+    global_state *g;
+};
+
+CHEETAH_INTERNAL
+__cilkrts_worker *__cilkrts_init_tls_worker(worker_id i, global_state *g);
 CHEETAH_INTERNAL void set_nworkers(global_state *g, unsigned int nworkers);
 CHEETAH_INTERNAL void set_force_reduce(global_state *g,
                                        unsigned int force_reduce);

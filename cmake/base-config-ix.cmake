@@ -6,6 +6,7 @@
 include(CheckIncludeFile)
 include(CheckCXXSourceCompiles)
 include(TestBigEndian)
+include(CMakePushCheckState)
 
 check_include_file(unwind.h HAVE_UNWIND_H)
 

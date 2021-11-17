@@ -3,23 +3,8 @@ set(cilk_header_files
   cilk/cilk_api.h
   cilk/cilk_stub.h
   cilk/holder.h
-  cilk/hyperobject_base.h
-  cilk/metaprogramming.h
-  cilk/reducer.h
-  cilk/reducer_file.h
-  cilk/reducer_list.h
-  cilk/reducer_max.h
-  cilk/reducer_min.h
-  cilk/reducer_min_max.h
-  cilk/reducer_opadd.h
-  cilk/reducer_opand.h
-  cilk/reducer_opmul.h
-  cilk/reducer_opor.h
-  cilk/reducer_opxor.h
-  cilk/reducer_ostream.h
-  cilk/reducer_string.h
-  cilk/reducer_vector.h
-)
+  cilk/opadd_reducer.h
+  cilk/ostream_reducer.h)
 
 set(output_dir ${CHEETAH_OUTPUT_DIR}/include)
 set(out_files)

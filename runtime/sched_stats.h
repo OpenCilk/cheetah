@@ -27,6 +27,8 @@ struct sched_stats {
 
     uint64_t steals;
     uint64_t repos;
+    uint64_t reeng_rqsts;
+    uint64_t onesen_rqsts;
 };
 
 struct global_sched_stats {
@@ -38,6 +40,8 @@ struct global_sched_stats {
     uint64_t boss_end;
     uint64_t steals;
     uint64_t repos;
+    uint64_t reeng_rqsts;
+    uint64_t onesen_rqsts;
     double time[NUMBER_OF_STATS]; // Total time measured for all stats
     uint64_t count[NUMBER_OF_STATS];
 };
