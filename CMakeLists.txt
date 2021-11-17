@@ -16,9 +16,9 @@ if (CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR OR CHEETAH_STANDALONE_BUI
   set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
   set(PACKAGE_NAME Cheetah)
-  set(PACKAGE_VERSION 12.0.0)
+  set(PACKAGE_VERSION 14.0.5)
   set(PACKAGE_STRING "${PACKAGE_NAME} ${PACKAGE_VERSION}")
-  set(PACKAGE_BUGREPORT "bugs@opencilk.org")
+  set(PACKAGE_BUGREPORT "https://github.com/OpenCilk/cheetah/issues/")
 endif()
 
 # Require out of source build.
@@ -109,6 +109,9 @@ if (CHEETAH_STANDALONE_BUILD)
   endif()
   set(LLVM_LIT_ARGS "${LIT_ARGS_DEFAULT}" CACHE STRING "Default options for lit")
   set(LLVM_LIT_OUTPUT_DIR "${CHEETAH_EXEC_OUTPUT_DIR}")
+
+  # Define llvm-link path
+  set(LLVM_LINK_PATH "${LLVM_TOOLS_BINARY_DIR}/llvm-link")
 endif()
 
 construct_cheetah_default_triple()

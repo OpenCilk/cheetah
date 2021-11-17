@@ -78,6 +78,8 @@ void sysdep_restore_fp_state(__cilkrts_stack_frame *sf) {
 }
 
 CHEETAH_INTERNAL
+char *sysdep_get_stack_start(struct cilk_fiber *fiber);
+CHEETAH_INTERNAL
 char *sysdep_reset_stack_for_resume(struct cilk_fiber *fiber,
                                     __cilkrts_stack_frame *sf);
 CHEETAH_INTERNAL_NORETURN

@@ -18,6 +18,12 @@ enum im_tag {
 
 CHEETAH_INTERNAL const char *name_for_im_tag(enum im_tag);
 
+/* Helper routine to round sizes to alignments, for use with cilk_aligned_alloc.
+ */
+static inline size_t round_size_to_alignment(size_t alignment, size_t size) {
+    return ((size + alignment - 1) / alignment) * alignment;
+}
+
 /* Custom implementation of aligned_alloc. */
 static inline void *cilk_aligned_alloc(size_t alignment, size_t size) {
 #if defined(_ISOC11_SOURCE)

@@ -9,7 +9,7 @@
 #include "local.h"
 #include "mutex.h"
 
-// Whent the pool becomes full (empty), free (allocate) this fraction
+// When the pool becomes full (empty), free (allocate) this fraction
 // of the pool back to (from) parent / the OS.
 #define BATCH_FRACTION 2
 #define GLOBAL_POOL_RATIO 10 // make global pool this much larger
@@ -295,8 +295,8 @@ void cilk_fiber_pool_per_worker_init(__cilkrts_worker *w) {
     CILK_ASSERT(w, NULL != pool->fibers);
     CILK_ASSERT(w, w->g->fiber_pool.stack_size == pool->stack_size);
 
-    fiber_pool_allocate_batch(w, pool, bufsize / BATCH_FRACTION);
     fiber_pool_stat_init(pool);
+    fiber_pool_allocate_batch(w, pool, bufsize / BATCH_FRACTION);
 }
 
 /* This does not yet destroy the fiber pool; merely collects

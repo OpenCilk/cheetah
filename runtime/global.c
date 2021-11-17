@@ -3,6 +3,9 @@
 #endif
 
 #include <pthread.h>
+#ifdef __FreeBSD__
+#include <pthread_np.h>
+#endif
 #include <sched.h>
 #include <stdio.h>
 #include <string.h>
@@ -10,9 +13,14 @@
 
 #include "debug.h"
 #include "global.h"
+#include "hypertable.h"
 #include "init.h"
 #include "readydeque.h"
 #include "reducer_impl.h"
+
+#if defined __FreeBSD__ && __FreeBSD__ < 13
+typedef cpuset_t cpu_set_t;
+#endif
 
 global_state *default_cilkrts;
 
@@ -175,11 +183,13 @@ global_state *global_state_init(int argc, char *argv[]) {
     g->root_closure_initialized = false;
     atomic_store_explicit(&g->done, 0, memory_order_relaxed);
     atomic_store_explicit(&g->cilkified, 0, memory_order_relaxed);
-    atomic_store_explicit(&g->disengaged_deprived, 0, memory_order_relaxed);
+    atomic_store_explicit(&g->disengaged_sentinel, 0, memory_order_relaxed);
 
     g->terminate = false;
     g->exiting_worker = 0;
 
+    g->worker_args =
+        (struct worker_args *)calloc(active_size, sizeof(struct worker_args));
     g->workers =
         (__cilkrts_worker **)calloc(active_size, sizeof(__cilkrts_worker *));
     g->deques = (ReadyDeque *)cilk_aligned_alloc(
@@ -199,12 +209,14 @@ global_state *global_state_init(int argc, char *argv[]) {
 void for_each_worker(global_state *g, void (*fn)(__cilkrts_worker *, void *),
                      void *data) {
     for (unsigned i = 0; i < g->options.nproc; ++i)
-        fn(g->workers[i], data);
+        if (g->workers[i])
+            fn(g->workers[i], data);
 }
 
 void for_each_worker_rev(global_state *g,
                          void (*fn)(__cilkrts_worker *, void *), void *data) {
     unsigned i = g->options.nproc;
     while (i-- > 0)
-        fn(g->workers[i], data);
+        if (g->workers[i])
+            fn(g->workers[i], data);
 }

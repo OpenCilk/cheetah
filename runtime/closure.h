@@ -156,6 +156,8 @@ static inline void Closure_init(Closure *t) {
     t->frame = NULL;
     t->fiber = NULL;
     t->fiber_child = NULL;
+    t->ext_fiber = NULL;
+    t->ext_fiber_child = NULL;
 
     t->orig_rsp = NULL;
 
@@ -340,32 +342,35 @@ void Closure_remove_callee(__cilkrts_worker *const w, Closure *caller) {
 
 /* This function is used for steal, the next function for sync.
    The invariants are slightly different. */
-static inline
-void Closure_suspend_victim(__cilkrts_worker *thief, __cilkrts_worker *victim,
-                            Closure *cl) {
+static inline void Closure_suspend_victim(struct ReadyDeque *deques,
+                                          __cilkrts_worker *thief,
+                                          __cilkrts_worker *victim,
+                                          Closure *cl) {
 
     Closure *cl1;
+    worker_id victim_id = victim->self;
 
     CILK_ASSERT(thief, !cl->user_rmap);
 
     Closure_checkmagic(thief, cl);
     Closure_assert_ownership(thief, cl);
-    deque_assert_ownership(thief, victim->self);
+    deque_assert_ownership(deques, thief, victim_id);
 
     CILK_ASSERT(thief, cl == thief->g->root_closure || cl->spawn_parent ||
                            cl->call_parent);
 
     Closure_change_status(thief, cl, CLOSURE_RUNNING, CLOSURE_SUSPENDED);
 
-    cl1 = deque_xtract_bottom(thief, victim->self);
+    cl1 = deque_xtract_bottom(deques, thief, victim_id);
     CILK_ASSERT(thief, cl == cl1);
     USE_UNUSED(cl1);
 }
 
-static inline
-void Closure_suspend(__cilkrts_worker *const w, Closure *cl) {
+static inline void Closure_suspend(struct ReadyDeque *deques,
+                                   __cilkrts_worker *const w, Closure *cl) {
 
     Closure *cl1;
+    worker_id self = w->self;
 
     CILK_ASSERT(w, !cl->user_rmap);
 
@@ -373,18 +378,18 @@ void Closure_suspend(__cilkrts_worker *const w, Closure *cl) {
 
     Closure_checkmagic(w, cl);
     Closure_assert_ownership(w, cl);
-    deque_assert_ownership(w, w->self);
+    deque_assert_ownership(deques, w, self);
 
     CILK_ASSERT(w, cl == w->g->root_closure || cl->spawn_parent ||
                        cl->call_parent);
     CILK_ASSERT(w, cl->frame != NULL);
     CILK_ASSERT(w, __cilkrts_stolen(cl->frame));
-    CILK_ASSERT(w, cl->frame->worker->self == w->self);
+    CILK_ASSERT(w, cl->frame->worker->self == self);
 
     Closure_change_status(w, cl, CLOSURE_RUNNING, CLOSURE_SUSPENDED);
     atomic_store_explicit(&cl->frame->worker, INVALID, memory_order_relaxed);
 
-    cl1 = deque_xtract_bottom(w, w->self);
+    cl1 = deque_xtract_bottom(deques, w, self);
 
     CILK_ASSERT(w, cl == cl1);
     USE_UNUSED(cl1);

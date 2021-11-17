@@ -19,6 +19,7 @@
 #endif
 #include <unistd.h>
 
+#include "cilk-internal.h"
 #include "debug.h"
 #include "fiber.h"
 #include "global.h"
@@ -31,26 +32,22 @@
 
 #include "reducer_impl.h"
 
-extern __thread bool is_boss_thread;
-
-#ifdef __FreeBSD__
+#if defined __FreeBSD__ && __FreeBSD__ < 13
 typedef cpuset_t cpu_set_t;
 #endif
 
-static local_state *worker_local_init(global_state *g) {
-    local_state *l = (local_state *)calloc(1, sizeof(local_state));
+static local_state *worker_local_init(local_state *l, global_state *g) {
     l->shadow_stack = (__cilkrts_stack_frame **)calloc(
         g->options.deqdepth, sizeof(struct __cilkrts_stack_frame *));
     for (int i = 0; i < JMPBUF_SIZE; i++) {
         l->rts_ctx[i] = NULL;
     }
+    l->hyper_table = NULL;
     l->fiber_to_free = NULL;
+    l->ext_fiber_to_free = NULL;
     l->state = WORKER_IDLE;
-    l->lock_wait = false;
     l->provably_good_steal = false;
     l->rand_next = 0; /* will be reset in scheduler loop */
-    l->index_to_worker =
-        (worker_id *)calloc(g->options.nproc, sizeof(worker_id));
     cilk_sched_stats_init(&(l->stats));
 
     return l;
@@ -69,28 +66,43 @@ static void deques_init(global_state *g) {
 static void workers_init(global_state *g) {
     cilkrts_alert(BOOT, NULL, "(workers_init) Initializing workers");
     for (unsigned int i = 0; i < g->options.nproc; i++) {
-        cilkrts_alert(BOOT, NULL, "(workers_init) Initializing worker %u", i);
-        __cilkrts_worker *w = (__cilkrts_worker *)cilk_aligned_alloc(
-            __alignof__(__cilkrts_worker), sizeof(__cilkrts_worker));
-        w->self = i;
-        w->g = g;
-        w->l = worker_local_init(g);
-
-        w->ltq_limit = w->l->shadow_stack + g->options.deqdepth;
-        g->workers[i] = w;
-        __cilkrts_stack_frame **init = w->l->shadow_stack + 1;
-        atomic_store_explicit(&w->tail, init, memory_order_relaxed);
-        atomic_store_explicit(&w->head, init, memory_order_relaxed);
-        atomic_store_explicit(&w->exc, init, memory_order_relaxed);
-        w->current_stack_frame = NULL;
-        w->reducer_map = NULL;
-        // initialize internal malloc first
-        cilk_internal_malloc_per_worker_init(w);
+        if (i == 0) {
+            __cilkrts_init_tls_worker(0, g);
+        }
 
         // Initialize index-to-worker map entry for this worker.
+        g->worker_args[i].id = i;
+        g->worker_args[i].g = g;
         g->index_to_worker[i] = i;
         g->worker_to_index[i] = i;
     }
+}
+
+__cilkrts_worker *__cilkrts_init_tls_worker(worker_id i, global_state *g) {
+    cilkrts_alert(BOOT, NULL, "(workers_init) Initializing worker %u", i);
+    size_t alignment = 2 * __alignof__(__cilkrts_worker);
+    void *mem = cilk_aligned_alloc(
+        alignment, round_size_to_alignment(alignment, sizeof(__cilkrts_worker) +
+                                                          sizeof(local_state)));
+    __cilkrts_worker *w = (__cilkrts_worker *)mem;
+    w->self = i;
+    w->extension = NULL;
+    w->ext_stack = NULL;
+    w->g = g;
+    w->l = worker_local_init(mem + sizeof(__cilkrts_worker), g);
+
+    w->ltq_limit = w->l->shadow_stack + g->options.deqdepth;
+    g->workers[i] = w;
+    __cilkrts_stack_frame **init = w->l->shadow_stack + 1;
+    atomic_store_explicit(&w->tail, init, memory_order_relaxed);
+    atomic_store_explicit(&w->head, init, memory_order_relaxed);
+    atomic_store_explicit(&w->exc, init, memory_order_relaxed);
+    w->current_stack_frame = NULL;
+    w->reducer_map = NULL;
+    // initialize internal malloc first
+    cilk_internal_malloc_per_worker_init(w);
+
+    return w;
 }
 
 #ifdef CPU_SETSIZE
@@ -185,7 +197,7 @@ static void threads_init(global_state *g) {
             ;
     for (int w = worker_start; w < n_threads; w++) {
         int status = pthread_create(&g->threads[w], NULL, scheduler_thread_proc,
-                                    g->workers[w]);
+                                    &g->worker_args[w]);
 
         if (status != 0)
             cilkrts_bug(NULL, "Cilk: thread creation (%u) failed: %s", w,
@@ -225,11 +237,11 @@ global_state *__cilkrts_startup(int argc, char *argv[]) {
     cilkrts_alert(BOOT, NULL, "(__cilkrts_startup) argc %d", argc);
     global_state *g = global_state_init(argc, argv);
     reducers_init(g);
-    __cilkrts_init_tls_variables();
+    /* __cilkrts_init_tls_variables(); */
     workers_init(g);
     deques_init(g);
     CILK_ASSERT_G(0 == g->exiting_worker);
-    reducers_import(g, g->workers[g->exiting_worker]);
+    reducers_import(g, g->workers[0]);
 
     // Create the root closure and a fiber to go with it.  Use worker 0 to
     // allocate the closure and fiber.
@@ -315,14 +327,14 @@ static inline __attribute__((noinline)) void boss_wait_helper(void) {
     // function arguments and local variables in this function.  Get
     // fresh copies of these arguments from the runtime's global
     // state.
-    global_state *g = tls_worker->g;
+    global_state *g = __cilkrts_tls_worker->g;
     __cilkrts_stack_frame *sf = g->root_closure->frame;
     CILK_BOSS_START_TIMING(g);
 
 #if !BOSS_THIEF
-    worker_id self = tls_worker->self;
+    worker_id self = __cilkrts_tls_worker->self;
 #endif
-    tls_worker = NULL;
+    __cilkrts_tls_worker = NULL;
 
 #if !BOSS_THIEF
     // Wake up the worker the boss was impersonating, to let it take
@@ -334,8 +346,13 @@ static inline __attribute__((noinline)) void boss_wait_helper(void) {
     wait_until_cilk_done(g);
 
 #if BOSS_THIEF
-    g->workers[0]->reducer_map = g->workers[g->exiting_worker]->reducer_map;
-    g->workers[g->exiting_worker]->reducer_map = NULL;
+    __cilkrts_worker **workers = g->workers;
+    __cilkrts_worker *w0 = workers[0];
+    __cilkrts_worker *wexit = workers[g->exiting_worker];
+    w0->reducer_map = wexit->reducer_map;
+    wexit->reducer_map = NULL;
+    w0->extension = wexit->extension;
+    wexit->extension = NULL;
     g->exiting_worker = 0;
 #endif
 
@@ -357,13 +374,10 @@ static inline __attribute__((noinline)) void boss_wait_helper(void) {
 
 // Setup runtime structures to start a new Cilkified region.  Executed by the
 // Cilkifying thread in cilkify().
-void __cilkrts_internal_invoke_cilkified_root(global_state *g,
-                                              __cilkrts_stack_frame *sf) {
+void __cilkrts_internal_invoke_cilkified_root(__cilkrts_stack_frame *sf) {
+    global_state *g = default_cilkrts;
+
     CILK_ASSERT_G(!__cilkrts_get_tls_worker());
-    /* CILK_ASSERT_G( */
-    /*     !atomic_load_explicit(&g->start_thieves, memory_order_acquire)); */
-    /* CILK_ASSERT_G( */
-    /*     !atomic_load_explicit(&g->start_thieves_futex, memory_order_acquire)); */
 
     // Start the workers if necessary
     if (__builtin_expect(!g->workers_started, false)) {
@@ -376,17 +390,29 @@ void __cilkrts_internal_invoke_cilkified_root(global_state *g,
         // rts_srand(g->workers[0], (0 + 1) * 162347);
         g->workers[0]->l->rand_next = 162347;
 #endif
+        if (USE_EXTENSION) {
+            g->root_closure->ext_fiber =
+                cilk_fiber_allocate(g->workers[0], g->options.stacksize);
+        }
         is_boss_thread = true;
     }
 
     // The boss thread will impersonate the last exiting worker until it tries
     // to become a thief.
 #if BOSS_THIEF
-    tls_worker = g->workers[0];
+    __cilkrts_tls_worker = g->workers[0];
 #else
-    tls_worker = g->workers[g->exiting_worker];
+    __cilkrts_tls_worker = g->workers[g->exiting_worker];
 #endif
-    CILK_START_TIMING(tls_worker, INTERVAL_CILKIFY_ENTER);
+    if (USE_EXTENSION) {
+        // Initialize sf->extension, to appease the later call to
+        // setup_for_execution.
+        sf->extension = __cilkrts_tls_worker->extension;
+        // Initialize worker->ext_stack.
+        __cilkrts_tls_worker->ext_stack =
+            sysdep_get_stack_start(g->root_closure->ext_fiber);
+    }
+    CILK_START_TIMING(__cilkrts_tls_worker, INTERVAL_CILKIFY_ENTER);
 
     // Mark the root closure as not initialized
     g->root_closure_initialized = false;
@@ -413,6 +439,8 @@ void __cilkrts_internal_invoke_cilkified_root(global_state *g,
     // flags.
 
     /* reset_disengaged_var(g); */
+    CILK_ASSERT_G(!atomic_load_explicit(&g->cilkified, memory_order_relaxed) &&
+                  "OpenCilk runtime already executing a Cilk computation.");
     set_cilkified(g);
 
     // Set g->done = 0, so Cilk workers will continue trying to steal.
@@ -428,8 +456,9 @@ void __cilkrts_internal_invoke_cilkified_root(global_state *g,
     /* request_more_thieves(g, g->nworkers); */
 
     if (__builtin_setjmp(g->boss_ctx) == 0) {
-        CILK_SWITCH_TIMING(tls_worker, INTERVAL_CILKIFY_ENTER, INTERVAL_SCHED);
-        do_what_it_says_boss(tls_worker, g->root_closure);
+        CILK_SWITCH_TIMING(__cilkrts_tls_worker, INTERVAL_CILKIFY_ENTER,
+                           INTERVAL_SCHED);
+        do_what_it_says_boss(__cilkrts_tls_worker, g->root_closure);
     } else {
         // The stack on which
         // __cilkrts_internal_invoke_cilkified_root() was called may
@@ -453,6 +482,7 @@ void __cilkrts_internal_exit_cilkified_root(global_state *g,
     // exiting_worker.
     worker_id self = w->self;
     g->exiting_worker = self;
+    ReadyDeque *deques = g->deques;
 
     // Mark the computation as done.  Also "sleep" the workers: update global
     // flags so workers who exit the work-stealing loop will return to waiting
@@ -476,11 +506,11 @@ void __cilkrts_internal_exit_cilkified_root(global_state *g,
     // Cilkified region to start with an empty deque.  We go ahead and grab the
     // deque lock to make sure no other worker has a lingering pointer to the
     // closure.
-    deque_lock_self(w);
-    g->deques[w->self].bottom = (Closure *)NULL;
-    g->deques[w->self].top = (Closure *)NULL;
+    deque_lock_self(deques, w);
+    deques[self].bottom = (Closure *)NULL;
+    deques[self].top = (Closure *)NULL;
     WHEN_CILK_DEBUG(g->root_closure->owner_ready_deque = NO_WORKER);
-    deque_unlock_self(w);
+    deque_unlock_self(deques, w);
 
     // Clear the flags in sf.  This routine runs before leave_frame in a Cilk
     // function, but leave_frame is executed conditionally in Cilk functions
@@ -494,13 +524,18 @@ void __cilkrts_internal_exit_cilkified_root(global_state *g,
         // We finished the computation on the boss thread.  No need to jump to
         // the runtime in this case; just return normally.
         /* CILK_ASSERT(w, w->l->fiber_to_free == NULL); */
-        if (w->l->fiber_to_free) {
-            cilk_fiber_deallocate_to_pool(w, w->l->fiber_to_free);
+        local_state *l = w->l;
+        if (l->fiber_to_free) {
+            cilk_fiber_deallocate_to_pool(w, l->fiber_to_free);
+            l->fiber_to_free = NULL;
         }
-        w->l->fiber_to_free = NULL;
+        if (l->ext_fiber_to_free) {
+            cilk_fiber_deallocate_to_pool(w, l->ext_fiber_to_free);
+            l->ext_fiber_to_free = NULL;
+        }
         atomic_store_explicit(&g->cilkified, 0, memory_order_release);
-        w->l->state = WORKER_IDLE;
-        tls_worker = NULL;
+        l->state = WORKER_IDLE;
+        __cilkrts_tls_worker = NULL;
 
         // Restore the boss's original rsp, so the boss completes the Cilk
         // function on its original stack.
@@ -537,6 +572,8 @@ static void global_state_deinit(global_state *g) {
     pthread_cond_destroy(&g->start_root_worker_cond_var);
     pthread_mutex_destroy(&g->disengaged_lock);
     pthread_cond_destroy(&g->disengaged_cond_var);
+    free(g->worker_args);
+    g->worker_args = NULL;
     free(g->workers);
     g->workers = NULL;
     g->nworkers = 0;
@@ -605,12 +642,11 @@ static void workers_deinit(global_state *g) {
     while (i-- > 0) {
         __cilkrts_worker *w = g->workers[i];
         g->workers[i] = NULL;
+        if (!w)
+            continue;
         cilk_internal_malloc_per_worker_destroy(w); // internal malloc last
         free(w->l->shadow_stack);
         w->l->shadow_stack = NULL;
-        free(w->l->index_to_worker);
-        w->l->index_to_worker = NULL;
-        free(w->l);
         w->l = NULL;
         free(w);
     }
@@ -628,6 +664,8 @@ CHEETAH_INTERNAL void __cilkrts_shutdown(global_state *g) {
 
     // Deallocate the root closure and its fiber
     cilk_fiber_deallocate_global(g, g->root_closure->fiber);
+    if (USE_EXTENSION)
+        cilk_fiber_deallocate_global(g, g->root_closure->ext_fiber);
     Closure_destroy_global(g, g->root_closure);
 
     // Cleanup the global state

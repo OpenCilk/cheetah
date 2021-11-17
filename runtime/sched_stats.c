@@ -1,3 +1,4 @@
+#include <inttypes.h>
 #include <stdio.h>
 #include <time.h>
 
@@ -30,33 +31,9 @@ static const char *enum_to_str(enum timing_type t) {
     }
 }
 
-static inline double cycles_to_micro_sec(uint64_t cycle) {
-    return (double)cycle / ((double)PROC_SPEED_IN_GHZ * 1000.0);
-}
-
 __attribute__((unused)) static inline double
 micro_sec_to_sec(double micro_sec) {
     return micro_sec / 1000000.0;
-}
-
-static inline uint64_t begin_cycle_count() {
-    unsigned int low, high;
-    __asm__ volatile("cpuid\n\t"
-                     "rdtsc\n\t"
-                     "mov %%edx, %0\n\t"
-                     "mov %%eax, %1\n\t"
-                     : "=r"(high), "=r"(low)::"%rax", "%rbx", "%rcx", "%rdx");
-    return ((uint64_t)high << 32) | low;
-}
-
-static inline uint64_t end_cycle_count() {
-    unsigned int low, high;
-    __asm__ volatile("rdtscp\n\t"
-                     "mov %%edx, %0\n\t"
-                     "mov %%eax, %1\n\t"
-                     "cpuid\n\t"
-                     : "=r"(high), "=r"(low)::"%rax", "%rbx", "%rcx", "%rdx");
-    return ((uint64_t)high << 32) | low;
 }
 
 static inline double nsec_to_sec(uint64_t nsec) { return nsec / 1.0e9; }
@@ -83,6 +60,8 @@ void cilk_global_sched_stats_init(struct global_sched_stats *s) {
     s->exit_time = 0;
     s->steals = 0;
     s->repos = 0;
+    s->reeng_rqsts = 0;
+    s->onesen_rqsts = 0;
     for (int i = 0; i < NUMBER_OF_STATS; ++i) {
         s->time[i] = 0.0;
         s->count[i] = 0;
@@ -98,6 +77,8 @@ void cilk_sched_stats_init(struct sched_stats *s) {
     }
     s->steals = 0;
     s->repos = 0;
+    s->reeng_rqsts = 0;
+    s->onesen_rqsts = 0;
 }
 
 void cilk_start_timing(__cilkrts_worker *w, enum timing_type t) {
@@ -182,14 +163,16 @@ static void sched_stats_reset_worker(__cilkrts_worker *w,
     }
     w->l->stats.steals = 0;
     w->l->stats.repos = 0;
+    w->l->stats.reeng_rqsts = 0;
+    w->l->stats.onesen_rqsts = 0;
 }
 
 #define COL_DESC "%15s"
-#define HDR_DESC "%18s %8s"
+#define HDR_DESC "%18s %10s"
 #define WORKER_HDR_DESC "%10s %3u:"
-#define FIELD_DESC "%18.6f %8ld"
-#define COUNT_HDR_DESC "%8s"
-#define COUNT_DESC "%8ld"
+#define FIELD_DESC "%18.6f %10" PRIu64
+#define COUNT_HDR_DESC "%10s"
+#define COUNT_DESC "%10" PRIu64
 
 static void sched_stats_print_worker(__cilkrts_worker *w, void *data) {
     FILE *fp = (FILE *)data;
@@ -203,9 +186,13 @@ static void sched_stats_print_worker(__cilkrts_worker *w, void *data) {
     }
     w->g->stats.steals += w->l->stats.steals;
     w->g->stats.repos += w->l->stats.repos;
+    w->g->stats.reeng_rqsts += w->l->stats.reeng_rqsts;
+    w->g->stats.onesen_rqsts += w->l->stats.onesen_rqsts;
 
     fprintf(stderr, COUNT_DESC, w->l->stats.steals);
     fprintf(stderr, COUNT_DESC, w->l->stats.repos);
+    fprintf(stderr, COUNT_DESC, w->l->stats.reeng_rqsts);
+    fprintf(stderr, COUNT_DESC, w->l->stats.onesen_rqsts);
     fprintf(fp, "\n");
 }
 
@@ -216,6 +203,8 @@ void cilk_sched_stats_print(struct global_state *g) {
     }
     g->stats.steals = 0;
     g->stats.repos = 0;
+    g->stats.reeng_rqsts = 0;
+    g->stats.onesen_rqsts = 0;
 
     fprintf(stderr, "\nSCHEDULING STATS (SECONDS):\n");
     {
@@ -232,6 +221,8 @@ void cilk_sched_stats_print(struct global_state *g) {
     }
     fprintf(stderr, COUNT_HDR_DESC, "steals");
     fprintf(stderr, COUNT_HDR_DESC, "reposses");
+    fprintf(stderr, COUNT_HDR_DESC, "reengs");
+    fprintf(stderr, COUNT_HDR_DESC, "onesen");
     fprintf(stderr, "\n");
 
     for_each_worker(g, &sched_stats_print_worker, stderr);
@@ -242,6 +233,8 @@ void cilk_sched_stats_print(struct global_state *g) {
     }
     fprintf(stderr, COUNT_DESC, g->stats.steals);
     fprintf(stderr, COUNT_DESC, g->stats.repos);
+    fprintf(stderr, COUNT_DESC, g->stats.reeng_rqsts);
+    fprintf(stderr, COUNT_DESC, g->stats.onesen_rqsts);
     fprintf(stderr, "\n");
 
     for_each_worker(g, &sched_stats_reset_worker, NULL);
