@@ -98,6 +98,5 @@ CHEETAH_INTERNAL uint64_t __cilkrts_cilk_for_grainsize_64(uint64_t n);
 
 // Not marked as CHEETAH_API as it may be deprecated soon
 unsigned __cilkrts_get_nworkers(void);
-//CHEETAH_API int64_t* __cilkrts_get_pedigree(void);
-//void __cilkrts_pedigree_bump_rank(void);
+
 #endif

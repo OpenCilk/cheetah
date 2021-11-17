@@ -466,10 +466,10 @@ function(add_cheetah_bitcode name)
     set(output_file_${libname} lib${output_name_${libname}}.bc)
     add_custom_command(
       OUTPUT ${output_dir_${libname}}/${output_file_${libname}}
-      COMMAND cp $<TARGET_OBJECTS:${libname}_compile> ${output_dir_${libname}}/${output_file_${libname}}
+      COMMAND ${LLVM_LINK_PATH} -o ${output_dir_${libname}}/${output_file_${libname}} $<TARGET_OBJECTS:${libname}_compile>
       DEPENDS ${libname}_compile $<TARGET_OBJECTS:${libname}_compile>
       COMMENT "Building bitcode ${output_file_${libname}}"
-      VERBATIM)
+      VERBATIM COMMAND_EXPAND_LISTS)
     add_custom_target(${libname} DEPENDS ${output_dir_${libname}}/${output_file_${libname}})
     install(FILES ${output_dir_${libname}}/${output_file_${libname}}
       DESTINATION ${install_dir_${libname}}

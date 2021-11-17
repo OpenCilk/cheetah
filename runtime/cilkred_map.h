@@ -3,13 +3,10 @@
 
 #include "cilk-internal.h"
 #include "debug.h"
-#include <cilk/hyperobject_base.h>
+#include "hyperobject_base.h"
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-
-typedef uint32_t hyper_id_t; /* must match cilk/hyperobject_base.h */
-#define HYPER_ID_VALID 0x80000000
 
 enum merge_kind {
     MERGE_UNORDERED, ///< Assertion fails
@@ -19,9 +16,8 @@ enum merge_kind {
 typedef enum merge_kind merge_kind;
 
 typedef struct view_info {
-    void *val; // pointer to the actual view for the reducer
-    // pointer to the hyperbase object for a given reducer
-    __cilkrts_hyperobject_base *key;
+    void *view;
+    hyperobject_base *hyper;
 } ViewInfo;
 
 /**
@@ -45,14 +41,12 @@ void cilkred_map_log_id(__cilkrts_worker *const w, cilkred_map *this_map,
                         hyper_id_t id);
 CHEETAH_INTERNAL
 void cilkred_map_unlog_id(__cilkrts_worker *const w, cilkred_map *this_map,
-
                           hyper_id_t id);
 
 /* Calling this function potentially invalidates any older ViewInfo pointers
    from the same map. */
 CHEETAH_INTERNAL
-ViewInfo *cilkred_map_lookup(cilkred_map *this_map,
-                             __cilkrts_hyperobject_base *key);
+ViewInfo *cilkred_map_lookup(cilkred_map *this_map, hyperobject_base *hyper);
 /**
  * Construct an empty reducer map from the memory pool associated with the
  * given worker.  This reducer map must be destroyed before the worker's

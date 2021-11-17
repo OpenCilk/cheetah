@@ -1,6 +1,7 @@
 include(CheckLibraryExists)
 include(CheckCCompilerFlag)
 include(CheckCXXCompilerFlag)
+include(CMakePushCheckState)
 
 function(check_linker_flag flag out_var)
   cmake_push_check_state()

@@ -11,6 +11,7 @@ RTS_DIR=../runtime
 RTS_LIB=libopencilk
 RTS_C_PERSONALITY_LIB=libopencilk-personality-c
 RTS_CXX_PERSONALITY_LIB=libopencilk-personality-cpp
+RTS_PEDIGREE_LIB=libopencilk-pedigrees
 
 # All runtime libraries and associated files will be placed in
 # `/oath/to/cheetah/lib/<target-triple>`, so that the compiler can easily find

@@ -39,6 +39,9 @@ struct Closure {
     struct cilk_fiber *fiber;
     struct cilk_fiber *fiber_child;
 
+    struct cilk_fiber *ext_fiber;
+    struct cilk_fiber *ext_fiber_child;
+
     worker_id owner_ready_deque; /* debug only */
     worker_id mutex_owner;       /* debug only */
 

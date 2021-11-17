@@ -13,23 +13,19 @@ static inline void swap_views(ViewInfo *v1, ViewInfo *v2) {
 }
 
 static inline void swap_vals(ViewInfo *v1, ViewInfo *v2) {
-    void *val = v1->val;
-    v1->val = v2->val;
-    v2->val = val;
+    void *val = v1->view;
+    v1->view = v2->view;
+    v2->view = val;
 }
 
-static inline void clear_view(ViewInfo *view) {
-    __cilkrts_hyperobject_base *key = view->key;
+static void clear_view(ViewInfo *view) {
+    hyperobject_base *hyper = view->hyper;
 
-    if (key != NULL) {
-        cilk_destroy_fn_t destroy = key->__c_monoid.destroy_fn;
-        if (destroy) {
-            key->__c_monoid.destroy_fn(key, view->val); // calls destructor
-        }
-        key->__c_monoid.deallocate_fn(key, view->val); // free the memory
+    if (hyper != NULL) {
+        __cilkrts_hyper_dealloc(view->view, hyper->view_size);
     }
-    view->key = NULL;
-    view->val = NULL;
+    view->view = NULL;
+    view->hyper = NULL;
 }
 
 // =================================================================
@@ -61,8 +57,8 @@ void cilkred_map_unlog_id(__cilkrts_worker *const w, cilkred_map *this_map,
     CILK_ASSERT(w, this_map->num_of_vinfo <= this_map->spa_cap);
     CILK_ASSERT(w, id < this_map->spa_cap);
 
-    this_map->vinfo[id].key = NULL;
-    this_map->vinfo[id].val = NULL;
+    this_map->vinfo[id].hyper = NULL;
+    this_map->vinfo[id].view = NULL;
 
     this_map->num_of_vinfo--;
     if (this_map->num_of_vinfo == 0) {
@@ -71,18 +67,16 @@ void cilkred_map_unlog_id(__cilkrts_worker *const w, cilkred_map *this_map,
 }
 
 /** @brief Return element mapped to 'key' or null if not found. */
-ViewInfo *cilkred_map_lookup(cilkred_map *this_map,
-                             __cilkrts_hyperobject_base *key) {
-    hyper_id_t id = key->__id_num;
-    if (__builtin_expect(!(id & HYPER_ID_VALID), 0)) {
+ViewInfo *cilkred_map_lookup(cilkred_map *this_map, hyperobject_base *hyper) {
+    hyper_id_t id = hyper->id_num;
+    if (__builtin_expect(!hyper->valid, 0)) {
         return NULL;
     }
-    id &= ~HYPER_ID_VALID;
     if (id >= this_map->spa_cap) {
         return NULL; /* TODO: grow map */
     }
     ViewInfo *ret = this_map->vinfo + id;
-    if (ret->key == NULL && ret->val == NULL) {
+    if (ret->hyper == NULL && ret->view == NULL) {
         return NULL;
     }
 
@@ -132,7 +126,7 @@ void cilkred_map_destroy_map(__cilkrts_worker *w, cilkred_map *h) {
     }
     if (DEBUG_ENABLED(REDUCER)) {
         for (hyper_id_t i = 0; i < h->spa_cap; ++i)
-            CILK_ASSERT(w, !h->vinfo[i].val);
+            CILK_ASSERT(w, !h->vinfo[i].view);
     }
     free(h->vinfo);
     h->vinfo = NULL;
@@ -160,6 +154,7 @@ void cilkred_map_merge(cilkred_map *this_map, __cilkrts_worker *w,
 
     if (other_map->num_of_vinfo == 0) {
         cilkred_map_destroy_map(w, other_map);
+        this_map->merging = false;
         return;
     }
 
@@ -168,20 +163,26 @@ void cilkred_map_merge(cilkred_map *this_map, __cilkrts_worker *w,
 
         for (i = 0; i < other_map->num_of_logs; i++) {
             hyper_id_t vindex = other_map->log[i];
-            __cilkrts_hyperobject_base *key = other_map->vinfo[vindex].key;
+            hyperobject_base *hyper = other_map->vinfo[vindex].hyper;
 
-            if (this_map->vinfo[vindex].key != NULL) {
-                CILK_ASSERT(w, key == this_map->vinfo[vindex].key);
+            if (hyper == NULL) {
+                /* The other map's hyperobject was deleted.
+                   The corresponding index in this map may
+                   belong to a different hyperobject. */
+                continue;
+            }
+            if (this_map->vinfo[vindex].hyper != NULL) {
+                CILK_ASSERT(w, hyper == this_map->vinfo[vindex].hyper);
                 if (kind == MERGE_INTO_RIGHT) { // other_map is the left val
                     swap_vals(&other_map->vinfo[vindex],
                               &this_map->vinfo[vindex]);
                 }
                 // updated val is stored back into the left
-                key->__c_monoid.reduce_fn(key, this_map->vinfo[vindex].val,
-                                          other_map->vinfo[vindex].val);
+                hyper->reduce_fn(this_map->vinfo[vindex].view,
+                                 other_map->vinfo[vindex].view);
                 clear_view(&other_map->vinfo[vindex]);
             } else {
-                CILK_ASSERT(w, this_map->vinfo[vindex].val == NULL);
+                CILK_ASSERT(w, this_map->vinfo[vindex].view == NULL);
                 swap_views(&other_map->vinfo[vindex], &this_map->vinfo[vindex]);
                 cilkred_map_log_id(w, this_map, vindex);
             }
@@ -190,20 +191,20 @@ void cilkred_map_merge(cilkred_map *this_map, __cilkrts_worker *w,
     } else {
         hyper_id_t i;
         for (i = 0; i < other_map->spa_cap; i++) {
-            if (other_map->vinfo[i].key != NULL) {
-                __cilkrts_hyperobject_base *key = other_map->vinfo[i].key;
+            if (other_map->vinfo[i].hyper != NULL) {
+                hyperobject_base *hyper = other_map->vinfo[i].hyper;
 
-                if (this_map->vinfo[i].key != NULL) {
-                    CILK_ASSERT(w, key == this_map->vinfo[i].key);
+                if (this_map->vinfo[i].hyper != NULL) {
+                    CILK_ASSERT(w, hyper == this_map->vinfo[i].hyper);
                     if (kind == MERGE_INTO_RIGHT) { // other_map is the left val
                         swap_vals(&other_map->vinfo[i], &this_map->vinfo[i]);
                     }
                     // updated val is stored back into the left
-                    key->__c_monoid.reduce_fn(key, this_map->vinfo[i].val,
-                                              other_map->vinfo[i].val);
+                    hyper->reduce_fn(this_map->vinfo[i].view,
+                                     other_map->vinfo[i].view);
                     clear_view(&other_map->vinfo[i]);
                 } else { // the 'this_map' page does not contain view
-                    CILK_ASSERT(w, this_map->vinfo[i].val == NULL);
+                    CILK_ASSERT(w, this_map->vinfo[i].view == NULL);
                     // transfer the key / val over
                     swap_views(&other_map->vinfo[i], &this_map->vinfo[i]);
                     cilkred_map_log_id(w, this_map, i);

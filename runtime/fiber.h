@@ -78,6 +78,8 @@ void sysdep_restore_fp_state(__cilkrts_stack_frame *sf) {
 }
 
 CHEETAH_INTERNAL
+char *sysdep_get_stack_start(struct cilk_fiber *fiber);
+CHEETAH_INTERNAL
 char *sysdep_reset_stack_for_resume(struct cilk_fiber *fiber,
                                     __cilkrts_stack_frame *sf);
 CHEETAH_INTERNAL_NORETURN
@@ -86,6 +88,7 @@ void sysdep_longjmp_to_sf(__cilkrts_stack_frame *sf);
 CHEETAH_INTERNAL void cilk_fiber_pool_global_init(global_state *g);
 CHEETAH_INTERNAL void cilk_fiber_pool_global_terminate(global_state *g);
 CHEETAH_INTERNAL void cilk_fiber_pool_global_destroy(global_state *g);
+CHEETAH_INTERNAL void cilk_fiber_pool_per_worker_zero_init(__cilkrts_worker *w);
 CHEETAH_INTERNAL void cilk_fiber_pool_per_worker_init(__cilkrts_worker *w);
 CHEETAH_INTERNAL void cilk_fiber_pool_per_worker_terminate(__cilkrts_worker *w);
 CHEETAH_INTERNAL void cilk_fiber_pool_per_worker_destroy(__cilkrts_worker *w);

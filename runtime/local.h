@@ -3,20 +3,23 @@
 
 #include <stdbool.h>
 
+#include "internal-malloc-impl.h" /* for cilk_im_desc */
+
+struct hyper_table_cache;
+
 struct local_state {
     struct __cilkrts_stack_frame **shadow_stack;
+    struct hyper_table_cache *hyper_table;
 
     unsigned short state; /* __cilkrts_worker_state */
-    bool lock_wait;
     bool provably_good_steal;
     unsigned int rand_next;
-    // Local copy of the index-to-worker map.
-    worker_id *index_to_worker;
 
     jmpbuf rts_ctx;
     struct cilk_fiber_pool fiber_pool;
     struct cilk_im_desc im_desc;
     struct cilk_fiber *fiber_to_free;
+    struct cilk_fiber *ext_fiber_to_free;
     struct sched_stats stats;
 };
 

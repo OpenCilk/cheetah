@@ -16,9 +16,9 @@ if (CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR OR CHEETAH_STANDALONE_BUI
   set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
   set(PACKAGE_NAME Cheetah)
-  set(PACKAGE_VERSION 12.0.0)
+  set(PACKAGE_VERSION 14.0.6)
   set(PACKAGE_STRING "${PACKAGE_NAME} ${PACKAGE_VERSION}")
-  set(PACKAGE_BUGREPORT "bugs@opencilk.org")
+  set(PACKAGE_BUGREPORT "https://github.com/OpenCilk/cheetah/issues/")
 endif()
 
 # Require out of source build.
@@ -57,6 +57,8 @@ option(CHEETAH_INSTALL_LIBRARY "Install the cheetah library." ON)
 option(CHEETAH_ENABLE_SHARED "Build cheetah as a shared library." ON)
 option(CHEETAH_ENABLE_STATIC "Build cheetah as a static library." ON)
 option(CHEETAH_ENABLE_ASAN "Build cheetah with ASan support." ON)
+
+option(CHEETAH_EMULATE_TLS "Build Cheetah with emulated TLS.  Necessary for some JITs." OFF)
 
 set(CHEETAH_ABI_VERSION "1" CACHE STRING "ABI version of cheetah. Defaults to 1.")
 
@@ -109,6 +111,9 @@ if (CHEETAH_STANDALONE_BUILD)
   endif()
   set(LLVM_LIT_ARGS "${LIT_ARGS_DEFAULT}" CACHE STRING "Default options for lit")
   set(LLVM_LIT_OUTPUT_DIR "${CHEETAH_EXEC_OUTPUT_DIR}")
+
+  # Define llvm-link path
+  set(LLVM_LINK_PATH "${LLVM_TOOLS_BINARY_DIR}/llvm-link")
 endif()
 
 construct_cheetah_default_triple()
@@ -119,8 +124,13 @@ if ("${CHEETAH_DEFAULT_TARGET_TRIPLE}" MATCHES ".*hf$")
 endif()
 
 set(CHEETAH_C_FLAGS "")
-set(CHEETAH_CXX_FLAGS "")
-set(CHEETAH_COMPILE_FLAGS "")
+if (CHEETAH_EMULATE_TLS)
+  set(CHEETAH_CXX_FLAGS "-femulated-tls")
+  set(CHEETAH_COMPILE_FLAGS "-femulated-tls")
+else()
+  set(CHEETAH_CXX_FLAGS "")
+  set(CHEETAH_COMPILE_FLAGS "")
+endif()
 set(CHEETAH_COMPILE_DEFS "")
 set(CHEETAH_LINK_FLAGS "")
 set(CHEETAH_COMMON_LIBS "")
@@ -187,3 +197,32 @@ if (CHEETAH_INCLUDE_TESTS)
   # add_subdirectory(handcomp_test)
   # add_subdirectory(bench)
 endif()
+
+#===============================================================================
+# Setup CMAKE CONFIG PACKAGE
+#===============================================================================
+make_directory(${CHEETAH_CMAKE_BUILDDIR})
+set(CHEETHA_LIBRARY_HOST "/lib/${LLVM_HOST_TARGET}")
+
+if(CHEETAH_INSTALL_LIBRARY)
+  set(CHEETAH_LIBRARY_DIR "")
+  if (LLVM_TREE_AVAILABLE)
+    set(CHEETAH_LIBRARY_DIR "${CMAKE_INSTALL_PREFIX}/${CHEETAH_LIBRARY_INSTALL_DIR}")
+  else()
+    set(CHEETAH_LIBRARY_DIR "${CMAKE_INSTALL_PREFIX}")
+  endif()
+  configure_file(
+    ${CMAKE_CURRENT_SOURCE_DIR}/cmake/CilkThreadsConfig.cmake.in
+    ${CHEETAH_CMAKE_BUILDDIR}/CilkThreadsConfig.cmake
+    NO_SOURCE_PERMISSIONS
+    @ONLY)
+else()
+  set(CHEETAH_LIBRARY_DIR ${CHEETAH_LIBRARY_OUTPUT_DIR})
+  configure_file(
+    ${CMAKE_CURRENT_SOURCE_DIR}/cmake/CilkThreadsConfig.cmake.in
+    ${CHEETAH_CMAKE_BUILDDIR}/CilkThreadsConfig.cmake
+    NO_SOURCE_PERMISSIONS
+    @ONLY)
+endif()
+
+install(FILES ${CHEETAH_CMAKE_BUILDDIR}/CilkThreadsConfig.cmake DESTINATION ${CHEETAH_CMAKE_INSTALLDIR})

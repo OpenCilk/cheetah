@@ -257,6 +257,14 @@ static void fiber_init(struct cilk_fiber *fiber) {
 // Supported public functions
 //===============================================================
 
+char *sysdep_get_stack_start(struct cilk_fiber *fiber) {
+    size_t align = 64;
+    char *sp = fiber->stack_high - align;
+    /* Debugging: make sure stack is accessible. */
+    ((volatile char *)sp)[-1];
+    return sp;
+}
+
 char *sysdep_reset_stack_for_resume(struct cilk_fiber *fiber,
                                     __cilkrts_stack_frame *sf) {
     CILK_ASSERT_G(fiber);

@@ -3,7 +3,7 @@
 #define _GNU_SOURCE
 #endif
 #include "reducer_impl.h"
-#include "cilk/hyperobject_base.h"
+#include "hyperobject_base.h"
 #include "global.h"
 #include "init.h"
 #include "internal-malloc.h"
@@ -11,6 +11,7 @@
 #include "scheduler.h"
 #include <assert.h>
 #include <dlfcn.h>
+#include <stdatomic.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
@@ -19,7 +20,6 @@
 
 #define USE_INTERNAL_MALLOC 1
 
-#define REDUCER_LIMIT 1024U
 #define GLOBAL_REDUCER_LIMIT 100U
 
 // =================================================================
@@ -38,9 +38,71 @@ typedef struct reducer_id_manager {
     /* When Cilk is not running, global holds all the registered
        hyperobjects so they can be imported into the first worker.
        Size is GLOBAL_REDUCER_LIMIT, regardless of spa_cap.   */
-    __cilkrts_hyperobject_base **global;
+    hyperobject_base **global;
 } reducer_id_manager;
 
+/* A table of hyperobjects
+   TODO: Use the bitmap logic from local reducer maps.  */
+static struct {
+  pthread_mutex_t lock;
+  uint32_t size, count, hint;
+  hyperobject_base **list;
+} global_reducers __attribute__((aligned(32)))
+  = {PTHREAD_MUTEX_INITIALIZER, 0, 0, 0, 0};
+
+void remove_global_reducer(hyperobject_base *hyper) {
+    int error = pthread_mutex_lock(&global_reducers.lock);
+    if (error)
+        cilkrts_bug(0, "mutex lock error");
+    uint32_t index = hyper->id_num;
+    CILK_ASSERT_G(index < global_reducers.size);
+    CILK_ASSERT_G(global_reducers.list[index] == hyper);
+    global_reducers.list[index] = 0;
+    --global_reducers.count;
+    uint32_t hint = global_reducers.hint;
+    global_reducers.hint = hint > index ? hint : index;
+    pthread_mutex_unlock(&global_reducers.lock);
+}
+
+void add_global_reducer(hyperobject_base *hyper) {
+    int error = pthread_mutex_lock(&global_reducers.lock);
+    if (error)
+        cilkrts_bug(0, "mutex lock error");
+    hyperobject_base **list = global_reducers.list;
+    size_t size = global_reducers.size;
+    size_t count = global_reducers.count;
+    size_t hint = global_reducers.hint;
+    uint32_t index = 0;
+    if (!list) {
+        list = calloc(32, sizeof(hyperobject_base *));
+        size = 32;
+        index = 0;
+        for (int i = 0; i < 32; ++i)
+            list[i] = 0;
+    } else if (count == size) {
+        size_t new_size = size * 3 / 2;
+        CILK_ASSERT_G((uint32_t)new_size == new_size);
+        list = realloc(list, new_size * sizeof(hyperobject_base *));
+        while (++size < new_size)
+            list[size] = 0;
+        size = new_size;
+        index = size;
+    } else if (!list[hint]) {
+        index = hint;
+    } else {
+        index = size;
+        while (index-- > 0)
+            if (!list[index])
+                break;
+    }
+    hyper->id_num = index;
+    list[index] = hyper;
+    global_reducers.list = list;
+    global_reducers.count = count + 1;
+    global_reducers.size = size;
+    global_reducers.hint = (size == index + 1) ? 0 : index + 1;
+    pthread_mutex_unlock(&global_reducers.lock);
+}
 
 static void reducer_id_manager_assert_ownership(reducer_id_manager *m,
                                                 __cilkrts_worker *const w) {
@@ -93,7 +155,7 @@ static void free_reducer_id_manager(reducer_id_manager *m) {
         m->used = NULL;
         free(old);
     }
-    __cilkrts_hyperobject_base **global = m->global;
+    hyperobject_base **global = m->global;
     if (global) {
         m->global = NULL;
         free(global);
@@ -148,6 +210,14 @@ static void reducer_id_free(__cilkrts_worker *const ws, hyper_id_t id) {
     reducer_id_manager_unlock(m, ws);
 }
 
+static void *get_or_init_leftmost(__cilkrts_worker *w,
+                                  hyperobject_base *hyper) {
+    void *left = hyper->key;
+    if (!left)
+      cilkrts_bug(w, "User error: hyperobject has no leftmost object");
+    return left;
+}
+
 // =================================================================
 // Init / deinit functions
 // =================================================================
@@ -158,7 +228,7 @@ void reducers_init(global_state *g) {
     if (g->id_manager) {
         return;
     } else {
-        g->id_manager = init_reducer_id_manager(REDUCER_LIMIT);
+        g->id_manager = init_reducer_id_manager(DEFAULT_REDUCER_LIMIT);
     }
 }
 
@@ -177,14 +247,13 @@ CHEETAH_INTERNAL void reducers_import(global_state *g, __cilkrts_worker *w) {
        should be exported when Cilk exits. */
     cilkred_map *map = cilkred_map_make_map(w, m->spa_cap);
     for (hyper_id_t i = 0; i < m->hwm; ++i) {
-        __cilkrts_hyperobject_base *h = m->global[i];
-        if (h) {
-            map->vinfo[i].key = h;
-            map->vinfo[i].val = (char *)h + (ptrdiff_t)h->__view_offset;
+        hyperobject_base *hyper = m->global[i];
+        if (hyper) {
+            map->vinfo[i].hyper = hyper;
+            map->vinfo[i].view = get_or_init_leftmost(w, hyper);
+            CILK_ASSERT(w, hyper->valid);
+            cilkred_map_log_id(w, map, hyper->id_num);
         }
-        hyper_id_t id = h->__id_num;
-        CILK_ASSERT(w, id & HYPER_ID_VALID);
-        cilkred_map_log_id(w, map, id & ~HYPER_ID_VALID);
     }
     w->reducer_map = map;
 }
@@ -209,7 +278,7 @@ static cilkred_map *install_new_reducer_map(__cilkrts_worker *w) {
 /* remove the reducer from the current reducer map.  If the reducer
    exists in maps other than the current one, the behavior is
    undefined. */
-void __cilkrts_hyper_destroy(__cilkrts_hyperobject_base *key) {
+void cilkrts_hyper_unregister(hyperobject_base *hyper) {
 
     __cilkrts_worker *w = __cilkrts_get_tls_worker();
     // If we don't have a worker, use instead the last exiting worker from the
@@ -217,14 +286,13 @@ void __cilkrts_hyper_destroy(__cilkrts_hyperobject_base *key) {
     if (!w)
         w = default_cilkrts->workers[default_cilkrts->exiting_worker];
 
-    hyper_id_t id = key->__id_num;
-    cilkrts_alert(REDUCE_ID, w, "Destroy reducer %x at %p", (unsigned)id, key);
-    if (!__builtin_expect(id & HYPER_ID_VALID, HYPER_ID_VALID)) {
-        cilkrts_bug(w, "unregistering unregistered hyperobject %p", key);
+    hyper_id_t id = hyper->id_num;
+    cilkrts_alert(REDUCE_ID, w, "Destroy reducer %x at %p", (unsigned)id, hyper);
+    if (__builtin_expect(!hyper->valid, 0)) {
+        cilkrts_bug(w, "unregistering unregistered hyperobject %p", hyper);
         return;
     }
-    id &= ~HYPER_ID_VALID;
-    key->__id_num = id;
+    hyper->id_num = id;
 
     if (w) {
 #define UNSYNCED_REDUCER_MSG                                                   \
@@ -243,7 +311,7 @@ void __cilkrts_hyper_destroy(__cilkrts_hyperobject_base *key) {
     reducer_id_free(w, id);
 }
 
-void __cilkrts_hyper_create(__cilkrts_hyperobject_base *key) {
+void cilkrts_hyper_register(hyperobject_base *hyper) {
     // This function registers the specified hyperobject in the current
     // reducer map and registers the initial value of the hyperobject as the
     // leftmost view of the reducer.
@@ -260,18 +328,13 @@ void __cilkrts_hyper_create(__cilkrts_hyperobject_base *key) {
     }
 
     hyper_id_t id = reducer_id_get(m, w);
-    key->__id_num = id | HYPER_ID_VALID;
+    hyper->id_num = id;
+    hyper->valid  = 1;
 
-    cilkrts_alert(REDUCE_ID, w, "Create reducer %x at %p", (unsigned)id, key);
+    cilkrts_alert(REDUCE_ID, w, "Create reducer %x at %p", (unsigned)id, hyper);
 
     if (__builtin_expect(!w, 0)) {
-        if (id >= GLOBAL_REDUCER_LIMIT) {
-            cilkrts_bug(w, "Global reducer pool exhausted");
-        }
-        if (!m->global) {
-            m->global = calloc(GLOBAL_REDUCER_LIMIT, sizeof *m->global);
-        }
-        m->global[id] = key;
+        add_global_reducer(hyper);
         return;
     }
 
@@ -282,7 +345,7 @@ void __cilkrts_hyper_create(__cilkrts_hyperobject_base *key) {
     }
 
     /* Must not exist. */
-    CILK_ASSERT(w, cilkred_map_lookup(h, key) == NULL);
+    CILK_ASSERT(w, cilkred_map_lookup(h, hyper) == NULL);
 
     if (h->merging)
         cilkrts_bug(w, "User error: hyperobject used by another hyperobject");
@@ -290,27 +353,26 @@ void __cilkrts_hyper_create(__cilkrts_hyperobject_base *key) {
     CILK_ASSERT(w, w->reducer_map == h);
 
     ViewInfo *vinfo = &h->vinfo[id];
-    vinfo->key = key;
+    vinfo->hyper = hyper;
     // init with left most view
-    vinfo->val = (char *)key + (ptrdiff_t)key->__view_offset;
+    vinfo->view = get_or_init_leftmost(w, hyper);
     cilkred_map_log_id(w, h, id);
 
-    static_assert(sizeof(__cilkrts_hyperobject_base) <= 64,
+    static_assert(sizeof(hyperobject_base) <= 64,
                   "hyperobject base is too large");
 }
 
-void *__cilkrts_hyper_lookup(__cilkrts_hyperobject_base *key) {
+void *cilkrts_hyper_lookup(hyperobject_base *hyper) {
     __cilkrts_worker *w = __cilkrts_get_tls_worker();
-    hyper_id_t id = key->__id_num;
+    hyper_id_t id = hyper->id_num;
 
-    if (!__builtin_expect(id & HYPER_ID_VALID, HYPER_ID_VALID)) {
+    if (__builtin_expect(!hyper->valid, 0)) {
         cilkrts_bug(w, "User error: reference to unregistered hyperobject %p",
-                    key);
+                    hyper);
     }
-    id &= ~HYPER_ID_VALID;
 
     if (__builtin_expect(!w, 0)) {
-        return (char *)key + key->__view_offset;
+        return hyper->key;
     }
 
     /* TODO: If this is the first reference to a reducer created at
@@ -330,24 +392,25 @@ void *__cilkrts_hyper_lookup(__cilkrts_hyperobject_base *key) {
     if (h->merging)
         cilkrts_bug(w, "User error: hyperobject used by another hyperobject");
 
-    ViewInfo *vinfo = cilkred_map_lookup(h, key);
+    ViewInfo *vinfo = cilkred_map_lookup(h, hyper);
     if (vinfo == NULL) {
         CILK_ASSERT(w, id < h->spa_cap);
         vinfo = &h->vinfo[id];
-        CILK_ASSERT(w, vinfo->key == NULL && vinfo->val == NULL);
+        CILK_ASSERT(w, vinfo->hyper == NULL && vinfo->view == NULL);
 
-        void *val = key->__c_monoid.allocate_fn(key, key->__view_size);
-        key->__c_monoid.identity_fn(key, val);
+        void *view = __cilkrts_hyper_alloc(hyper->view_size);
+        hyper->identity_fn(view);
 
         // allocate space for the val and initialize it to identity
-        vinfo->key = key;
-        vinfo->val = val;
+        vinfo->hyper = hyper;
+        vinfo->view = view;
         cilkred_map_log_id(w, h, id);
     }
-    return vinfo->val;
+    return vinfo->view;
 }
 
-void *__cilkrts_hyper_alloc(__cilkrts_hyperobject_base *key, size_t bytes) {
+__attribute__((noinline))
+void *__cilkrts_hyper_alloc(size_t bytes) {
     if (USE_INTERNAL_MALLOC) {
         __cilkrts_worker *w = __cilkrts_get_tls_worker();
         if (!w)
@@ -355,18 +418,20 @@ void *__cilkrts_hyper_alloc(__cilkrts_hyperobject_base *key, size_t bytes) {
             // a Cilkified region
             w = default_cilkrts->workers[default_cilkrts->exiting_worker];
         return cilk_internal_malloc(w, bytes, IM_REDUCER_MAP);
-    } else
-        return cilk_aligned_alloc(16, bytes);
+    } else {
+        return cilk_aligned_alloc(CILK_CACHE_LINE, bytes);
+    }
 }
 
-void __cilkrts_hyper_dealloc(__cilkrts_hyperobject_base *key, void *view) {
+__attribute__((noinline))
+void __cilkrts_hyper_dealloc(void *view, size_t bytes) {
     if (USE_INTERNAL_MALLOC) {
         __cilkrts_worker *w = __cilkrts_get_tls_worker();
         if (!w)
             // Use instead the worker from the default CilkRTS that last exited
             // a Cilkified region
             w = default_cilkrts->workers[default_cilkrts->exiting_worker];
-        cilk_internal_free(w, view, key->__view_size, IM_REDUCER_MAP);
+        cilk_internal_free(w, view, bytes, IM_REDUCER_MAP);
     } else
         free(view);
 }
