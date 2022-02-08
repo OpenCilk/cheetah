@@ -116,7 +116,7 @@ endif()
 construct_cheetah_default_triple()
 if ("${CHEETAH_DEFAULT_TARGET_TRIPLE}" MATCHES ".*hf$")
   if (${CHEETAH_DEFAULT_TARGET_ARCH} MATCHES "^arm")
-    set(CHEETAH_DEFAULT_TARGET_ARCH "arm")
+    set(CHEETAH_DEFAULT_TARGET_ARCH "armhf")
   endif()
 endif()
 
