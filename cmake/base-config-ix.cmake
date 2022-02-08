@@ -45,6 +45,8 @@ if (LLVM_TREE_AVAILABLE)
   set(CHEETAH_EXEC_OUTPUT_DIR ${LLVM_RUNTIME_OUTPUT_INTDIR})
   set(CHEETAH_INSTALL_PATH lib${LLVM_LIBDIR_SUFFIX}/clang/${CLANG_VERSION})
   set(CHEETAH_CMAKE_BUILDDIR ${LLVM_LIBRARY_OUTPUT_INTDIR}/cmake/clang)
+  set(CHEETAH_CMAKE_INSTALLDIR lib${LLVM_LIBDIR_SUFFIX}/cmake/clang)
+
   option(CHEETAH_INCLUDE_TESTS "Generate and build cheetah unit tests."
          ${LLVM_INCLUDE_TESTS})
   option(CHEETAH_ENABLE_WERROR "Fail and stop if warning is triggered"
@@ -73,6 +75,7 @@ else()
   set(CHEETAH_INSTALL_PATH ${CMAKE_INSTALL_PREFIX} CACHE PATH
     "Path where built cheetah libraries should be installed.")
   set(CHEETAH_CMAKE_BUILDDIR ${CMAKE_CURRENT_BINARY_DIR}/cmake)
+  set(CHEETAH_CMAKE_INSTALLDIR ${CMAKE_INSTALL_PREFIX}/cmake)
   option(CHEETAH_INCLUDE_TESTS "Generate and build cheetah unit tests." OFF)
   option(CHEETAH_ENABLE_WERROR "Fail and stop if warning is triggered" OFF)
   # Use a host compiler to compile/link tests.

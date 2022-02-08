@@ -203,8 +203,20 @@ set(CHEETHA_LIBRARY_HOST "")
 if(LLVM_ENABLE_PER_TARGET_RUNTIME_DIR)
   set(CHEETHA_LIBRARY_HOST "/lib/${LLVM_HOST_TARGET}")
 endif()
-configure_file(
-  ${CMAKE_CURRENT_SOURCE_DIR}/cmake/CilkThreadsConfig.cmake.in
-  ${CHEETAH_CMAKE_BUILDDIR}/CilkThreadsConfig.cmake
-  NO_SOURCE_PERMISSIONS
-  @ONLY)
+if(CHEETAH_INSTALL_LIBRARY)
+  set(CHEETAH_LIBRARY_DIR "${CMAKE_INSTALL_PREFIX}/${CHEETAH_LIBRARY_INSTALL_DIR}")
+  configure_file(
+    ${CMAKE_CURRENT_SOURCE_DIR}/cmake/CilkThreadsConfig.cmake.in
+    ${CHEETAH_CMAKE_BUILDDIR}/CilkThreadsConfig.cmake
+    NO_SOURCE_PERMISSIONS
+    @ONLY)
+elseif()
+  set(CHEETAH_LIBRARY_DIR ${CHEETAH_LIBRARY_OUTPUT_DIR})
+  configure_file(
+    ${CMAKE_CURRENT_SOURCE_DIR}/cmake/CilkThreadsConfig.cmake.in
+    ${CHEETAH_CMAKE_BUILDDIR}/CilkThreadsConfig.cmake
+    NO_SOURCE_PERMISSIONS
+    @ONLY)
+endif()
+
+install(FILES ${CHEETAH_CMAKE_BUILDDIR}/CilkThreadsConfig.cmake DESTINATION ${CHEETAH_CMAKE_INSTALLDIR})
