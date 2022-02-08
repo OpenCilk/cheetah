@@ -204,13 +204,10 @@ set(CHEETHA_LIBRARY_HOST "/lib/${LLVM_HOST_TARGET}")
 if(CHEETAH_INSTALL_LIBRARY)
   set(CHEETAH_LIBRARY_DIR "")
   if (LLVM_TREE_AVAILABLE)
-    message(STATUS "ok")
     set(CHEETAH_LIBRARY_DIR "${CMAKE_INSTALL_PREFIX}/${CHEETAH_LIBRARY_INSTALL_DIR}")
   else()
-    message(STATUS "ok1")
     set(CHEETAH_LIBRARY_DIR "${CMAKE_INSTALL_PREFIX}")
   endif()
-  message(STATUS "dir=${CHEETAH_LIBRARY_DIR}")
   configure_file(
     ${CMAKE_CURRENT_SOURCE_DIR}/cmake/CilkThreadsConfig.cmake.in
     ${CHEETAH_CMAKE_BUILDDIR}/CilkThreadsConfig.cmake
