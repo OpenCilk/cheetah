@@ -116,7 +116,7 @@ endif()
 construct_cheetah_default_triple()
 if ("${CHEETAH_DEFAULT_TARGET_TRIPLE}" MATCHES ".*hf$")
   if (${CHEETAH_DEFAULT_TARGET_ARCH} MATCHES "^arm")
-    set(CHEETAH_DEFAULT_TARGET_ARCH "armhf")
+    set(CHEETAH_DEFAULT_TARGET_ARCH "arm")
   endif()
 endif()
 
@@ -194,3 +194,17 @@ if (CHEETAH_INCLUDE_TESTS)
   # add_subdirectory(handcomp_test)
   # add_subdirectory(bench)
 endif()
+
+#===============================================================================
+# Setup CMAKE CONFIG PACKAGE
+#===============================================================================
+make_directory(${CHEETAH_CMAKE_BUILDDIR})
+set(CHEETHA_LIBRARY_HOST "")
+if(LLVM_ENABLE_PER_TARGET_RUNTIME_DIR)
+  set(CHEETHA_LIBRARY_HOST "/lib/${LLVM_HOST_TARGET}")
+endif()
+configure_file(
+  ${CMAKE_CURRENT_SOURCE_DIR}/cmake/CilkThreadsConfig.cmake.in
+  ${CHEETAH_CMAKE_BUILDDIR}/CilkThreadsConfig.cmake
+  NO_SOURCE_PERMISSIONS
+  @ONLY)

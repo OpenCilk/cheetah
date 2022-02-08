@@ -1,5 +1,5 @@
 add_library(CilkThreads::Threads INTERFACE IMPORTED)
-set_property(TARGET CilkThreads::Threads PROPERTY INTERFACE_LINK_LIBRARIES "-lopencilk -lopencilk-personality-cpp -L@CHEETAH_LIBRARY_OUTPUT_DIR@")
+set_property(TARGET CilkThreads::Threads PROPERTY INTERFACE_LINK_LIBRARIES "-lopencilk -lopencilk-personality-cpp -L@CHEETAH_LIBRARY_OUTPUT_DIR@@CHEETHA_LIBRARY_HOST@")
 set_property(TARGET CilkThreads::Threads
-  PROPERTY INTERFACE_COMPILE_OPTIONS "$<$<COMPILE_LANG_AND_ID:CUDA,NVIDIA>:SHELL:-Xcompiler -lopencilk -lopencilk-personality-cpp -L@CHEETAH_LIBRARY_OUTPUT_DIR@>"
-  "$<$<NOT:$<COMPILE_LANG_AND_ID:CUDA,NVIDIA>>:-lopencilk -lopencilk-personality-cpp -L@CHEETAH_LIBRARY_OUTPUT_DIR@>")
+  PROPERTY INTERFACE_COMPILE_OPTIONS "$<$<COMPILE_LANG_AND_ID:CUDA,NVIDIA>:SHELL:-Xcompiler -lopencilk -lopencilk-personality-cpp -L@CHEETAH_LIBRARY_OUTPUT_DIR@@CHEETHA_LIBRARY_HOST@>"
+  "$<$<NOT:$<COMPILE_LANG_AND_ID:CUDA,NVIDIA>>:-lopencilk -lopencilk-personality-cpp -L@CHEETAH_LIBRARY_OUTPUT_DIR@@CHEETHA_LIBRARY_HOST@>")
