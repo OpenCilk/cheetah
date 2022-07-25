@@ -50,6 +50,7 @@ static local_state *worker_local_init(local_state *l, global_state *g) {
     l->state = WORKER_IDLE;
     l->provably_good_steal = false;
     l->rand_next = 0; /* will be reset in scheduler loop */
+    l->wake_val = 0;
     cilk_sched_stats_init(&(l->stats));
 
     return l;
@@ -118,6 +119,7 @@ __cilkrts_worker *__cilkrts_init_tls_worker(worker_id i, global_state *g) {
     return w;
 }
 
+#if ENABLE_WORKER_PINNING
 #ifdef CPU_SETSIZE
 static void move_bit(int cpu, cpu_set_t *to, cpu_set_t *from) {
     if (CPU_ISSET(cpu, from)) {
@@ -126,11 +128,13 @@ static void move_bit(int cpu, cpu_set_t *to, cpu_set_t *from) {
     }
 }
 #endif
+#endif // ENABLE_WORKER_PINNING
 
 static void threads_init(global_state *g) {
     /* TODO: Mac OS has a better interface allowing the application
        to request that two threads run as far apart as possible by
        giving them distinct "affinity tags". */
+#if ENABLE_WORKER_PINNING
 #ifdef CPU_SETSIZE
     // Affinity setting, from cilkplus-rts
     cpu_set_t process_mask;
@@ -171,6 +175,7 @@ static void threads_init(global_state *g) {
         break;
     }
 #endif
+#endif // ENABLE_WORKER_PINNING
     int n_threads = g->nworkers;
     CILK_ASSERT_G(n_threads > 0);
 
@@ -178,6 +183,7 @@ static void threads_init(global_state *g) {
 
     cilkrts_alert(BOOT, NULL, "(threads_init) Setting up threads");
 
+#if ENABLE_WORKER_PINNING
 #ifdef CPU_SETSIZE
     /* Three cases: core count at least twice worker count, allocate
        groups of floor(worker count / core count) CPUs.
@@ -201,6 +207,7 @@ static void threads_init(global_state *g) {
         }
     }
 #endif
+#endif // ENABLE_WORKER_PINNING
     int worker_start =
 #if BOSS_THIEF
             1
@@ -216,6 +223,7 @@ static void threads_init(global_state *g) {
             cilkrts_bug(NULL, "Cilk: thread creation (%u) failed: %s", w,
                         strerror(status));
 
+#if ENABLE_WORKER_PINNING
 #ifdef CPU_SETSIZE
         if (available_cores > 0) {
             /* Skip to the next active CPU ID.  */
@@ -243,6 +251,7 @@ static void threads_init(global_state *g) {
             CILK_ASSERT_G(err == 0);
         }
 #endif
+#endif // ENABLE_WORKER_PINNING
     }
 }
 

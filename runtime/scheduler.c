@@ -172,6 +172,14 @@ static void setup_for_sync(__cilkrts_worker *w, Closure *t) {
     CILK_ASSERT_POINTER_EQUAL(w, w->current_stack_frame, t->frame);
 
     SP(t->frame) = (void *)t->orig_rsp;
+    if (USE_EXTENSION) {
+        // Set the worker's extension (analogous to updating the worker's stack
+        // pointer).
+        w->extension = t->frame->extension;
+        // Set the worker's extension stack to be the start of the saved
+        // extension fiber.
+        w->ext_stack = sysdep_get_stack_start(t->ext_fiber);
+    }
     t->orig_rsp = NULL; // unset once we have sync-ed
     atomic_store_explicit(&t->frame->worker, w, memory_order_relaxed);
 }
@@ -1513,10 +1521,9 @@ void worker_scheduler(__cilkrts_worker *w) {
     // Get the number of workers.  We don't currently support changing the
     // number of workers dynamically during execution of a Cilkified region.
     unsigned int nworkers = rts->nworkers;
-    // Initialize count of consecutive failed steal attempts.  Effectively,
-    // every worker is active upon entering this routine.
-    unsigned int fails = 0;
-    unsigned int request_threshold = SENTINEL_THRESHOLD;
+    // Initialize count of consecutive failed steal attempts.
+    unsigned int fails = init_fails(w->l->wake_val, rts);
+    unsigned int sample_threshold = SENTINEL_THRESHOLD;
     // Local history information of the state of the system, for sentinel
     // workers to use to determine when to disengage and how many workers to
     // reengage.
@@ -1566,19 +1573,14 @@ void worker_scheduler(__cilkrts_worker *w) {
                         index_to_worker[get_rand(rand_state) % stealable];
                 rand_state = update_rand_state(rand_state);
                 while (victim == self) {
-                    busy_loop_pause();
                     victim = index_to_worker[get_rand(rand_state) % stealable];
                     rand_state = update_rand_state(rand_state);
                 }
                 // Attempt to steal from that victim.
                 t = Closure_steal(workers, deques, w, victim);
                 if (!t) {
-                    // Pause inside this busy loop.  We perform many pause
-                    // instructions in order to limit how much memory bandwidth
-                    // the theif consumes.
-                    for (int i = 0; i < STEAL_BUSY_PAUSE; ++i) {
-                        busy_loop_pause();
-                    }
+                    // Pause inside this busy loop.
+                    steal_short_pause();
                 }
             } while (!t && --attempt > 0);
 
@@ -1593,7 +1595,7 @@ void worker_scheduler(__cilkrts_worker *w) {
             }
 #endif
             fails = go_to_sleep_maybe(
-                rts, self, nworkers, w, t, fails, &request_threshold,
+                rts, self, nworkers, w, t, fails, &sample_threshold,
                 &inefficient_history, &efficient_history,
                 sentinel_count_history, &sentinel_count_history_tail,
                 &recent_sentinel_count);
@@ -1622,14 +1624,14 @@ void worker_scheduler(__cilkrts_worker *w) {
                 // Decrement the count of failed steal attempts based on the
                 // amount of work done.
                 fails = decrease_fails_by_work(rts, w, fails, elapsed,
-                                               &request_threshold);
+                                               &sample_threshold);
                 if (fails < SENTINEL_THRESHOLD) {
                     inefficient_history = 0;
                     efficient_history = 0;
                 }
             } else {
                 fails = 0;
-                request_threshold = SENTINEL_THRESHOLD;
+                sample_threshold = SENTINEL_THRESHOLD;
             }
 #endif // ENABLE_THIEF_SLEEP
             t = NULL;
@@ -1696,7 +1698,7 @@ void *scheduler_thread_proc(void *arg) {
 #endif
             if (thief_should_wait(rts)) {
                 disengage_worker(rts, nworkers, self);
-                thief_wait(rts);
+                w->l->wake_val = thief_wait(rts);
                 reengage_worker(rts, nworkers, self);
             }
 #if !BOSS_THIEF

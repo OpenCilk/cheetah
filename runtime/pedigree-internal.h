@@ -17,22 +17,22 @@ typedef struct __pedigree_frame {
     int64_t dprng_depth;
 } __pedigree_frame;
 
-typedef struct __pedigree_frame_storage_t {
-    size_t next_pedigree_frame;
-    __pedigree_frame* frames;
-} __pedigree_frame_storage_t;
-
-
 ///////////////////////////////////////////////////////////////////////////
 // Helper methods
 
 static inline __attribute__((malloc)) __pedigree_frame *
 push_pedigree_frame(__cilkrts_worker *w) {
+#if ENABLE_EXTENSION
     return __cilkrts_push_ext_stack(w, sizeof(__pedigree_frame));
+#else
+    return NULL;
+#endif
 }
 
 static inline void pop_pedigree_frame(__cilkrts_worker *w) {
+#if ENABLE_EXTENSION
     __cilkrts_pop_ext_stack(w, sizeof(__pedigree_frame));
+#endif
 }
 
 static inline uint64_t __cilkrts_dprng_swap_halves(uint64_t x) {
@@ -63,11 +63,15 @@ static inline uint64_t __cilkrts_dprng_sum_mod_p(uint64_t a, uint64_t b) {
 // Helper method to advance the pedigree and dprng states.
 static inline __attribute__((always_inline)) __pedigree_frame *
 bump_worker_rank(void) {
+#if ENABLE_EXTENSION
     __pedigree_frame *frame = (__pedigree_frame *)(__cilkrts_get_extension());
     frame->rank++;
     frame->dprng_dotproduct = __cilkrts_dprng_sum_mod_p(
         frame->dprng_dotproduct, __pedigree_dprng_m_array[frame->dprng_depth]);
     return frame;
+#else
+    return NULL;
+#endif
 }
 
 #endif // _PEDIGREE_INTERNAL_H

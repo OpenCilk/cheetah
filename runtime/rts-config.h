@@ -44,13 +44,7 @@
 
 #define ENABLE_EXTENSION 1
 
-#if defined __linux__
-#define CILK_PAGE_SIZE 0 /* page size not available at compile time */
-#elif defined __APPLE__
-#define CILK_PAGE_SIZE 4096 /* Apple implies x86 or ARM */
-#else
-#include <machine/param.h>
-#endif
+#define ENABLE_WORKER_PINNING 0
 
 #define MIN_NUM_PAGES_PER_STACK 4
 #define MAX_NUM_PAGES_PER_STACK 2000

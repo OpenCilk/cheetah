@@ -1,7 +1,10 @@
 #ifndef _WORKER_SLEEP_H
 #define _WORKER_SLEEP_H
 
+#include <time.h>
+
 #include "cilk-internal.h"
+#include "sched_stats.h"
 #include "worker_coord.h"
 
 #if defined(__APPLE__) && defined(__aarch64__)
@@ -14,10 +17,11 @@
 
 // Nanoseconds that a sentinel worker should sleep if it reaches the disengage
 // threshold but does not disengage.
-/* #define SLEEP_NSEC 12500 */
+/* #define NAP_NSEC 12500 */
 #define NAP_NSEC 25000
-/* #define SLEEP_NSEC 50000 */
-#define SLEEP_NSEC 4 * NAP_NSEC
+/* #define NAP_NSEC 50000 */
+/* #define SLEEP_NSEC 4 * NAP_NSEC */
+#define SLEEP_NSEC NAP_NSEC
 
 // Ratio of active workers over sentinels that the system aims to maintain.
 #define AS_RATIO 2
@@ -48,15 +52,44 @@ typedef uint32_t history_t;
 // attempts don't take too much memory bandwidth away from the workers doing
 // work.
 #define STEAL_BUSY_PAUSE 16
+#define LONG_STEAL_BUSY_PAUSE 200
 
 static inline __attribute__((always_inline)) uint64_t gettime_fast(void) {
+    // __builtin_readcyclecounter triggers "illegal instruction" errors on ARM64
+    // chips, unless user-level access to the cycle counter has been enabled in
+    // the kernel.  Since we cannot rely on that, we use other means to measure
+    // the time.
 #ifdef APPLE_ARM64
-    // __builtin_readcyclecounter triggers "illegal instruction" runtime errors
-    // on Apple M1s.
     return clock_gettime_nsec_np(CLOCK_MONOTONIC_RAW);
+#elif defined(__aarch64__)
+    struct timespec res;
+    clock_gettime(CLOCK_MONOTONIC_RAW, &res);
+    return (res.tv_sec * 1e9) + (res.tv_nsec);
 #else
     return __builtin_readcyclecounter();
-#endif // #if APPLE_ARM64
+#endif
+}
+
+static inline __attribute__((always_inline)) void steal_short_pause(void) {
+    // We perform many pause instructions in order to limit how much memory
+    // bandwidth and other computing resources the thief consumes.
+#if defined(__aarch64__)
+    for (int i = 0; i < STEAL_BUSY_PAUSE; ++i) {
+        busy_loop_pause();
+    }
+#else
+    uint64_t start = __builtin_readcyclecounter();
+    do {
+        busy_loop_pause();
+        busy_loop_pause();
+        busy_loop_pause();
+        busy_loop_pause();
+        busy_loop_pause();
+        busy_loop_pause();
+        busy_loop_pause();
+        busy_loop_pause();
+    } while ((__builtin_readcyclecounter() - start) < 1600);
+#endif
 }
 
 typedef struct worker_counts {
@@ -193,7 +226,7 @@ is_efficient(worker_counts counts) {
 // Convert the elapsed time spent working into a fail count.
 __attribute__((const, always_inline)) static inline unsigned int
 get_scaled_elapsed(unsigned int elapsed) {
-#ifdef APPLE_ARM64
+#if defined(__aarch64__)
     return ((elapsed * (1 * SENTINEL_THRESHOLD) / (16 * 65536)) / ATTEMPTS) *
            ATTEMPTS;
 #else
@@ -208,7 +241,7 @@ __attribute__((always_inline)) static inline unsigned int
 maybe_reengage_workers(global_state *const rts, worker_id self,
                        unsigned int nworkers, __cilkrts_worker *const w,
                        unsigned int fails,
-                       unsigned int *const request_threshold,
+                       unsigned int *const sample_threshold,
                        history_t *const inefficient_history,
                        history_t *const efficient_history,
                        unsigned int *const sentinel_count_history,
@@ -230,7 +263,7 @@ maybe_reengage_workers(global_state *const rts, worker_id self,
         history_t my_efficient_history = *efficient_history;
         history_t my_inefficient_history = *inefficient_history;
         unsigned int my_sentinel_count = *recent_sentinel_count;
-        if (fails >= *request_threshold) {
+        if (fails >= *sample_threshold) {
             // Update the inefficient history.
             history_t curr_ineff = is_inefficient(counts);
             my_inefficient_history = (my_inefficient_history >> 1) |
@@ -286,11 +319,13 @@ maybe_reengage_workers(global_state *const rts, worker_id self,
         // Make sure at least 1 worker is requested if we're about to run
         // out of sentinels.
         if (request == 0 && counts.sentinels == 0 &&
-            counts.active < (int32_t)nworkers &&
-            !atomic_load_explicit(&rts->disengaged_thieves_futex,
-                                  memory_order_relaxed)) {
-            request = (counts.active + 3) / 4;
-            WHEN_SCHED_STATS(w->l->stats.onesen_rqsts += request);
+            counts.active < (int32_t)nworkers) {
+            int32_t current_request = atomic_load_explicit(
+                &rts->disengaged_thieves_futex, memory_order_relaxed);
+            if (current_request < ((counts.active + 3) / 4)) {
+                request = ((counts.active + 3) / 4) - current_request;
+                WHEN_SCHED_STATS(w->l->stats.onesen_rqsts += request);
+            }
         }
 
         if (request > 0) {
@@ -298,13 +333,14 @@ maybe_reengage_workers(global_state *const rts, worker_id self,
         }
 
         // Set a cap on the fail count.
-        if (fails > DISENGAGE_THRESHOLD)
-            fails = DISENGAGE_THRESHOLD;
+        if (fails > SENTINEL_THRESHOLD) {
+            fails = SENTINEL_THRESHOLD;
+        }
 
         // Update request threshold so that, in case this worker ends up
         // executing a small task, it still adds samples to its history that
         // are spread out in time.
-        *request_threshold = fails + (SENTINEL_THRESHOLD / 1);
+        *sample_threshold = fails + (SENTINEL_THRESHOLD / 1);
     }
 
     return fails;
@@ -350,7 +386,7 @@ __attribute__((always_inline)) static inline unsigned int
 handle_failed_steal_attempts(global_state *const rts, worker_id self,
                              unsigned int nworkers, __cilkrts_worker *const w,
                              unsigned int fails,
-                             unsigned int *const request_threshold,
+                             unsigned int *const sample_threshold,
                              history_t *const inefficient_history,
                              history_t *const efficient_history,
                              unsigned int *const sentinel_count_history,
@@ -382,8 +418,7 @@ handle_failed_steal_attempts(global_state *const rts, worker_id self,
 #if BOSS_THIEF
             if (is_boss_thread) {
                 if (fails % NAP_THRESHOLD == 0) {
-                    // The boss thread should never disengage.  Sleep
-                    // instead.
+                    // The boss thread should never disengage.  Sleep instead.
                     const struct timespec sleeptime = {
                         .tv_sec = 0,
                         .tv_nsec =
@@ -394,6 +429,7 @@ handle_failed_steal_attempts(global_state *const rts, worker_id self,
 #else
             {
 #endif
+#if ENABLE_THIEF_SLEEP
                 // Check if the current worker counts.
                 uint64_t disengaged_sentinel = atomic_load_explicit(
                     &rts->disengaged_sentinel, memory_order_acquire);
@@ -455,13 +491,16 @@ handle_failed_steal_attempts(global_state *const rts, worker_id self,
                         }
 
                         // Update fail count
-                        if (scaled_elapsed < SENTINEL_THRESHOLD)
+                        if (scaled_elapsed < SENTINEL_THRESHOLD) {
                             fails -= scaled_elapsed;
-                        else {
+                        } else {
                             fails = DISENGAGE_THRESHOLD - SENTINEL_THRESHOLD;
                         }
-                        *request_threshold = SENTINEL_THRESHOLD;
+                        *sample_threshold = SENTINEL_THRESHOLD;
                     }
+#else
+                if (false) {
+#endif
                 } else if (fails % NAP_THRESHOLD == 0) {
                     // We have enough active workers to keep this worker out of
                     // disengage, but this worker was still unable to steal
@@ -470,24 +509,48 @@ handle_failed_steal_attempts(global_state *const rts, worker_id self,
                     // approximately 50 us.
                     const struct timespec sleeptime = {
                         .tv_sec = 0,
-                        .tv_nsec = 
+                        .tv_nsec =
                             (fails > SLEEP_THRESHOLD) ? SLEEP_NSEC : NAP_NSEC};
                     nanosleep(&sleeptime, NULL);
                 } else {
                     // We perform many pause instructions to reduce the thief's
                     // load on the system in a lightweight manner.
-                    for (int i = 0; i < 8 * ATTEMPTS; ++i) {
+#if defined(__aarch64__)
+                    for (int i = 0; i < STEAL_BUSY_PAUSE; ++i) {
                         busy_loop_pause();
                     }
+#else
+                    uint64_t start = __builtin_readcyclecounter();
+                    do {
+                        busy_loop_pause();
+                        busy_loop_pause();
+                        busy_loop_pause();
+                        busy_loop_pause();
+                    } while ((__builtin_readcyclecounter() - start) < 800);
+#endif
                 }
             }
         }
     } else {
         // We perform many pause instructions to reduce the thief's load on
         // the system in a lightweight manner.
-        for (int i = 0; i < 32 * ATTEMPTS; ++i) {
+#if defined(__aarch64__)
+        for (int i = 0; i < LONG_STEAL_BUSY_PAUSE; ++i) {
             busy_loop_pause();
         }
+#else
+        uint64_t start = __builtin_readcyclecounter();
+        do {
+            busy_loop_pause();
+            busy_loop_pause();
+            busy_loop_pause();
+            busy_loop_pause();
+            busy_loop_pause();
+            busy_loop_pause();
+            busy_loop_pause();
+            busy_loop_pause();
+        } while ((__builtin_readcyclecounter() - start) < 3600);
+#endif
     }
     CILK_STOP_TIMING(w, INTERVAL_SLEEP);
     return fails;
@@ -498,7 +561,7 @@ static unsigned int go_to_sleep_maybe(global_state *const rts, worker_id self,
                                       unsigned int nworkers,
                                       __cilkrts_worker *const w,
                                       Closure *const t, unsigned int fails,
-                                      unsigned int *const request_threshold,
+                                      unsigned int *const sample_threshold,
                                       history_t *const inefficient_history,
                                       history_t *const efficient_history,
                                       unsigned int *const sentinel_count_history,
@@ -506,12 +569,12 @@ static unsigned int go_to_sleep_maybe(global_state *const rts, worker_id self,
                                       unsigned int *const recent_sentinel_count) {
     if (t) {
         return maybe_reengage_workers(
-            rts, self, nworkers, w, fails, request_threshold,
+            rts, self, nworkers, w, fails, sample_threshold,
             inefficient_history, efficient_history, sentinel_count_history,
             sentinel_count_history_tail, recent_sentinel_count);
     } else {
         return handle_failed_steal_attempts(
-            rts, self, nworkers, w, fails, request_threshold,
+            rts, self, nworkers, w, fails, sample_threshold,
             inefficient_history, efficient_history, sentinel_count_history,
             sentinel_count_history_tail, recent_sentinel_count);
     }
@@ -521,7 +584,7 @@ static unsigned int go_to_sleep_maybe(global_state *const rts, worker_id self,
 __attribute__((always_inline)) static unsigned int
 decrease_fails_by_work(global_state *const rts, __cilkrts_worker *const w,
                        unsigned int fails, uint64_t elapsed,
-                       unsigned int *const request_threshold) {
+                       unsigned int *const sample_threshold) {
     uint64_t scaled_elapsed = get_scaled_elapsed(elapsed);
 
     // Decrease the number of fails based on the work done.
@@ -535,10 +598,10 @@ decrease_fails_by_work(global_state *const rts, __cilkrts_worker *const w,
     // work.
     CILK_ASSERT(w, fails % ATTEMPTS == 0);
 
-    if (scaled_elapsed > (uint64_t)(*request_threshold) - SENTINEL_THRESHOLD)
-        *request_threshold = SENTINEL_THRESHOLD;
+    if (scaled_elapsed > (uint64_t)(*sample_threshold) - SENTINEL_THRESHOLD)
+        *sample_threshold = SENTINEL_THRESHOLD;
     else
-        *request_threshold -= scaled_elapsed;
+        *sample_threshold -= scaled_elapsed;
 
     // If this worker is still sentinel, update sentinel-worker count.
     if (fails >= SENTINEL_THRESHOLD)
@@ -547,6 +610,26 @@ decrease_fails_by_work(global_state *const rts, __cilkrts_worker *const w,
     return fails;
 }
 #endif // ENABLE_THIEF_SLEEP
+
+__attribute__((always_inline)) static unsigned int
+init_fails(uint32_t wake_val, global_state *rts) {
+    // It's possible that a disengaged worker is woken up by a call to
+    // request_more_thieves, in which case it should be a sentinel.  But there
+    // isn't a direct way to tell how whether the worker should be active or a
+    // sentinel when it's woken up.  Since the maximum value of the futex when
+    // sentinels are engaging and disengaging during Cilk execution is
+    // nworkers/2, we simply assume that if the value of the futex is less than
+    // that value, then it should be a sentinel.
+    //
+    // As a result, when workers are woken up to start executing any new Cilk
+    // function, half of them will be active, and half sentinels.
+    if (wake_val <= (rts->nworkers / 2)) {
+        atomic_fetch_add_explicit(&rts->disengaged_sentinel, 1,
+                                  memory_order_release);
+        return SENTINEL_THRESHOLD;
+    }
+    return 0;
+}
 
 __attribute__((always_inline)) static unsigned int
 reset_fails(global_state *rts, unsigned int fails) {
@@ -574,7 +657,7 @@ disengage_worker(global_state *g, unsigned int nworkers, worker_id self) {
     cilk_mutex_unlock(&g->index_lock);
 }
 
- __attribute__((always_inline)) static inline void
+__attribute__((always_inline)) static inline void
 reengage_worker(global_state *g, unsigned int nworkers, worker_id self) {
     cilk_mutex_lock(&g->index_lock);
     uint64_t disengaged_sentinel = atomic_fetch_sub_explicit(
