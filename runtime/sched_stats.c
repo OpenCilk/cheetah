@@ -8,6 +8,7 @@
 #include "internal-malloc-impl.h"
 #include "local.h"
 #include "sched_stats.h"
+#include "types.h"
 
 #if SCHED_STATS
 static const char *enum_to_str(enum timing_type t) {
@@ -157,14 +158,15 @@ void cilk_exit_worker_timing(struct global_state *g) {
 
 static void sched_stats_reset_worker(__cilkrts_worker *w,
                                      void *data __attribute__((unused))) {
+    local_state *l = w->l;
     for (int t = 0; t < NUMBER_OF_STATS; t++) {
-        w->l->stats.time[t] = 0;
-        w->l->stats.count[t] = 0;
+        l->stats.time[t] = 0;
+        l->stats.count[t] = 0;
     }
-    w->l->stats.steals = 0;
-    w->l->stats.repos = 0;
-    w->l->stats.reeng_rqsts = 0;
-    w->l->stats.onesen_rqsts = 0;
+    l->stats.steals = 0;
+    l->stats.repos = 0;
+    l->stats.reeng_rqsts = 0;
+    l->stats.onesen_rqsts = 0;
 }
 
 #define COL_DESC "%15s"
@@ -177,22 +179,24 @@ static void sched_stats_reset_worker(__cilkrts_worker *w,
 static void sched_stats_print_worker(__cilkrts_worker *w, void *data) {
     FILE *fp = (FILE *)data;
     fprintf(fp, WORKER_HDR_DESC, "Worker", w->self);
+    global_state *g = w->g;
+    local_state *l = w->l;
     for (int t = 0; t < NUMBER_OF_STATS; t++) {
-        double tmp = nsec_to_sec(w->l->stats.time[t]);
-        w->g->stats.time[t] += (double)tmp;
-        uint64_t tmp_count = w->l->stats.count[t];
-        w->g->stats.count[t] += tmp_count;
+        double tmp = nsec_to_sec(l->stats.time[t]);
+        g->stats.time[t] += (double)tmp;
+        uint64_t tmp_count = l->stats.count[t];
+        g->stats.count[t] += tmp_count;
         fprintf(fp, FIELD_DESC, tmp, tmp_count);
     }
-    w->g->stats.steals += w->l->stats.steals;
-    w->g->stats.repos += w->l->stats.repos;
-    w->g->stats.reeng_rqsts += w->l->stats.reeng_rqsts;
-    w->g->stats.onesen_rqsts += w->l->stats.onesen_rqsts;
+    g->stats.steals += l->stats.steals;
+    g->stats.repos += l->stats.repos;
+    g->stats.reeng_rqsts += l->stats.reeng_rqsts;
+    g->stats.onesen_rqsts += l->stats.onesen_rqsts;
 
-    fprintf(stderr, COUNT_DESC, w->l->stats.steals);
-    fprintf(stderr, COUNT_DESC, w->l->stats.repos);
-    fprintf(stderr, COUNT_DESC, w->l->stats.reeng_rqsts);
-    fprintf(stderr, COUNT_DESC, w->l->stats.onesen_rqsts);
+    fprintf(stderr, COUNT_DESC, l->stats.steals);
+    fprintf(stderr, COUNT_DESC, l->stats.repos);
+    fprintf(stderr, COUNT_DESC, l->stats.reeng_rqsts);
+    fprintf(stderr, COUNT_DESC, l->stats.onesen_rqsts);
     fprintf(fp, "\n");
 }
 

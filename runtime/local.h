@@ -14,6 +14,7 @@ struct local_state {
     unsigned short state; /* __cilkrts_worker_state */
     bool provably_good_steal;
     unsigned int rand_next;
+    uint32_t wake_val;
 
     jmpbuf rts_ctx;
     struct cilk_fiber_pool fiber_pool;
