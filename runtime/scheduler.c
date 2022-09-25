@@ -152,12 +152,12 @@ static void setup_for_sync(__cilkrts_worker *w, Closure *t) {
         // never go back to the runtime; we will only free it either once
         // when we get back to the runtime or when we encounter a case
         // where we need to.
-        w->l->fiber_to_free = t->fiber;
+        cilk_fiber_deallocate_to_pool(w, t->fiber);
         t->fiber = t->fiber_child;
         t->fiber_child = NULL;
 
         if (USE_EXTENSION) {
-            w->l->ext_fiber_to_free = t->ext_fiber;
+            cilk_fiber_deallocate_to_pool(w, t->ext_fiber);
             t->ext_fiber = t->ext_fiber_child;
             t->ext_fiber_child = NULL;
         }
@@ -1340,12 +1340,12 @@ int Cilk_sync(__cilkrts_worker *const w, __cilkrts_stack_frame *frame) {
         // exception in the continuation was thrown), we still need this
         // fiber for unwinding.
         if (t->user_exn.exn == NULL) {
-             l->fiber_to_free = t->fiber;
+            cilk_fiber_deallocate_to_pool(w, t->fiber);
         } else {
             t->saved_throwing_fiber = t->fiber;
         }
         if (USE_EXTENSION) {
-            l->ext_fiber_to_free = t->ext_fiber;
+            cilk_fiber_deallocate_to_pool(w, t->ext_fiber);
         }
         t->fiber = NULL;
         t->ext_fiber = NULL;
