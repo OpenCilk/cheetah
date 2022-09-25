@@ -401,11 +401,6 @@ void __cilkrts_internal_invoke_cilkified_root(__cilkrts_stack_frame *sf) {
 
     CILK_ASSERT_G(!__cilkrts_get_tls_worker());
 
-    // Start the workers if necessary
-    if (__builtin_expect(!g->workers_started, false)) {
-        __cilkrts_start_workers(g);
-    }
-
     if (!is_boss_thread) {
 #if BOSS_THIEF
         cilk_fiber_pool_per_worker_init(g->workers[0]);
@@ -476,6 +471,11 @@ void __cilkrts_internal_invoke_cilkified_root(__cilkrts_stack_frame *sf) {
     // of the extra kernel interactions involved in waking workers gradually.
     wake_thieves(g);
     /* request_more_thieves(g, g->nworkers); */
+
+    // Start the workers if necessary
+    if (__builtin_expect(!g->workers_started, false)) {
+        __cilkrts_start_workers(g);
+    }
 
     if (__builtin_setjmp(g->boss_ctx) == 0) {
         CILK_SWITCH_TIMING(__cilkrts_tls_worker, INTERVAL_CILKIFY_ENTER,
