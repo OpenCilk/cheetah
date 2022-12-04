@@ -143,7 +143,6 @@ static void setup_for_sync(__cilkrts_worker *w, Closure *t) {
     // ANGE: this must be true since in case a) we would have freed it in
     // Cilk_sync, or in case b) we would have freed it when we first returned to
     // the runtime before doing the provably good steal.
-    CILK_ASSERT(w, w->l->fiber_to_free == NULL);
     CILK_ASSERT(w, t->fiber != t->fiber_child);
 
     if (t->simulated_stolen == false) {
@@ -157,7 +156,8 @@ static void setup_for_sync(__cilkrts_worker *w, Closure *t) {
         t->fiber_child = NULL;
 
         if (USE_EXTENSION) {
-            cilk_fiber_deallocate_to_pool(w, t->ext_fiber);
+            if (t->ext_fiber)
+                cilk_fiber_deallocate_to_pool(w, t->ext_fiber);
             t->ext_fiber = t->ext_fiber_child;
             t->ext_fiber_child = NULL;
         }
@@ -503,7 +503,7 @@ static Closure *Closure_return(__cilkrts_worker *const w, Closure *child) {
         // Case where we are not the leftmost stack.
         CILK_ASSERT(w, parent->fiber_child != child->fiber);
         cilk_fiber_deallocate_to_pool(w, child->fiber);
-        if (USE_EXTENSION) {
+        if (USE_EXTENSION && child->ext_fiber) {
             cilk_fiber_deallocate_to_pool(w, child->ext_fiber);
         }
     } else {
@@ -1313,24 +1313,6 @@ int Cilk_sync(__cilkrts_worker *const w, __cilkrts_stack_frame *frame) {
     // when sync fails, the user_rmap should remain NULL at this point.
     CILK_ASSERT(w, t->user_rmap == (cilkred_map *)NULL);
 
-    // ANGE: we might have passed a sync successfully before and never
-    // gotten back to runtime but returning to another ancestor that needs
-    // to sync ... in which case we might have a fiber to free, but it's
-    // never the same fiber that we are on right now.
-    local_state *l = w->l;
-    if (l->fiber_to_free) {
-        CILK_ASSERT(w, l->fiber_to_free != t->fiber);
-        // we should free this fiber now and we can as long as we are not on
-        // it
-        cilk_fiber_deallocate_to_pool(w, l->fiber_to_free);
-        l->fiber_to_free = NULL;
-    }
-    if (USE_EXTENSION && l->ext_fiber_to_free) {
-        CILK_ASSERT(w, l->ext_fiber_to_free != t->ext_fiber);
-        cilk_fiber_deallocate_to_pool(w, l->ext_fiber_to_free);
-        l->ext_fiber_to_free = NULL;
-    }
-
     if (Closure_has_children(t)) {
         cilkrts_alert(SYNC, w,
                       "(Cilk_sync) Closure %p has outstanding children",
@@ -1344,7 +1326,7 @@ int Cilk_sync(__cilkrts_worker *const w, __cilkrts_stack_frame *frame) {
         } else {
             t->saved_throwing_fiber = t->fiber;
         }
-        if (USE_EXTENSION) {
+        if (USE_EXTENSION && t->ext_fiber) {
             cilk_fiber_deallocate_to_pool(w, t->ext_fiber);
         }
         t->fiber = NULL;
@@ -1406,10 +1388,6 @@ static void do_what_it_says(ReadyDeque *deques, __cilkrts_worker *w,
 
         switch (t->status) {
         case CLOSURE_READY:
-            // ANGE: anything we need to free must have been freed at this point
-            CILK_ASSERT(w, l->fiber_to_free == NULL);
-            CILK_ASSERT(w, l->ext_fiber_to_free == NULL);
-
             cilkrts_alert(SCHED, w, "(do_what_it_says) CLOSURE_READY");
             /* just execute it */
             setup_for_execution(w, t);
@@ -1446,15 +1424,6 @@ static void do_what_it_says(ReadyDeque *deques, __cilkrts_worker *w,
                 CILK_ASSERT_POINTER_EQUAL(w, w, __cilkrts_get_tls_worker());
                 sanitizer_finish_switch_fiber();
                 worker_change_state(w, WORKER_SCHED);
-                // CILK_ASSERT(w, t->fiber == w->l->fiber_to_free);
-                if (l->fiber_to_free) {
-                    cilk_fiber_deallocate_to_pool(w, l->fiber_to_free);
-                    l->fiber_to_free = NULL;
-                }
-                if (USE_EXTENSION && l->ext_fiber_to_free) {
-                    cilk_fiber_deallocate_to_pool(w, l->ext_fiber_to_free);
-                    l->ext_fiber_to_free = NULL;
-                }
 
                 // Attempt to get a closure from the bottom of our deque.
                 deque_lock_self(deques, w);

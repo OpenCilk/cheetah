@@ -45,8 +45,6 @@ static local_state *worker_local_init(local_state *l, global_state *g) {
     }
     l->hyper_table =
         g->hyper_table ? hyper_table_cache_create(g->hyper_table) : NULL;
-    l->fiber_to_free = NULL;
-    l->ext_fiber_to_free = NULL;
     l->state = WORKER_IDLE;
     l->provably_good_steal = false;
     l->rand_next = 0; /* will be reset in scheduler loop */
@@ -545,16 +543,7 @@ void __cilkrts_internal_exit_cilkified_root(global_state *g,
     if (is_boss_thread) {
         // We finished the computation on the boss thread.  No need to jump to
         // the runtime in this case; just return normally.
-        /* CILK_ASSERT(w, w->l->fiber_to_free == NULL); */
         local_state *l = w->l;
-        if (l->fiber_to_free) {
-            cilk_fiber_deallocate_to_pool(w, l->fiber_to_free);
-            l->fiber_to_free = NULL;
-        }
-        if (l->ext_fiber_to_free) {
-            cilk_fiber_deallocate_to_pool(w, l->ext_fiber_to_free);
-            l->ext_fiber_to_free = NULL;
-        }
         atomic_store_explicit(&g->cilkified, 0, memory_order_release);
         l->state = WORKER_IDLE;
         __cilkrts_tls_worker = NULL;
@@ -645,7 +634,6 @@ static void sum_allocations(__cilkrts_worker *w, void *data) {
 }
 
 static void wrap_fiber_pool_destroy(__cilkrts_worker *w, void *data) {
-    CILK_ASSERT(w, w->l->fiber_to_free == NULL);
     cilk_fiber_pool_per_worker_destroy(w);
 }
 

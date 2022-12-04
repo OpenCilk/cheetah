@@ -19,8 +19,6 @@ struct local_state {
     jmpbuf rts_ctx;
     struct cilk_fiber_pool fiber_pool;
     struct cilk_im_desc im_desc;
-    struct cilk_fiber *fiber_to_free;
-    struct cilk_fiber *ext_fiber_to_free;
     struct sched_stats stats;
 };
 
