@@ -80,7 +80,10 @@ hyperobject_base *__cilkrts_hyper_key(void *key) {
 }
 
 /* ABI, declared in cilk_api.h */
-void *__cilkrts_reducer_lookup(void *key) {
+/* void *__cilkrts_reducer_lookup(void *key) { */
+void *__cilkrts_reducer_lookup(void *key, size_t size,
+			       __cilk_identity_fn id,
+			       __cilk_reduce_fn reduce) {
   hyperobject_base *hyper = __cilkrts_hyper_key(key);
   if (hyper)
     return cilkrts_hyper_lookup(hyper);

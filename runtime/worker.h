@@ -6,6 +6,7 @@
 struct __cilkrts_stack_frame;
 struct local_state;
 struct global_state;
+struct local_hyper_table;
 
 enum __cilkrts_worker_state {
     WORKER_IDLE = 10,
@@ -25,6 +26,8 @@ struct __cilkrts_worker {
 
     // Map from reducer names to reducer values
     cilkred_map *reducer_map;
+
+    struct local_hyper_table *hyper_table;
 
     // Global state of the runtime system, opaque to the client.
     struct global_state *g;

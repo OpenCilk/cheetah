@@ -4,6 +4,7 @@
 #include "cilk-internal.h"
 #include "cilkred_map.h"
 #include "fiber.h"
+#include "local-hypertable.h"
 #include "mutex.h"
 
 // Forward declaration
@@ -91,6 +92,10 @@ struct Closure {
     _Atomic(cilkred_map *) volatile child_rmap;
     /* Reducer map for this closure when suspended at sync */
     cilkred_map *user_rmap;
+
+    hyper_table *right_ht;
+    hyper_table *child_ht;
+    hyper_table *user_ht;
 
     // Exceptions (roughly follows the reducer protocol)
 

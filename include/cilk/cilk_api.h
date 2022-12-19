@@ -31,13 +31,15 @@ extern uint64_t __cilkrts_get_dprand(void);
 typedef void (*__cilk_identity_fn)(void *);
 typedef void (*__cilk_reduce_fn)(void *, void *);
 
-extern void *__cilkrts_reducer_lookup(void *key);
+/* extern void *__cilkrts_reducer_lookup(void *key); */
+extern void *__cilkrts_reducer_lookup(void *key, size_t size,
+                                      __cilk_identity_fn id,
+                                      __cilk_reduce_fn reduce);
 extern void __cilkrts_reducer_register(void *key, size_t size,
                                        __cilk_identity_fn id,
                                        __cilk_reduce_fn reduce)
-  __attribute__((deprecated));
-extern void __cilkrts_reducer_unregister(void *key)
-  __attribute__((deprecated));
+    __attribute__((deprecated));
+extern void __cilkrts_reducer_unregister(void *key) __attribute__((deprecated));
 
 #ifdef __cplusplus
 }

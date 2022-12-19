@@ -248,6 +248,8 @@ void Cilk_set_return(__cilkrts_worker *const w) {
     // all rmaps from child or right sibling must have been reduced
     CILK_ASSERT(w, t->child_rmap == (cilkred_map *)NULL &&
                        t->right_rmap == (cilkred_map *)NULL);
+    CILK_ASSERT(w, t->child_ht == (hyper_table *)NULL &&
+                       t->right_ht == (hyper_table *)NULL);
     CILK_ASSERT(w, t->call_parent);
     CILK_ASSERT(w, t->spawn_parent == NULL);
     CILK_ASSERT(w, (t->frame->flags & CILK_FRAME_DETACHED) == 0);
@@ -401,6 +403,7 @@ static Closure *Closure_return(__cilkrts_worker *const w, Closure *child) {
 
     /* If in the future the worker's map is not created lazily,
        assert it is not null here. */
+    CILK_ASSERT(w, w->hyper_table != NULL);
 
     /* need a loop as multiple siblings can return while we
        are performing reductions */
@@ -424,36 +427,47 @@ static Closure *Closure_return(__cilkrts_worker *const w, Closure *child) {
         struct closure_exception right_exn = child->right_exn;
         clear_closure_exception(&(child->right_exn));
 
+        hyper_table *rht = child->right_ht;
+        child->right_ht = NULL;
+
         // Get the "left" hypermap and exception, which either belongs to a
         // left sibling, if it exists, or the parent, otherwise.
         _Atomic(cilkred_map *) volatile *left_ptr;
         struct closure_exception *left_exn_ptr;
+        hyper_table **lht_ptr;
         Closure *const left_sib = child->left_sib;
         if (left_sib != NULL) {
             left_ptr = &left_sib->right_rmap;
             left_exn_ptr = &left_sib->right_exn;
+            lht_ptr = &left_sib->right_ht;
         } else {
             left_ptr = &parent->child_rmap;
             left_exn_ptr = &parent->child_exn;
+            lht_ptr = &parent->child_ht;
         }
         cilkred_map *left =
             atomic_load_explicit(left_ptr, memory_order_acquire);
         atomic_store_explicit(left_ptr, NULL, memory_order_relaxed);
         struct closure_exception left_exn = *left_exn_ptr;
         clear_closure_exception(left_exn_ptr);
+        hyper_table *lht = *lht_ptr;
+        *lht_ptr = NULL;
 
         // Get the current active hypermap and exception.
         cilkred_map *active = w->reducer_map;
         w->reducer_map = NULL;
         struct closure_exception active_exn = child->user_exn;
+        hyper_table *active_ht = w->hyper_table;
+        w->hyper_table = NULL;
 
         // If we have no hypermaps or exceptions on either the left or right,
         // deposit the active hypermap and exception and break from the loop.
         if (left == NULL && right == NULL && left_exn.exn == NULL &&
-            right_exn.exn == NULL) {
+            right_exn.exn == NULL && lht == NULL && rht == NULL) {
             /* deposit views */
             atomic_store_explicit(left_ptr, active, memory_order_release);
             *left_exn_ptr = active_exn;
+            *lht_ptr = active_ht;
             break;
         }
 
@@ -494,6 +508,15 @@ static Closure *Closure_return(__cilkrts_worker *const w, Closure *child) {
             active = merge_two_rmaps(w, active, right);
         }
         w->reducer_map = active;
+
+        if (lht) {
+            active_ht = merge_two_hts(w, lht, active_ht);
+        }
+        if (rht) {
+            active_ht = merge_two_hts(w, active_ht, rht);
+        }
+        w->hyper_table = active_ht;
+
         Closure_lock(w, parent);
         Closure_lock(w, child);
     }
@@ -575,6 +598,12 @@ static Closure *Closure_return(__cilkrts_worker *const w, Closure *child) {
         atomic_store_explicit(&parent->child_rmap, NULL, memory_order_relaxed);
         parent->user_rmap = NULL;
         w->reducer_map = merge_two_rmaps(w, child, active);
+
+        hyper_table *child_ht = parent->child_ht;
+        hyper_table *active_ht = parent->user_ht;
+        parent->child_ht = NULL;
+        parent->user_ht = NULL;
+        w->hyper_table = merge_two_hts(w, child_ht, active_ht);
 
         if (parent->simulated_stolen) {
             atomic_store_explicit(&parent->child_rmap, w->reducer_map,
@@ -1255,6 +1284,14 @@ void longjmp_to_user_code(__cilkrts_worker *w, Closure *t) {
                 w->extension = sf->extension;
                 w->ext_stack = sysdep_get_stack_start(t->ext_fiber);
             }
+            if (NULL == w->hyper_table) {
+                // Eagerly create local hyperobject tables.
+                struct local_hyper_table *hyper_table =
+                    (struct local_hyper_table *)malloc(
+                        sizeof(struct local_hyper_table));
+                local_hyper_table_init(hyper_table);
+                w->hyper_table = hyper_table;
+            }
         }
     }
     CILK_SWITCH_TIMING(w, INTERVAL_SCHED, INTERVAL_WORK);
@@ -1307,6 +1344,7 @@ int Cilk_sync(__cilkrts_worker *const w, __cilkrts_stack_frame *frame) {
     // each sync is executed only once; since we occupy user_rmap only
     // when sync fails, the user_rmap should remain NULL at this point.
     CILK_ASSERT(w, t->user_rmap == (cilkred_map *)NULL);
+    CILK_ASSERT(w, t->user_ht == (hyper_table *)NULL);
 
     if (Closure_has_children(t)) {
         cilkrts_alert(SYNC, w,
@@ -1331,8 +1369,13 @@ int Cilk_sync(__cilkrts_worker *const w, __cilkrts_stack_frame *frame) {
         // reduce these when successful provably good steal occurs
         cilkred_map *reducers = w->reducer_map;
         w->reducer_map = NULL;
+
+        hyper_table *ht = w->hyper_table;
+        w->hyper_table = NULL;
+
         Closure_suspend(deques, w, t);
         t->user_rmap = reducers; /* set this after state change to suspended */
+        t->user_ht = ht;
         res = SYNC_NOT_READY;
     } else {
         cilkrts_alert(SYNC, w, "(Cilk_sync) closure %p sync successfully",
@@ -1361,6 +1404,11 @@ int Cilk_sync(__cilkrts_worker *const w, __cilkrts_stack_frame *frame) {
             atomic_store_explicit(&t->child_rmap, NULL, memory_order_relaxed);
             /* reducer_map may be accessed without lock */
             w->reducer_map = merge_two_rmaps(w, child_rmap, w->reducer_map);
+        }
+        hyper_table *child_ht = t->child_ht;
+        if (child_ht) {
+            t->child_ht = NULL;
+            w->hyper_table = merge_two_hts(w, child_ht, w->hyper_table);
         }
         if (t->simulated_stolen)
             t->simulated_stolen = false;

@@ -81,6 +81,13 @@ static void workers_init(global_state *g) {
             // back on.
             __cilkrts_init_tls_worker(0, g);
 
+            __cilkrts_worker *w0 = g->workers[0];
+            struct local_hyper_table *hyper_table =
+                (struct local_hyper_table *)malloc(
+                    sizeof(struct local_hyper_table));
+            local_hyper_table_init(hyper_table);
+            w0->hyper_table = hyper_table;
+
             atomic_store_explicit(&g->dummy_worker.tail, NULL, memory_order_relaxed);
             atomic_store_explicit(&g->dummy_worker.head, NULL, memory_order_relaxed);
         } else {
@@ -116,6 +123,7 @@ __cilkrts_worker *__cilkrts_init_tls_worker(worker_id i, global_state *g) {
     atomic_store_explicit(&w->exc, init, memory_order_relaxed);
     w->current_stack_frame = NULL;
     w->reducer_map = NULL;
+    w->hyper_table = NULL;
     // initialize internal malloc first
     cilk_internal_malloc_per_worker_init(w);
     // zero-initialize the worker's fiber pool.
@@ -272,9 +280,9 @@ global_state *__cilkrts_startup(int argc, char *argv[]) {
 
     // Create the root closure and a fiber to go with it.  Use worker 0 to
     // allocate the closure and fiber.
-    Closure *t = Closure_create(g->workers[g->exiting_worker], 0);
-    struct cilk_fiber *fiber = cilk_fiber_allocate(
-        g->workers[g->exiting_worker], g->options.stacksize);
+    __cilkrts_worker *w0 = g->workers[0];
+    Closure *t = Closure_create(w0, NULL);
+    struct cilk_fiber *fiber = cilk_fiber_allocate(w0, g->options.stacksize);
     t->fiber = fiber;
     g->root_closure = t;
 
@@ -518,6 +526,8 @@ void __cilkrts_internal_exit_cilkified_root(global_state *g,
         __cilkrts_worker *w0 = workers[0];
         w0->reducer_map = w->reducer_map;
         w->reducer_map = NULL;
+        w0->hyper_table = w->hyper_table;
+        w->hyper_table = NULL;
         w0->extension = w->extension;
         w->extension = NULL;
     }
@@ -628,6 +638,11 @@ static void worker_terminate(__cilkrts_worker *w, void *data) {
     // Workers can have NULL reducer maps now.
     if (rm) {
         cilkred_map_destroy_map(w, rm);
+    }
+    hyper_table *ht = w->hyper_table;
+    w->hyper_table = NULL;
+    if (ht) {
+        local_hyper_table_destroy(ht);
     }
     worker_local_destroy(w->l, w->g);
     cilk_internal_malloc_per_worker_terminate(w); // internal malloc last

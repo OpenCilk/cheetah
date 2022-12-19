@@ -300,6 +300,7 @@ void Closure_remove_child(__cilkrts_worker *const w, Closure *parent,
     }
 
     CILK_ASSERT(w, child->right_rmap == (cilkred_map *)NULL);
+    CILK_ASSERT(w, child->right_ht == (hyper_table *)NULL);
 
     unlink_child(w, child);
 }
@@ -421,6 +422,10 @@ static inline void Closure_clean(__cilkrts_worker *const w, Closure *t) {
         CILK_ASSERT(w, t->user_rmap == (cilkred_map *)NULL);
         CILK_ASSERT(w, t->child_rmap == (cilkred_map *)NULL);
         CILK_ASSERT(w, t->right_rmap == (cilkred_map *)NULL);
+
+        CILK_ASSERT(w, t->user_ht == (hyper_table *)NULL);
+        CILK_ASSERT(w, t->child_ht == (hyper_table *)NULL);
+        CILK_ASSERT(w, t->right_ht == (hyper_table *)NULL);
     } else {
         CILK_ASSERT_G(t->left_sib == (Closure *)NULL);
         CILK_ASSERT_G(t->right_sib == (Closure *)NULL);
@@ -428,6 +433,10 @@ static inline void Closure_clean(__cilkrts_worker *const w, Closure *t) {
         CILK_ASSERT_G(t->user_rmap == (cilkred_map *)NULL);
         CILK_ASSERT_G(t->child_rmap == (cilkred_map *)NULL);
         CILK_ASSERT_G(t->right_rmap == (cilkred_map *)NULL);
+
+        CILK_ASSERT_G(t->user_ht == (hyper_table *)NULL);
+        CILK_ASSERT_G(t->child_ht == (hyper_table *)NULL);
+        CILK_ASSERT_G(t->right_ht == (hyper_table *)NULL);
     }
 
     cilk_mutex_destroy(&t->mutex);

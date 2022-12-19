@@ -12,9 +12,11 @@ set(CHEETAH_SOURCES
   hypertable.c
   init.c
   internal-malloc.c
+  local-hypertable.c
+  local-reducer-api.c
   pedigree_globals.c
   personality.c
-  reducer_api.c
+  # reducer_api.c
   reducer_impl.c
   sched_stats.c
   scheduler.c
