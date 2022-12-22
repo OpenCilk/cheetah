@@ -43,7 +43,10 @@ struct rts_options {
     unsigned int force_reduce;   /* can be set via env variable CILK_FORCE_REDUCE */
 };
 
-struct worker_args;
+struct worker_args {
+    worker_id id;
+    global_state *g;
+};
 
 struct global_state {
     /* globally-visible options (read-only after init) */
@@ -118,11 +121,6 @@ struct global_state {
 };
 
 CHEETAH_INTERNAL extern global_state *default_cilkrts;
-
-struct worker_args {
-    worker_id id;
-    global_state *g;
-};
 
 CHEETAH_INTERNAL
 __cilkrts_worker *__cilkrts_init_tls_worker(worker_id i, global_state *g);

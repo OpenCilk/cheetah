@@ -47,6 +47,7 @@ static local_state *worker_local_init(local_state *l, global_state *g) {
         g->hyper_table ? hyper_table_cache_create(g->hyper_table) : NULL;
     l->state = WORKER_IDLE;
     l->provably_good_steal = false;
+    l->exiting = false;
     l->rand_next = 0; /* will be reset in scheduler loop */
     l->wake_val = 0;
     cilk_sched_stats_init(&(l->stats));
@@ -365,16 +366,6 @@ static inline __attribute__((noinline)) void boss_wait_helper(void) {
     // Wait until the cilkified region is done executing.
     wait_until_cilk_done(g);
 
-#if BOSS_THIEF
-    __cilkrts_worker **workers = g->workers;
-    __cilkrts_worker *w0 = workers[0];
-    __cilkrts_worker *wexit = workers[g->exiting_worker];
-    w0->reducer_map = wexit->reducer_map;
-    wexit->reducer_map = NULL;
-    w0->extension = wexit->extension;
-    wexit->extension = NULL;
-    g->exiting_worker = 0;
-#endif
 
     // At this point, some Cilk worker must have completed the
     // Cilkified region and executed uncilkify at the end of the Cilk
@@ -400,34 +391,36 @@ void __cilkrts_internal_invoke_cilkified_root(__cilkrts_stack_frame *sf) {
     CILK_ASSERT_G(!__cilkrts_get_tls_worker());
 
     if (!is_boss_thread) {
+        __cilkrts_worker *w0 = g->workers[0];
 #if BOSS_THIEF
-        cilk_fiber_pool_per_worker_init(g->workers[0]);
+        cilk_fiber_pool_per_worker_init(w0);
         // rts_srand(g->workers[0], (0 + 1) * 162347);
-        g->workers[0]->l->rand_next = 162347;
+        w0->l->rand_next = 162347;
 #endif
         if (USE_EXTENSION) {
             g->root_closure->ext_fiber =
-                cilk_fiber_allocate(g->workers[0], g->options.stacksize);
+                cilk_fiber_allocate(w0, g->options.stacksize);
         }
         is_boss_thread = true;
     }
 
     // The boss thread will impersonate the last exiting worker until it tries
     // to become a thief.
+    __cilkrts_worker *w;
 #if BOSS_THIEF
-    __cilkrts_tls_worker = g->workers[0];
+    w = g->workers[0];
 #else
-    __cilkrts_tls_worker = g->workers[g->exiting_worker];
+    w = g->workers[g->exiting_worker];
 #endif
+    __cilkrts_tls_worker = w;
     if (USE_EXTENSION) {
         // Initialize sf->extension, to appease the later call to
         // setup_for_execution.
-        sf->extension = __cilkrts_tls_worker->extension;
+        sf->extension = w->extension;
         // Initialize worker->ext_stack.
-        __cilkrts_tls_worker->ext_stack =
-            sysdep_get_stack_start(g->root_closure->ext_fiber);
+        w->ext_stack = sysdep_get_stack_start(g->root_closure->ext_fiber);
     }
-    CILK_START_TIMING(__cilkrts_tls_worker, INTERVAL_CILKIFY_ENTER);
+    CILK_START_TIMING(w, INTERVAL_CILKIFY_ENTER);
 
     // Mark the root closure as not initialized
     g->root_closure_initialized = false;
@@ -501,15 +494,27 @@ void __cilkrts_internal_exit_cilkified_root(global_state *g,
     // setting done, so that other workers will properly observe the new
     // exiting_worker.
     worker_id self = w->self;
-    g->exiting_worker = self;
     ReadyDeque *deques = g->deques;
 
     // Mark the computation as done.  Also "sleep" the workers: update global
     // flags so workers who exit the work-stealing loop will return to waiting
     // for the start of the next Cilkified region.
     sleep_thieves(g);
+
     atomic_store_explicit(&g->done, 1, memory_order_release);
     /* wake_all_disengaged(g); */
+
+#if BOSS_THIEF
+    if (self != 0) {
+        w->l->exiting = true;
+        __cilkrts_worker **workers = g->workers;
+        __cilkrts_worker *w0 = workers[0];
+        w0->reducer_map = w->reducer_map;
+        w->reducer_map = NULL;
+        w0->extension = w->extension;
+        w->extension = NULL;
+    }
+#endif
 
 #if !BOSS_THIEF
     if (!is_boss_thread && self != atomic_load_explicit(&g->start_root_worker,
@@ -544,7 +549,7 @@ void __cilkrts_internal_exit_cilkified_root(global_state *g,
         // We finished the computation on the boss thread.  No need to jump to
         // the runtime in this case; just return normally.
         local_state *l = w->l;
-        atomic_store_explicit(&g->cilkified, 0, memory_order_release);
+        atomic_store_explicit(&g->cilkified, 0, memory_order_relaxed);
         l->state = WORKER_IDLE;
         __cilkrts_tls_worker = NULL;
 

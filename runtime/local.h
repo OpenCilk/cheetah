@@ -13,6 +13,7 @@ struct local_state {
 
     unsigned short state; /* __cilkrts_worker_state */
     bool provably_good_steal;
+    bool exiting;
     unsigned int rand_next;
     uint32_t wake_val;
 

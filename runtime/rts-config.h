@@ -38,7 +38,8 @@
 
 #define PROC_SPEED_IN_GHZ 2.2
 
-#define BUSY_LOOP_SPIN 4096
+#define BUSY_PAUSE 1
+#define BUSY_LOOP_SPIN 4096 / BUSY_PAUSE
 
 #define ENABLE_THIEF_SLEEP 1
 

@@ -1,5 +1,7 @@
 #include <assert.h>
 #include <pthread.h>
+#include <stdatomic.h>
+#include <stdint.h>
 #ifdef __linux__
 #include <sched.h>
 #endif
@@ -1063,20 +1065,17 @@ static Closure *Closure_steal(__cilkrts_worker **workers, ReadyDeque *deques,
     __cilkrts_worker *victim_w;
     victim_w = workers[victim];
 
-    if (victim_w == NULL)
-        return NULL;
-
     // Fast test for an unsuccessful steal attempt using only read operations.
     // This fast test seems to improve parallel performance.
-    {
-        __cilkrts_stack_frame **head =
-            atomic_load_explicit(&victim_w->head, memory_order_relaxed);
-        __cilkrts_stack_frame **tail =
-            atomic_load_explicit(&victim_w->tail, memory_order_relaxed);
-        if (head >= tail) {
-            return NULL;
-        }
+    /* { */
+    __cilkrts_stack_frame **head =
+        atomic_load_explicit(&victim_w->head, memory_order_relaxed);
+    __cilkrts_stack_frame **tail =
+        atomic_load_explicit(&victim_w->tail, memory_order_relaxed);
+    if (head >= tail) {
+        return NULL;
     }
+    /* } */
 
     //----- EVENT_STEAL_ATTEMPT
     if (deque_trylock(deques, w, victim) == 0) {
@@ -1425,6 +1424,17 @@ static void do_what_it_says(ReadyDeque *deques, __cilkrts_worker *w,
                 sanitizer_finish_switch_fiber();
                 worker_change_state(w, WORKER_SCHED);
 
+                // If this worker finished the cilkified region, mark the
+                // computation as no longer cilkified, to signal the thread that
+                // originally cilkified the execution.
+                if (l->exiting) {
+                    l->exiting = false;
+                    global_state *g = w->g;
+                    CILK_EXIT_WORKER_TIMING(g);
+                    signal_uncilkified(g);
+                    return;
+                }
+
                 // Attempt to get a closure from the bottom of our deque.
                 deque_lock_self(deques, w);
                 t = deque_xtract_bottom(deques, w, self);
@@ -1485,13 +1495,15 @@ void worker_scheduler(__cilkrts_worker *w) {
     // Get this worker's local_state pointer, to avoid rereading it
     // unnecessarily during the work-stealing loop.  This optimization helps
     // reduce sharing on the worker structure.
-    unsigned int rand_state = w->l->rand_next;
+    local_state *l = w->l;
+    unsigned int rand_state = l->rand_next;
 
     // Get the number of workers.  We don't currently support changing the
     // number of workers dynamically during execution of a Cilkified region.
     unsigned int nworkers = rts->nworkers;
+
     // Initialize count of consecutive failed steal attempts.
-    unsigned int fails = init_fails(w->l->wake_val, rts);
+    unsigned int fails = init_fails(l->wake_val, rts);
     unsigned int sample_threshold = SENTINEL_THRESHOLD;
     // Local history information of the state of the system, for sentinel
     // workers to use to determine when to disengage and how many workers to
@@ -1525,6 +1537,7 @@ void worker_scheduler(__cilkrts_worker *w) {
                 &rts->disengaged_sentinel, memory_order_relaxed);
             uint32_t disengaged = GET_DISENGAGED(disengaged_sentinel);
             uint32_t stealable = nworkers - disengaged;
+            uint32_t sentinel = recent_sentinel_count / SENTINEL_COUNT_HISTORY;
 
             if (__builtin_expect(stealable == 1, false))
                 // If this worker detects only 1 stealable worker, then its the
@@ -1533,15 +1546,25 @@ void worker_scheduler(__cilkrts_worker *w) {
 
 #else // ENABLE_THIEF_SLEEP
             uint32_t stealable = nworkers;
+            uint32_t sentinel = nworkers / 2;
 #endif // ENABLE_THIEF_SLEEP
+            uint32_t lg_sentinel = sentinel == 0 ? 1
+                                                 : (8 * sizeof(sentinel)) -
+                                                       __builtin_clz(sentinel);
+            uint32_t sentinel_div_lg_sentinel =
+                sentinel == 0 ? 1
+                              : (sentinel >> (8 * sizeof(lg_sentinel) -
+                                              __builtin_clz(lg_sentinel)));
+            const unsigned int NAP_THRESHOLD = SENTINEL_THRESHOLD * 64;
 
+            uint64_t start = __builtin_readcyclecounter();
             int attempt = ATTEMPTS;
             do {
                 // Choose a random victim not equal to self.
                 worker_id victim =
                         index_to_worker[get_rand(rand_state) % stealable];
                 rand_state = update_rand_state(rand_state);
-                while (victim == self) {
+                while (victim == self || __builtin_expect(workers[victim] == NULL, false)) {
                     victim = index_to_worker[get_rand(rand_state) % stealable];
                     rand_state = update_rand_state(rand_state);
                 }
@@ -1549,7 +1572,7 @@ void worker_scheduler(__cilkrts_worker *w) {
                 t = Closure_steal(workers, deques, w, victim);
                 if (!t) {
                     // Pause inside this busy loop.
-                    steal_short_pause();
+                    busy_loop_pause();
                 }
             } while (!t && --attempt > 0);
 
@@ -1563,11 +1586,22 @@ void worker_scheduler(__cilkrts_worker *w) {
                 CILK_DROP_TIMING(w, INTERVAL_SCHED);
             }
 #endif
+
             fails = go_to_sleep_maybe(
-                rts, self, nworkers, w, t, fails, &sample_threshold,
-                &inefficient_history, &efficient_history,
+                rts, self, nworkers, NAP_THRESHOLD, w, t, fails,
+                &sample_threshold, &inefficient_history, &efficient_history,
                 sentinel_count_history, &sentinel_count_history_tail,
                 &recent_sentinel_count);
+
+            if (!t) {
+                uint64_t stop = 450 * ATTEMPTS;
+                if (fails > stealable)
+                    stop += 650 * ATTEMPTS;
+                stop *= sentinel_div_lg_sentinel;
+                while ((__builtin_readcyclecounter() - start) < stop) {
+                    busy_pause();
+                }
+            }
         }
         CILK_START_TIMING(w, INTERVAL_SCHED);
         // If one Cilkified region stops and another one starts, then a worker
@@ -1605,14 +1639,14 @@ void worker_scheduler(__cilkrts_worker *w) {
 #endif // ENABLE_THIEF_SLEEP
             t = NULL;
         } else if (!is_boss &&
-                   atomic_load_explicit(&rts->done, memory_order_acquire)) {
+                   atomic_load_explicit(&rts->done, memory_order_relaxed)) {
             // If it appears the computation is done, busy-wait for a while
             // before exiting the work-stealing loop, in case another cilkified
             // region is started soon.
             unsigned int busy_fail = 0;
-            while (busy_fail++ < 2 * BUSY_LOOP_SPIN &&
-                   atomic_load_explicit(&rts->done, memory_order_acquire)) {
-                busy_loop_pause();
+            while (busy_fail++ < BUSY_LOOP_SPIN &&
+                   atomic_load_explicit(&rts->done, memory_order_relaxed)) {
+                busy_pause();
             }
             if (thief_should_wait(rts)) {
                 break;
@@ -1621,14 +1655,16 @@ void worker_scheduler(__cilkrts_worker *w) {
     }
 
     // Reset the fail count.
+#if ENABLE_THIEF_SLEEP
     reset_fails(rts, fails);
-    w->l->rand_next = rand_state;
+#endif
+    l->rand_next = rand_state;
 
     CILK_STOP_TIMING(w, INTERVAL_SCHED);
     worker_change_state(w, WORKER_IDLE);
 #if BOSS_THIEF
     if (is_boss) {
-        __builtin_longjmp(w->g->boss_ctx, 1);
+        __builtin_longjmp(rts->boss_ctx, 1);
     }
 #endif
 }
@@ -1650,6 +1686,7 @@ void *scheduler_thread_proc(void *arg) {
     // Avoid redundant lookups of these commonly accessed worker fields.
     const worker_id self = w->self;
     global_state *rts = w->g;
+    local_state *l = w->l;
     const unsigned int nworkers = rts->nworkers;
 
     // Initialize worker's random-number generator.
@@ -1657,6 +1694,7 @@ void *scheduler_thread_proc(void *arg) {
 
     CILK_START_TIMING(w, INTERVAL_SLEEP_UNCILK);
     do {
+        l->wake_val = nworkers;
         // Wait for g->start == 1 to start executing the work-stealing loop.  We
         // use a condition variable to wait on g->start, because this approach
         // seems to result in better performance.
@@ -1667,7 +1705,7 @@ void *scheduler_thread_proc(void *arg) {
 #endif
             if (thief_should_wait(rts)) {
                 disengage_worker(rts, nworkers, self);
-                w->l->wake_val = thief_wait(rts);
+                l->wake_val = thief_wait(rts);
                 reengage_worker(rts, nworkers, self);
             }
 #if !BOSS_THIEF
@@ -1691,35 +1729,11 @@ void *scheduler_thread_proc(void *arg) {
         }
 
         // At this point, some worker will have finished the Cilkified region,
-        // meaning it recordied its ID in g->exiting_worker and set g->done = 1.
+        // meaning it recorded its ID in g->exiting_worker and set g->done = 1.
         // That worker's state accurately reflects the execution of the
         // Cilkified region, including all updates to reducers.  Wait for that
         // worker to exit the work-stealing loop, and use it to wake-up the
         // original Cilkifying thread.
-        if (self == rts->exiting_worker) {
-            // Mark the computation as no longer cilkified, to signal the thread
-            // that originally cilkified the execution.
-            CILK_EXIT_WORKER_TIMING(rts);
-            CILK_START_TIMING(w, INTERVAL_SLEEP_UNCILK);
-            signal_uncilkified(rts);
-#if BOSS_THIEF
-            unsigned int fail = 0;
-            while (fail++ < BUSY_LOOP_SPIN &&
-                   !atomic_load_explicit(&rts->disengaged_thieves_futex,
-                                         memory_order_acquire)) {
-                busy_loop_pause();
-            }
-#endif // BOSS_THIEF
-        } else {
-            CILK_START_TIMING(w, INTERVAL_SLEEP_UNCILK);
-            // Busy-wait for a while to amortize the cost of syscalls to put
-            // thief threads to sleep.
-            unsigned int fail = 0;
-            while (fail++ < BUSY_LOOP_SPIN &&
-                   !atomic_load_explicit(&rts->disengaged_thieves_futex,
-                                         memory_order_acquire)) {
-                busy_loop_pause();
-            }
-        }
+        CILK_START_TIMING(w, INTERVAL_SLEEP_UNCILK);
     } while (true);
 }
