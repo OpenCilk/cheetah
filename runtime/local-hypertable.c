@@ -23,7 +23,7 @@ static void bucket_init(struct bucket *b) {
 // Data type for indexing the hash table.  This type is used for
 // hashes as well as the table's capacity.
 const int32_t MIN_CAPACITY = 4;
-const int32_t MIN_HT_CAPACITY = 16;
+const int32_t MIN_HT_CAPACITY = 8;
 
 // Constant used to determine the target maximum load factor.  The
 // table will aim for a maximum load factor of
@@ -113,8 +113,8 @@ static struct bucket *rebuild_table(hyper_table *table, int32_t new_capacity) {
     table->buckets = bucket_array_create(new_capacity);
     table->capacity = new_capacity;
     table->occupancy = 0;
-    // Initialize ins_rm_count so that the count is 0 after inserting
-    // all the existing elements.
+    // Set count of insertions and removals to prevent insertions into
+    // new table from triggering another rebuild.
     table->ins_rm_count = -old_occupancy;
 
     // Iterate through old table and insert each element into the new
@@ -128,8 +128,8 @@ static struct bucket *rebuild_table(hyper_table *table, int32_t new_capacity) {
 
     assert(table->occupancy == old_occupancy &&
            "Mismatched occupancy after resizing table.");
-    assert(table->ins_rm_count == 0 &&
-           "Unexpected operation count after rebuilding table.");
+
+    free(old_buckets);
     return table->buckets;
 }
 
@@ -280,7 +280,7 @@ bool insert_hyperobject(hyper_table *table, struct bucket b) {
             }
 
             // The key is not aleady in the table.  Append the bucket.
-            buckets[occupancy - 1] = b;
+            buckets[occupancy] = b;
             ++table->occupancy;
             return true;
         }
