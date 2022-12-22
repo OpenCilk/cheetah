@@ -17,19 +17,6 @@ extern _Unwind_Reason_Code _Unwind_RaiseException(struct _Unwind_Exception *);
 CHEETAH_INTERNAL struct cilkrts_callbacks cilkrts_callbacks = {
     0, 0, false, {NULL}, {NULL}};
 
-unsigned __cilkrts_get_nworkers(void) { return cilkg_nproc; }
-
-// Internal method to get the Cilk worker ID.  Intended for debugging purposes.
-//
-// TODO: Figure out how we want to support worker-local storage.
-unsigned __cilkrts_get_worker_number(void) {
-    __cilkrts_worker *w = __cilkrts_get_tls_worker();
-    if (w)
-        return w->self;
-    // Use the last exiting worker from default_cilkrts instead
-    return default_cilkrts->exiting_worker;
-}
-
 // Test if the Cilk runtime has been initialized.  This method is intended to
 // help initialization of libraries that depend on the OpenCilk runtime.
 int __cilkrts_is_initialized(void) { return NULL != default_cilkrts; }

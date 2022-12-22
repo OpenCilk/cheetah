@@ -26,6 +26,22 @@
 _Alignas(__cilkrts_stack_frame)
 size_t __cilkrts_stack_frame_align = __alignof__(__cilkrts_stack_frame);
 
+__attribute__((always_inline)) unsigned __cilkrts_get_nworkers(void) {
+    return cilkg_nproc;
+}
+
+// Internal method to get the Cilk worker ID.  Intended for debugging purposes.
+//
+// TODO: Figure out how we want to support worker-local storage.
+__attribute__((always_inline))
+unsigned __cilkrts_get_worker_number(void) {
+    __cilkrts_worker *w = __cilkrts_get_tls_worker();
+    if (w)
+        return w->self;
+    // If we're not cilkified, pretend we're worker 0.
+    return 0;
+}
+
 // Begin a Cilkified region.  The routine runs on a Cilkifying thread to
 // transfer the execution of this function to the workers in global_state g.
 // This routine must be inlined for correctness.
