@@ -19,6 +19,7 @@
 #include "global.h"
 #include "jmpbuf.h"
 #include "local.h"
+#include "local-hypertable.h"
 #include "readydeque.h"
 #include "scheduler.h"
 #include "worker_coord.h"
@@ -403,7 +404,6 @@ static Closure *Closure_return(__cilkrts_worker *const w, Closure *child) {
 
     /* If in the future the worker's map is not created lazily,
        assert it is not null here. */
-    CILK_ASSERT(w, w->hyper_table != NULL);
 
     /* need a loop as multiple siblings can return while we
        are performing reductions */
@@ -1284,14 +1284,6 @@ void longjmp_to_user_code(__cilkrts_worker *w, Closure *t) {
                 w->extension = sf->extension;
                 w->ext_stack = sysdep_get_stack_start(t->ext_fiber);
             }
-            if (NULL == w->hyper_table) {
-                // Eagerly create local hyperobject tables.
-                struct local_hyper_table *hyper_table =
-                    (struct local_hyper_table *)malloc(
-                        sizeof(struct local_hyper_table));
-                local_hyper_table_init(hyper_table);
-                w->hyper_table = hyper_table;
-            }
         }
     }
     CILK_SWITCH_TIMING(w, INTERVAL_SCHED, INTERVAL_WORK);
@@ -1567,6 +1559,7 @@ void worker_scheduler(__cilkrts_worker *w) {
         /* A worker entering the steal loop must have saved its reducer map into
            the frame to which it belongs. */
         CILK_ASSERT(w, !w->reducer_map);
+        CILK_ASSERT(w, !w->hyper_table);
 
         CILK_STOP_TIMING(w, INTERVAL_SCHED);
 

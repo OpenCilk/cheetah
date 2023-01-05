@@ -20,10 +20,10 @@ static void bucket_init(struct bucket *b) {
     reducer_base_init(&b->value);
 }
 
-// Data type for indexing the hash table.  This type is used for
-// hashes as well as the table's capacity.
-const int32_t MIN_CAPACITY = 4;
-const int32_t MIN_HT_CAPACITY = 8;
+/* // Data type for indexing the hash table.  This type is used for */
+/* // hashes as well as the table's capacity. */
+/* const int32_t MIN_CAPACITY = 4; */
+/* const int32_t MIN_HT_CAPACITY = 8; */
 
 // Constant used to determine the target maximum load factor.  The
 // table will aim for a maximum load factor of
@@ -75,25 +75,24 @@ static struct bucket *bucket_array_create(int32_t array_size) {
     return buckets;
 }
 
-// Some random numbers for the hash.
-uint64_t seed = 0xe803e76341ed6d51UL;
-const uint64_t salt = 0x96b9af4f6a40de92UL;
+/* // Some random numbers for the hash. */
+/* uint64_t seed = 0xe803e76341ed6d51UL; */
+/* const uint64_t salt = 0x96b9af4f6a40de92UL; */
 
-static index_t hash(uintptr_t key_in) {
-    /* uint64_t x = (uint32_t)(key_in ^ salt) | (((key_in ^ seed) >> 32) << 32);
-     */
-    uint64_t x = key_in ^ salt;
-    // mix64 from SplitMix.
-    x = (x ^ (x >> 33)) * 0xff51afd7ed558ccdUL;
-    x = (x ^ (x >> 33)) * 0xc4ceb9fe1a85ec53UL;
-    return x;
-}
+/* static index_t hash(uintptr_t key_in) { */
+/*     /\* uint64_t x = (uint32_t)(key_in ^ salt) | (((key_in ^ seed) >> 32) << 32); */
+/*      *\/ */
+/*     uint64_t x = key_in ^ salt; */
+/*     // mix64 from SplitMix. */
+/*     x = (x ^ (x >> 33)) * 0xff51afd7ed558ccdUL; */
+/*     x = (x ^ (x >> 33)) * 0xc4ceb9fe1a85ec53UL; */
+/*     return x; */
+/* } */
 
-static index_t get_table_entry(hyper_table *table, uintptr_t key) {
-    // TODO: Replace capacity with lg_capacity and replace this
-    // operation with a shift instead of a divide.
-    return hash(key) % table->capacity;
-}
+/* static index_t get_table_entry(int32_t capacity, uintptr_t key) { */
+/*     // Assumes capacity is a power of 2. */
+/*     return hash(key) & (capacity - 1); */
+/* } */
 
 void local_hyper_table_init(hyper_table *table) {
     int32_t capacity = MIN_CAPACITY;
@@ -136,88 +135,87 @@ static struct bucket *rebuild_table(hyper_table *table, int32_t new_capacity) {
 ///////////////////////////////////////////////////////////////////////////
 // Query, insert, and delete methods for the hash table.
 
-static index_t inc_index(index_t i, index_t capacity) {
-    ++i;
-    if (i == capacity)
-        i = 0;
-    return i;
-}
+/* static index_t inc_index(index_t i, index_t capacity) { */
+/*     ++i; */
+/*     if (i == capacity) */
+/*         i = 0; */
+/*     return i; */
+/* } */
 
-static bool continue_search(index_t tgt, index_t hash, index_t i,
-                            uintptr_t tgt_key, uintptr_t key) {
-    // Continue the search if the current hash is smaller than the
-    // target or if the hashes match and the current key is smaller
-    // than the target key.
-    //
-    // It's possible that the current hash is larger than the target
-    // because it belongs to a run that wraps from the end of the
-    // table to the beginning.  We want to treat such hashes as
-    // smaller than the target, unless the target itself is part of
-    // such a wrapping run.  To detect such cases, check that the
-    // target is smaller than the current index i --- meaning the
-    // search has not wrapped --- and the current hash is larger than
-    // i --- meaning the current hash is part of a wrapped run.
-    return hash <= tgt || // (hash == tgt && key < tgt_key) ||
-           (tgt < i && hash > i);
-}
+/* static bool continue_search(index_t tgt, index_t hash, index_t i, */
+/*                             uintptr_t tgt_key, uintptr_t key) { */
+/*     // Continue the search if the current hash is smaller than the */
+/*     // target or if the hashes match and the current key is smaller */
+/*     // than the target key. */
+/*     // */
+/*     // It's possible that the current hash is larger than the target */
+/*     // because it belongs to a run that wraps from the end of the */
+/*     // table to the beginning.  We want to treat such hashes as */
+/*     // smaller than the target, unless the target itself is part of */
+/*     // such a wrapping run.  To detect such cases, check that the */
+/*     // target is smaller than the current index i --- meaning the */
+/*     // search has not wrapped --- and the current hash is larger than */
+/*     // i --- meaning the current hash is part of a wrapped run. */
+/*     return hash <= tgt || // (hash == tgt && key < tgt_key) || */
+/*            (tgt < i && hash > i); */
+/* } */
 
-struct bucket *find_hyperobject(hyper_table *table, uintptr_t key) {
-    int32_t capacity = table->capacity;
-    if (capacity < MIN_HT_CAPACITY) {
-        // If the table is small enough, just scan the array.
-        struct bucket *buckets = table->buckets;
-        int32_t occupancy = table->occupancy;
+/* struct bucket *find_hyperobject(hyper_table *table, uintptr_t key) { */
+/*     int32_t capacity = table->capacity; */
+/*     if (capacity < MIN_HT_CAPACITY) { */
+/*         // If the table is small enough, just scan the array. */
+/*         struct bucket *buckets = table->buckets; */
+/*         int32_t occupancy = table->occupancy; */
 
-        // Scan the array backwards, since inserts add new entries to
-        // the end of the array, and we anticipate that the program
-        // will exhibit locality of reference.
-        for (int32_t i = occupancy - 1; i >= 0; --i)
-            if (buckets[i].key == key)
-                return &buckets[i];
+/*         // Scan the array backwards, since inserts add new entries to */
+/*         // the end of the array, and we anticipate that the program */
+/*         // will exhibit locality of reference. */
+/*         for (int32_t i = occupancy - 1; i >= 0; --i) */
+/*             if (buckets[i].key == key) */
+/*                 return &buckets[i]; */
 
-        return NULL;
-    }
+/*         return NULL; */
+/*     } */
 
-    // Target hash
-    index_t tgt = get_table_entry(table, key);
-    struct bucket *buckets = table->buckets;
-    // Start the search at the target hash
-    index_t i = tgt;
-    do {
-        uintptr_t curr_key = buckets[i].key;
-        // If we find the key, return that bucket.
-        // TODO: Consider moving this bucket to the front of the run.
-        if (key == curr_key)
-            return &buckets[i];
+/*     // Target hash */
+/*     index_t tgt = get_table_entry(capacity, key); */
+/*     struct bucket *buckets = table->buckets; */
+/*     // Start the search at the target hash */
+/*     index_t i = tgt; */
+/*     do { */
+/*         uintptr_t curr_key = buckets[i].key; */
+/*         // If we find the key, return that bucket. */
+/*         // TODO: Consider moving this bucket to the front of the run. */
+/*         if (key == curr_key) */
+/*             return &buckets[i]; */
 
-        // If we find an empty entry, the search failed.
-        if (is_empty(curr_key))
-            return NULL;
+/*         // If we find an empty entry, the search failed. */
+/*         if (is_empty(curr_key)) */
+/*             return NULL; */
 
-        // If we find a tombstone, continue the search.
-        if (is_tombstone(curr_key)) {
-            i = inc_index(i, capacity);
-            continue;
-        }
+/*         // If we find a tombstone, continue the search. */
+/*         if (is_tombstone(curr_key)) { */
+/*             i = inc_index(i, capacity); */
+/*             continue; */
+/*         } */
 
-        // Otherwise we have another valid key that does not match.
-        // Compare the hashes to decide whether or not to continue the
-        // search.
-        index_t curr_hash = get_table_entry(table, curr_key);
-        if (continue_search(tgt, curr_hash, i, key, curr_key)) {
-            i = inc_index(i, capacity);
-            continue;
-        }
+/*         // Otherwise we have another valid key that does not match. */
+/*         // Compare the hashes to decide whether or not to continue the */
+/*         // search. */
+/*         index_t curr_hash = get_table_entry(capacity, curr_key); */
+/*         if (continue_search(tgt, curr_hash, i, key, curr_key)) { */
+/*             i = inc_index(i, capacity); */
+/*             continue; */
+/*         } */
 
-        // If none of the above cases match, then the search failed to
-        // find the key.
-        return NULL;
-    } while (i != tgt);
+/*         // If none of the above cases match, then the search failed to */
+/*         // find the key. */
+/*         return NULL; */
+/*     } while (i != tgt); */
 
-    // The search failed to find the key.
-    return NULL;
-}
-
+/*     // The search failed to find the key. */
+/*     return NULL; */
+/* } */
 bool remove_hyperobject(hyper_table *table, uintptr_t key) {
     if (table->capacity < MIN_HT_CAPACITY) {
         // If the table is small enough, just scan the array.
@@ -292,9 +290,6 @@ bool insert_hyperobject(hyper_table *table, struct bucket b) {
         buckets = rebuild_table(table, capacity);
     }
 
-    // Target hash
-    index_t tgt = get_table_entry(table, b.key);
-
     // If the occupancy is already too high, rebuild the table.
     if (is_overloaded(table->occupancy, capacity)) {
         capacity *= 2;
@@ -302,6 +297,9 @@ bool insert_hyperobject(hyper_table *table, struct bucket b) {
     } else if (time_to_rebuild(table->ins_rm_count, capacity)) {
         buckets = rebuild_table(table, capacity);
     }
+
+    // Target hash
+    index_t tgt = get_table_entry(capacity, b.key);
 
     // If we find an empty entry, insert the bucket there.
     if (is_empty(buckets[tgt].key)) {
@@ -350,7 +348,7 @@ bool insert_hyperobject(hyper_table *table, struct bucket b) {
                 i = next_i;
                 continue;
             }
-            index_t next_hash = get_table_entry(table, next_key);
+            index_t next_hash = get_table_entry(capacity, next_key);
             if (!continue_search(tgt, next_hash, next_i, b.key, next_key)) {
                 // This location is appropriate for inserting the bucket.
                 buckets[i] = b;
@@ -367,7 +365,7 @@ bool insert_hyperobject(hyper_table *table, struct bucket b) {
         // Otherwise we have another valid key that does not match.
         // Compare the hashes to decide whether or not to continue the
         // search.
-        index_t curr_hash = get_table_entry(table, curr_key);
+        index_t curr_hash = get_table_entry(capacity, curr_key);
         if (continue_search(tgt, curr_hash, i, b.key, curr_key)) {
             i = inc_index(i, capacity);
             continue;
@@ -378,6 +376,7 @@ bool insert_hyperobject(hyper_table *table, struct bucket b) {
         break;
     } while (i != tgt);
 
+    index_t insert_tgt = i;
     // The search found a place to insert the bucket, but it's
     // occupied.  Insert the bucket here and shift the subsequent
     // entries.
@@ -398,20 +397,24 @@ bool insert_hyperobject(hyper_table *table, struct bucket b) {
 
         // Continue onto the next index.
         i = inc_index(i, capacity);
-    } while (i != tgt);
+    } while (i != insert_tgt);
 
-    assert(i != tgt && "Insertion failed.");
+    assert(i != insert_tgt && "Insertion failed.");
     return false;
 }
 
 hyper_table *merge_two_hts(__cilkrts_worker *restrict w,
                            hyper_table *restrict left,
                            hyper_table *restrict right) {
-    if (!left)
+    // In the trivial case of an empty hyper_table, return the other
+    // hyper_table.
+    if (!left || left->occupancy == 0)
         return right;
-    if (!right)
+    if (!right || right->occupancy == 0)
         return left;
 
+    // Pick the smaller hyper_table to be the source, which we will iterate
+    // over.
     bool left_dst;
     hyper_table *src, *dst;
     if (left->occupancy >= right->occupancy) {
@@ -424,18 +427,27 @@ hyper_table *merge_two_hts(__cilkrts_worker *restrict w,
         left_dst = false;
     }
 
-    int32_t src_capacity = src->capacity;
+    int32_t src_capacity =
+        (src->capacity < MIN_HT_CAPACITY) ? src->occupancy : src->capacity;
     struct bucket *src_buckets = src->buckets;
+    // Iterate over the contents of the source hyper_table.
     for (int32_t i = 0; i < src_capacity; ++i) {
         struct bucket b = src_buckets[i];
         if (!is_valid(b.key))
             continue;
 
+        // For each valid key in the source table, lookup that key in the
+        // destination table.
         struct bucket *dst_bucket = find_hyperobject(dst, b.key);
 
         if (NULL == dst_bucket) {
+            // The destination table does not contain this key.  Insert the
+            // key-value pair from the source table into the destination.
             insert_hyperobject(dst, b);
         } else {
+            // Merge the two views in the source and destination buckets, being
+            // sure to preserve left-to-right ordering.  Free the right view
+            // when done.
             reducer_base dst_rb = dst_bucket->value;
             if (left_dst) {
                 dst_rb.reduce_fn(dst_rb.view, b.value.view);
@@ -448,6 +460,7 @@ hyper_table *merge_two_hts(__cilkrts_worker *restrict w,
         }
     }
 
+    // Destroy the source hyper_table, and return the destination.
     local_hyper_table_destroy(src);
     free(src);
 

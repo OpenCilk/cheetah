@@ -183,6 +183,9 @@ static inline void Closure_init(Closure *t, __cilkrts_stack_frame *frame) {
     atomic_store_explicit(&t->child_rmap, NULL, memory_order_relaxed);
     atomic_store_explicit(&t->right_rmap, NULL, memory_order_relaxed);
     t->user_rmap = NULL;
+    t->user_ht = NULL;
+    t->child_ht = NULL;
+    t->right_ht = NULL;
 }
 
 static inline Closure *Closure_create(__cilkrts_worker *const w,

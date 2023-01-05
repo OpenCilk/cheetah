@@ -81,13 +81,6 @@ static void workers_init(global_state *g) {
             // back on.
             __cilkrts_init_tls_worker(0, g);
 
-            __cilkrts_worker *w0 = g->workers[0];
-            struct local_hyper_table *hyper_table =
-                (struct local_hyper_table *)malloc(
-                    sizeof(struct local_hyper_table));
-            local_hyper_table_init(hyper_table);
-            w0->hyper_table = hyper_table;
-
             atomic_store_explicit(&g->dummy_worker.tail, NULL, memory_order_relaxed);
             atomic_store_explicit(&g->dummy_worker.head, NULL, memory_order_relaxed);
         } else {
@@ -640,9 +633,10 @@ static void worker_terminate(__cilkrts_worker *w, void *data) {
         cilkred_map_destroy_map(w, rm);
     }
     hyper_table *ht = w->hyper_table;
-    w->hyper_table = NULL;
     if (ht) {
         local_hyper_table_destroy(ht);
+        free(ht);
+        w->hyper_table = NULL;
     }
     worker_local_destroy(w->l, w->g);
     cilk_internal_malloc_per_worker_terminate(w); // internal malloc last
