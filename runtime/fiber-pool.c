@@ -12,7 +12,6 @@
 // When the pool becomes full (empty), free (allocate) this fraction
 // of the pool back to (from) parent / the OS.
 #define BATCH_FRACTION 2
-#define GLOBAL_POOL_RATIO 10 // make global pool this much larger
 
 //=========================================================================
 // Currently the fiber pools are organized into two-levels, like in Hoard
@@ -258,7 +257,7 @@ static void fiber_pool_free_batch(__cilkrts_worker *w,
 /* Global fiber pool initialization: */
 void cilk_fiber_pool_global_init(global_state *g) {
 
-    unsigned int bufsize = GLOBAL_POOL_RATIO * g->options.fiber_pool_cap;
+    unsigned int bufsize = g->options.nproc * g->options.fiber_pool_cap;
     struct cilk_fiber_pool *pool = &(g->fiber_pool);
     fiber_pool_init(pool, g->options.stacksize, bufsize, NULL, 1 /*shared*/);
     CILK_ASSERT_G(NULL != pool->fibers);
@@ -306,12 +305,13 @@ void cilk_fiber_pool_per_worker_zero_init(__cilkrts_worker *w) {
  */
 void cilk_fiber_pool_per_worker_init(__cilkrts_worker *w) {
 
-    unsigned int bufsize = w->g->options.fiber_pool_cap;
+    global_state *g = w->g;
+    unsigned int bufsize = g->options.fiber_pool_cap;
     struct cilk_fiber_pool *pool = &(w->l->fiber_pool);
-    fiber_pool_init(pool, w->g->options.stacksize, bufsize, &(w->g->fiber_pool),
+    fiber_pool_init(pool, g->options.stacksize, bufsize, &(g->fiber_pool),
                     0 /* private */);
     CILK_ASSERT(w, NULL != pool->fibers);
-    CILK_ASSERT(w, w->g->fiber_pool.stack_size == pool->stack_size);
+    CILK_ASSERT(w, g->fiber_pool.stack_size == pool->stack_size);
 
     fiber_pool_stat_init(pool);
     fiber_pool_allocate_batch(w, pool, bufsize / BATCH_FRACTION);
