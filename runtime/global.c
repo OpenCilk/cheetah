@@ -211,7 +211,7 @@ global_state *global_state_init(int argc, char *argv[]) {
 void for_each_worker(global_state *g, void (*fn)(__cilkrts_worker *, void *),
                      void *data) {
     for (unsigned i = 0; i < g->options.nproc; ++i)
-        if (g->workers[i])
+        if (worker_is_valid(g->workers[i], g))
             fn(g->workers[i], data);
 }
 
@@ -219,6 +219,6 @@ void for_each_worker_rev(global_state *g,
                          void (*fn)(__cilkrts_worker *, void *), void *data) {
     unsigned i = g->options.nproc;
     while (i-- > 0)
-        if (g->workers[i])
+        if (worker_is_valid(g->workers[i], g))
             fn(g->workers[i], data);
 }

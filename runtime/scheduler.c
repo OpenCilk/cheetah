@@ -1564,7 +1564,7 @@ void worker_scheduler(__cilkrts_worker *w) {
                 worker_id victim =
                         index_to_worker[get_rand(rand_state) % stealable];
                 rand_state = update_rand_state(rand_state);
-                while (victim == self || __builtin_expect(workers[victim] == NULL, false)) {
+                while (victim == self) {
                     victim = index_to_worker[get_rand(rand_state) % stealable];
                     rand_state = update_rand_state(rand_state);
                 }

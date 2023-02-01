@@ -1,5 +1,6 @@
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE
+#include <stdatomic.h>
 #endif
 #include <sched.h>
 #include <stdint.h>
@@ -79,6 +80,11 @@ static void workers_init(global_state *g) {
             // Initialize worker 0, so we always have a worker structure to fall
             // back on.
             __cilkrts_init_tls_worker(0, g);
+
+            atomic_store_explicit(&g->dummy_worker.tail, NULL, memory_order_relaxed);
+            atomic_store_explicit(&g->dummy_worker.head, NULL, memory_order_relaxed);
+        } else {
+            g->workers[i] = &g->dummy_worker;
         }
 
         // Initialize index-to-worker map entry for this worker.
@@ -658,7 +664,7 @@ static void workers_deinit(global_state *g) {
     while (i-- > 0) {
         __cilkrts_worker *w = g->workers[i];
         g->workers[i] = NULL;
-        if (!w)
+        if (!worker_is_valid(w, g))
             continue;
         cilk_internal_malloc_per_worker_destroy(w); // internal malloc last
         free(w->l->shadow_stack);

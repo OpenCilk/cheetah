@@ -15,6 +15,7 @@
 #include "rts-config.h"
 #include "sched_stats.h"
 #include "types.h"
+#include "worker.h"
 
 extern unsigned cilkg_nproc;
 
@@ -117,6 +118,14 @@ struct global_state {
 
     struct hyper_table *hyper_table;
 
+    // This dummy worker structure is used to support lazy initialization of
+    // worker structures.  In particular, the global workers array is initially
+    // populated with pointers to this dummy worker, so that the main steal loop
+    // does not need to check whether it's reading an uninitialized entry in the
+    // global workers array.  Instead, this dummy worker will ensure the fast
+    // check in Closure_steal always fails.
+    struct __cilkrts_worker dummy_worker;
+
     struct global_sched_stats stats;
 };
 
@@ -141,6 +150,11 @@ inline static long env_get_int(char const *var) {
     if (envstr)
         return strtol(envstr, NULL, 0);
     return 0;
+}
+
+inline static bool worker_is_valid(const __cilkrts_worker *w,
+                                   const global_state *g) {
+    return w != &g->dummy_worker;
 }
 
 #endif /* _CILK_GLOBAL_H */
