@@ -122,6 +122,7 @@ static struct bucket *rebuild_table(hyper_table *table, int32_t new_capacity) {
         if (is_valid(old_buckets[i].key)) {
             bool success = insert_hyperobject(table, old_buckets[i]);
             assert(success && "Failed to insert when resizing table.");
+            (void)success;
         }
     }
 

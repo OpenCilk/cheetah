@@ -12,6 +12,7 @@
 #include "cilk2c.h"
 #include "debug.h"
 #include "fiber.h"
+#include "frame.h"
 #include "global.h"
 #include "init.h"
 #include "local-reducer-api.h"
@@ -88,6 +89,7 @@ void *__cilkrts_reducer_lookup(void *key, size_t size,
     bool success = insert_hyperobject(table, new_bucket);
     CILK_ASSERT(
         w, success && "__cilkrts_reducer_lookup failed to insert new reducer.");
+    (void)success;
     // Return the new view.
     return new_view;
 }
