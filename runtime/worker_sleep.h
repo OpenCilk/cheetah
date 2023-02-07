@@ -466,7 +466,6 @@ handle_failed_steal_attempts(global_state *const rts, worker_id self,
                             (fails > SLEEP_THRESHOLD) ? SLEEP_NSEC : NAP_NSEC};
                     nanosleep(&sleeptime, NULL);
                 } else {
-                    busy_loop_pause();
                 }
             } else {
 #else
@@ -523,14 +522,25 @@ handle_failed_steal_attempts(global_state *const rts, worker_id self,
                             fails = DISENGAGE_THRESHOLD - SENTINEL_THRESHOLD;
                         }
                         *sample_threshold = SENTINEL_THRESHOLD;
+                    } else if (fails % NAP_THRESHOLD == 0) {
+                        // We have enough active workers to keep this worker
+                        // engaged, but this worker was still unable to steal
+                        // work.  Put this thief to sleep for a while using the
+                        // conventional way. In testing, a nanosleep(0) takes
+                        // approximately 50 us.
+                        const struct timespec sleeptime = {
+                            .tv_sec = 0,
+                            .tv_nsec = (fails > SLEEP_THRESHOLD) ? SLEEP_NSEC
+                                                                 : NAP_NSEC};
+                        nanosleep(&sleeptime, NULL);
                     }
 #else
                 if (false) {
 #endif
                 } else if (fails % NAP_THRESHOLD == 0) {
-                    // We have enough active workers to keep this worker out of
-                    // disengage, but this worker was still unable to steal
-                    // work.  Put this thief to sleep for a while using the
+                    // We have enough active workers to keep this worker
+                    // engaged, but this worker was still unable to steal work.
+                    // Put this thief to sleep for a while using the
                     // conventional way. In testing, a nanosleep(0) takes
                     // approximately 50 us.
                     const struct timespec sleeptime = {
@@ -539,44 +549,10 @@ handle_failed_steal_attempts(global_state *const rts, worker_id self,
                             (fails > SLEEP_THRESHOLD) ? SLEEP_NSEC : NAP_NSEC};
                     nanosleep(&sleeptime, NULL);
                 } else {
-                    // We perform many pause instructions to reduce the thief's
-                    // load on the system in a lightweight manner.
-#if defined(__aarch64__)
-                    for (int i = 0; i < STEAL_BUSY_PAUSE; ++i) {
-                        busy_loop_pause();
-                    }
-#else
-                    uint64_t start = __builtin_readcyclecounter();
-                    do {
-                        busy_loop_pause();
-                        busy_loop_pause();
-                        busy_loop_pause();
-                        busy_loop_pause();
-                    } while ((__builtin_readcyclecounter() - start) < 800);
-#endif
                 }
             }
         }
     } else {
-        // We perform many pause instructions to reduce the thief's load on
-        // the system in a lightweight manner.
-#if defined(__aarch64__)
-        for (int i = 0; i < LONG_STEAL_BUSY_PAUSE; ++i) {
-            busy_loop_pause();
-        }
-#else
-        uint64_t start = __builtin_readcyclecounter();
-        do {
-            busy_loop_pause();
-            busy_loop_pause();
-            busy_loop_pause();
-            busy_loop_pause();
-            busy_loop_pause();
-            busy_loop_pause();
-            busy_loop_pause();
-            busy_loop_pause();
-        } while ((__builtin_readcyclecounter() - start) < 2800);
-#endif
     }
     CILK_STOP_TIMING(w, INTERVAL_SLEEP);
     return fails;
