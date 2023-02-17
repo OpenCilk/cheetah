@@ -8,7 +8,11 @@
 #include <stdlib.h>
 #include <string.h>
 
+#if ALERT_LVL & (ALERT_CFRAME|ALERT_RETURN)
+unsigned int alert_level = 0;
+#else
 CHEETAH_INTERNAL unsigned int alert_level = 0;
+#endif
 CHEETAH_INTERNAL unsigned int debug_level = 0;
 
 /* To reduce overhead of logging messages are accumulated into memory
@@ -22,7 +26,7 @@ void set_alert_level(unsigned int level) {
         flush_alert_log();
         return;
     }
-    if (level & 0x80000000) {
+    if (level & ALERT_NOBUF) {
         return;
     }
     if (alert_log == NULL) {
@@ -92,7 +96,9 @@ void flush_alert_log() {
 
 static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 
+#if !(ALERT_LVL & (ALERT_CFRAME|ALERT_RETURN))
 CHEETAH_INTERNAL
+#endif
 void cilkrts_alert(const int lvl, __cilkrts_worker *w, const char *fmt, ...) {
     if (ALERT_LVL == 0)
         return;

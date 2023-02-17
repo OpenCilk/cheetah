@@ -4,6 +4,7 @@
 
 #include "cilk-internal.h"
 #include "debug.h"
+#include "fiber-header.h"
 #include "fiber.h"
 #include "global.h"
 #include "local.h"
@@ -12,7 +13,6 @@
 // When the pool becomes full (empty), free (allocate) this fraction
 // of the pool back to (from) parent / the OS.
 #define BATCH_FRACTION 2
-#define GLOBAL_POOL_RATIO 10 // make global pool this much larger
 
 //=========================================================================
 // Currently the fiber pools are organized into two-levels, like in Hoard
@@ -258,9 +258,9 @@ static void fiber_pool_free_batch(__cilkrts_worker *w,
 /* Global fiber pool initialization: */
 void cilk_fiber_pool_global_init(global_state *g) {
 
-    unsigned int bufsize = GLOBAL_POOL_RATIO * g->options.fiber_pool_cap;
+    unsigned int bufsize = g->options.nproc * g->options.fiber_pool_cap;
     struct cilk_fiber_pool *pool = &(g->fiber_pool);
-    fiber_pool_init(pool, g->options.stacksize, bufsize, NULL, 1 /*shared*/);
+    fiber_pool_init(pool, get_stack_size(), bufsize, NULL, 1 /*shared*/);
     CILK_ASSERT_G(NULL != pool->fibers);
     fiber_pool_stat_init(pool);
     /* let's not preallocate for global fiber pool for now */
@@ -306,12 +306,13 @@ void cilk_fiber_pool_per_worker_zero_init(__cilkrts_worker *w) {
  */
 void cilk_fiber_pool_per_worker_init(__cilkrts_worker *w) {
 
-    unsigned int bufsize = w->g->options.fiber_pool_cap;
+    global_state *g = w->g;
+    unsigned int bufsize = g->options.fiber_pool_cap;
     struct cilk_fiber_pool *pool = &(w->l->fiber_pool);
-    fiber_pool_init(pool, w->g->options.stacksize, bufsize, &(w->g->fiber_pool),
+    fiber_pool_init(pool, get_stack_size(), bufsize, &(g->fiber_pool),
                     0 /* private */);
     CILK_ASSERT(w, NULL != pool->fibers);
-    CILK_ASSERT(w, w->g->fiber_pool.stack_size == pool->stack_size);
+    CILK_ASSERT(w, g->fiber_pool.stack_size == pool->stack_size);
 
     fiber_pool_stat_init(pool);
     fiber_pool_allocate_batch(w, pool, bufsize / BATCH_FRACTION);
@@ -352,6 +353,8 @@ struct cilk_fiber *cilk_fiber_allocate_from_pool(__cilkrts_worker *w) {
         pool->stats.max_in_use = pool->stats.in_use;
     }
     CILK_ASSERT(w, ret);
+    sanitizer_unpoison_fiber(ret);
+    init_fiber_header(ret);
     return ret;
 }
 
@@ -361,7 +364,8 @@ struct cilk_fiber *cilk_fiber_allocate_from_pool(__cilkrts_worker *w) {
  */
 void cilk_fiber_deallocate_to_pool(__cilkrts_worker *w,
                                    struct cilk_fiber *fiber_to_return) {
-    sanitizer_fiber_deallocate(fiber_to_return);
+    if (fiber_to_return)
+        sanitizer_poison_fiber(fiber_to_return);
     struct cilk_fiber_pool *pool = &(w->l->fiber_pool);
     if (pool->size == pool->capacity) {
         fiber_pool_free_batch(w, pool, pool->capacity / BATCH_FRACTION);
@@ -369,6 +373,7 @@ void cilk_fiber_deallocate_to_pool(__cilkrts_worker *w,
                            (pool->capacity / BATCH_FRACTION));
     }
     if (fiber_to_return) {
+        deinit_fiber_header(fiber_to_return);
         pool->fibers[pool->size++] = fiber_to_return;
         pool->stats.in_use--;
         if (pool->size > pool->stats.max_free) {

@@ -6,19 +6,11 @@ include(CheckSymbolExists)
 # setting in CMake has serious issues that make its syntax challenging
 # at best.
 function(set_target_compile_flags target)
-  set(argstring "")
-  foreach(arg ${ARGN})
-    set(argstring "${argstring} ${arg}")
-  endforeach()
-  set_property(TARGET ${target} PROPERTY COMPILE_FLAGS "${argstring}")
+  set_property(TARGET ${target} PROPERTY COMPILE_OPTIONS ${ARGN})
 endfunction()
 
 function(set_target_link_flags target)
-  set(argstring "")
-  foreach(arg ${ARGN})
-    set(argstring "${argstring} ${arg}")
-  endforeach()
-  set_property(TARGET ${target} PROPERTY LINK_FLAGS "${argstring}")
+  set_property(TARGET ${target} PROPERTY LINK_OPTIONS ${ARGN})
 endfunction()
 
 # Set the variable var_PYBOOL to True if var holds a true-ish string,
@@ -129,7 +121,9 @@ macro(test_target_arch arch def)
     if(NOT HAS_${arch}_DEF)
       set(CAN_TARGET_${arch} FALSE)
     elseif(TEST_COMPILE_ONLY)
-      try_compile_only(CAN_TARGET_${arch} FLAGS ${TARGET_${arch}_CFLAGS})
+      try_compile_only(CAN_TARGET_${arch}
+                       SOURCE "#include <limits.h>\nint foo(int x, int y) { return x + y; }\n"
+                       FLAGS ${TARGET_${arch}_CFLAGS})
     else()
       set(FLAG_NO_EXCEPTIONS "")
       if(CHEETAH_HAS_FNO_EXCEPTIONS_FLAG)
@@ -207,106 +201,126 @@ macro(detect_target_arch)
   endif()
 endmacro()
 
+function(get_cheetah_root_source_dir ROOT_DIR_VAR)
+  # Compute the path to the root of the Cheetah source tree
+  # regardless of how the project was configured.
+  #
+  # This function is useful because using `${CMAKE_SOURCE_DIR}`
+  # is error prone due to the numerous ways Cheetah can be
+  # configured.
+  #
+  # `ROOT_DIR_VAR` - the name of the variable to write the result to.
+  #
+  # TODO(dliew): When CMake min version is 3.17 or newer use
+  # `CMAKE_CURRENT_FUNCTION_LIST_DIR` instead.
+  if ("${ROOT_DIR_VAR}" STREQUAL "")
+    message(FATAL_ERROR "ROOT_DIR_VAR cannot be empty")
+  endif()
+
+  # cheetah supports different source root paths.
+  # Handle each case here.
+  set(PATH_TO_CHEETAH_SOURCE_ROOT "")
+  if(DEFINED Cheetah_SOURCE_DIR)
+    # Cheetah standalone build.
+    # `opencilk-project/cheetah`
+    set(PATH_TO_CHEETAH_SOURCE_ROOT "${Cheetah_SOURCE_DIR}")
+  elseif (EXISTS "${CMAKE_SOURCE_DIR}/../cheetah")
+    # In tree build with LLVM as the root project.
+    # See `llvm-project/projects/`.
+    # Assumes monorepo layout.
+    set(PATH_TO_CHEETAH_SOURCE_ROOT "${CMAKE_SOURCE_DIR}/../cheetah")
+  else()
+    message(FATAL_ERROR "Unhandled Cheetah source root configuration.")
+  endif()
+
+  get_filename_component(ROOT_DIR "${PATH_TO_CHEETAH_SOURCE_ROOT}" ABSOLUTE)
+  if (NOT EXISTS "${ROOT_DIR}")
+    message(FATAL_ERROR "Path \"${ROOT_DIR}\" doesn't exist")
+  endif()
+
+  # Sanity check: Make sure we can locate the current source file via the
+  # computed path.
+  set(PATH_TO_CURRENT_FILE "${ROOT_DIR}/cmake/Modules/CheetahUtils.cmake")
+  if (NOT EXISTS "${PATH_TO_CURRENT_FILE}")
+    message(FATAL_ERROR "Could not find \"${PATH_TO_CURRENT_FILE}\"")
+  endif()
+
+  set("${ROOT_DIR_VAR}" "${ROOT_DIR}" PARENT_SCOPE)
+endfunction()
+
 macro(load_llvm_config)
-  if (NOT LLVM_CONFIG_PATH)
-    find_program(LLVM_CONFIG_PATH "llvm-config"
-                 DOC "Path to llvm-config binary")
-    if (NOT LLVM_CONFIG_PATH)
-      message(WARNING "UNSUPPORTED CHEETAH CONFIGURATION DETECTED: "
-                      "llvm-config not found.\n"
-                      "Reconfigure with -DLLVM_CONFIG_PATH=path/to/llvm-config.")
+  if (LLVM_CONFIG_PATH AND NOT LLVM_CMAKE_DIR)
+    message(WARNING
+      "LLVM_CONFIG_PATH is deprecated, please use LLVM_CMAKE_DIR instead")
+    # Compute the path to the LLVM install prefix and pass it as LLVM_CMAKE_DIR,
+    # CMake will locate the appropriate lib*/cmake subdirectory from there.
+    # For example. for -DLLVM_CONFIG_PATH=/usr/lib/llvm/16/bin/llvm-config
+    # this will yield LLVM_CMAKE_DIR=/usr/lib/llvm/16.
+    get_filename_component(LLVM_CMAKE_DIR "${LLVM_CONFIG_PATH}" DIRECTORY)
+    get_filename_component(LLVM_CMAKE_DIR "${LLVM_CMAKE_DIR}" DIRECTORY)
+  endif()
+
+  # Compute path to LLVM sources assuming the monorepo layout.
+  # We don't set `LLVM_MAIN_SRC_DIR` directly to avoid overriding a user provided
+  # CMake cache value.
+  get_cheetah_root_source_dir(CHEETAH_ROOT_SRC_PATH)
+  get_filename_component(LLVM_MAIN_SRC_DIR_DEFAULT "${CHEETAH_ROOT_SRC_PATH}/../llvm" ABSOLUTE)
+  if (NOT EXISTS "${LLVM_MAIN_SRC_DIR_DEFAULT}")
+    # TODO(dliew): Remove this legacy fallback path.
+    message(WARNING
+      "LLVM source tree not found at \"${LLVM_MAIN_SRC_DIR_DEFAULT}\". "
+      "You are not using the monorepo layout. This configuration is DEPRECATED.")
+  endif()
+
+  find_package(LLVM HINTS "${LLVM_CMAKE_DIR}")
+  if (NOT LLVM_FOUND)
+     message(WARNING "UNSUPPORTED CHEETAH CONFIGURATION DETECTED: "
+                     "LLVM cmake package not found.\n"
+                     "Reconfigure with -DLLVM_CMAKE_DIR=/path/to/llvm.")
+  else()
+    list(APPEND CMAKE_MODULE_PATH "${LLVM_DIR}")
+    # Turn into CACHE PATHs for overwritting
+    set(LLVM_BINARY_DIR "${LLVM_BINARY_DIR}" CACHE PATH "Path to LLVM build tree")
+    set(LLVM_LIBRARY_DIR "${LLVM_LIBRARY_DIR}" CACHE PATH "Path to llvm/lib")
+    set(LLVM_TOOLS_BINARY_DIR "${LLVM_TOOLS_BINARY_DIR}" CACHE PATH "Path to llvm/bin")
+    set(LLVM_INCLUDE_DIR ${LLVM_INCLUDE_DIRS} CACHE PATH "Path to llvm/include and any other header dirs needed")
+
+    list(FIND LLVM_AVAILABLE_LIBS LLVMXRay XRAY_INDEX)
+    set(CHEETAH_HAS_LLVMXRAY TRUE)
+    if (XRAY_INDEX EQUAL -1)
+      message(WARNING "LLVMXRay not found in LLVM_AVAILABLE_LIBS")
+      set(CHEETAH_HAS_LLVMXRAY FALSE)
+    endif()
+
+    list(FIND LLVM_AVAILABLE_LIBS LLVMTestingSupport TESTINGSUPPORT_INDEX)
+    set(CHEETAH_HAS_LLVMTESTINGSUPPORT TRUE)
+    if (TESTINGSUPPORT_INDEX EQUAL -1)
+      message(WARNING "LLVMTestingSupport not found in LLVM_AVAILABLE_LIBS")
+      set(CHEETAH_HAS_LLVMTESTINGSUPPORT FALSE)
     endif()
   endif()
-  if (LLVM_CONFIG_PATH)
-    execute_process(
-      COMMAND ${LLVM_CONFIG_PATH} "--obj-root" "--bindir" "--libdir" "--src-root" "--includedir" "--host-target"
-      RESULT_VARIABLE HAD_ERROR
-      OUTPUT_VARIABLE CONFIG_OUTPUT)
-    if (HAD_ERROR)
-      message(FATAL_ERROR "llvm-config failed with status ${HAD_ERROR}")
-    endif()
-    string(REGEX REPLACE "[ \t]*[\r\n]+[ \t]*" ";" CONFIG_OUTPUT ${CONFIG_OUTPUT})
-    list(GET CONFIG_OUTPUT 0 BINARY_DIR)
-    list(GET CONFIG_OUTPUT 1 TOOLS_BINARY_DIR)
-    list(GET CONFIG_OUTPUT 2 LIBRARY_DIR)
-    list(GET CONFIG_OUTPUT 3 MAIN_SRC_DIR)
-    list(GET CONFIG_OUTPUT 4 INCLUDE_DIR)
-    list(GET CONFIG_OUTPUT 5 HOST_TARGET)
 
-    set(LLVM_BINARY_DIR ${BINARY_DIR} CACHE PATH "Path to LLVM build tree")
-    set(LLVM_LIBRARY_DIR ${LIBRARY_DIR} CACHE PATH "Path to llvm/lib")
-    set(LLVM_MAIN_SRC_DIR ${MAIN_SRC_DIR} CACHE PATH "Path to LLVM source tree")
-    set(LLVM_TOOLS_BINARY_DIR ${TOOLS_BINARY_DIR} CACHE PATH "Path to llvm/bin")
-    set(LLVM_INCLUDE_DIR ${INCLUDE_DIR} CACHE PATH "Paths to LLVM headers")
-    set(LLVM_HOST_TARGET ${HOST_TARGET} CACHE PATH "Host target from LLVM")
+  set(LLVM_LIBRARY_OUTPUT_INTDIR
+    ${LLVM_BINARY_DIR}/${CMAKE_CFG_INTDIR}/lib${LLVM_LIBDIR_SUFFIX})
 
-    # Detect if we have the LLVMXRay and TestingSupport library installed and
-    # available from llvm-config.
-    execute_process(
-      COMMAND ${LLVM_CONFIG_PATH} "--ldflags" "--libs" "xray"
-      RESULT_VARIABLE HAD_ERROR
-      OUTPUT_VARIABLE CONFIG_OUTPUT
-      ERROR_QUIET)
-    if (HAD_ERROR)
-      message(WARNING "llvm-config finding xray failed with status ${HAD_ERROR}")
-      set(CHEETAH_HAS_LLVMXRAY FALSE)
-    else()
-      string(REGEX REPLACE "[ \t]*[\r\n]+[ \t]*" ";" CONFIG_OUTPUT ${CONFIG_OUTPUT})
-      list(GET CONFIG_OUTPUT 0 LDFLAGS)
-      list(GET CONFIG_OUTPUT 1 LIBLIST)
-      file(TO_CMAKE_PATH "${LDFLAGS}" LDFLAGS)
-      file(TO_CMAKE_PATH "${LIBLIST}" LIBLIST)
-      set(LLVM_XRAY_LDFLAGS ${LDFLAGS} CACHE STRING "Linker flags for LLVMXRay library")
-      set(LLVM_XRAY_LIBLIST ${LIBLIST} CACHE STRING "Library list for LLVMXRay")
-      set(CHEETAH_HAS_LLVMXRAY TRUE)
-    endif()
+  set(LLVM_MAIN_SRC_DIR "${LLVM_MAIN_SRC_DIR_DEFAULT}" CACHE PATH "Path to LLVM source tree")
+  message(STATUS "LLVM_MAIN_SRC_DIR: \"${LLVM_MAIN_SRC_DIR}\"")
+  if (NOT EXISTS "${LLVM_MAIN_SRC_DIR}")
+    # TODO(dliew): Make this a hard error
+    message(WARNING "LLVM_MAIN_SRC_DIR (${LLVM_MAIN_SRC_DIR}) does not exist. "
+                    "You can override the inferred path by adding "
+                    "`-DLLVM_MAIN_SRC_DIR=<path_to_llvm_src>` to your CMake invocation "
+                    "where `<path_to_llvm_src>` is the path to the `llvm` directory in "
+                    "the `llvm-project` repo. "
+                    "This will be treated as error in the future.")
+  endif()
 
-    # CHEETAH_HAS_LLVMTESTINGSUPPORT is currently unused, and this
-    # test triggers a CMake warning.  Removing this test for now.
-    #
-    # set(CHEETAH_HAS_LLVMTESTINGSUPPORT FALSE)
-    # execute_process(
-    #   COMMAND ${LLVM_CONFIG_PATH} "--ldflags" "--libs" "testingsupport"
-    #   RESULT_VARIABLE HAD_ERROR
-    #   OUTPUT_VARIABLE CONFIG_OUTPUT
-    #   ERROR_QUIET)
-    # if (HAD_ERROR)
-    #   message(WARNING "llvm-config finding testingsupport failed with status ${HAD_ERROR}")
-    # elseif(CHEETAH_INCLUDE_TESTS)
-    #   string(REGEX REPLACE "[ \t]*[\r\n]+[ \t]*" ";" CONFIG_OUTPUT ${CONFIG_OUTPUT})
-    #   list(GET CONFIG_OUTPUT 0 LDFLAGS)
-    #   list(GET CONFIG_OUTPUT 1 LIBLIST)
-    #   if (LIBLIST STREQUAL "")
-    #     message(WARNING "testingsupport library not installed, some tests will be skipped")
-    #   else()
-    #     file(TO_CMAKE_PATH "${LDFLAGS}" LDFLAGS)
-    #     file(TO_CMAKE_PATH "${LIBLIST}" LIBLIST)
-    #     set(LLVM_TESTINGSUPPORT_LDFLAGS ${LDFLAGS} CACHE STRING "Linker flags for LLVMTestingSupport library")
-    #     set(LLVM_TESTINGSUPPORT_LIBLIST ${LIBLIST} CACHE STRING "Library list for LLVMTestingSupport")
-    #     set(CHEETAH_HAS_LLVMTESTINGSUPPORT TRUE)
-    #   endif()
-    # endif()
-
-    # Make use of LLVM CMake modules.
-    # --cmakedir is supported since llvm r291218 (4.0 release)
-    execute_process(
-      COMMAND ${LLVM_CONFIG_PATH} --cmakedir
-      RESULT_VARIABLE HAD_ERROR
-      OUTPUT_VARIABLE CONFIG_OUTPUT)
-    if(NOT HAD_ERROR)
-      string(STRIP "${CONFIG_OUTPUT}" LLVM_CMAKE_PATH_FROM_LLVM_CONFIG)
-      file(TO_CMAKE_PATH ${LLVM_CMAKE_PATH_FROM_LLVM_CONFIG} LLVM_CMAKE_PATH)
-    else()
-      file(TO_CMAKE_PATH ${LLVM_BINARY_DIR} LLVM_BINARY_DIR_CMAKE_STYLE)
-      set(LLVM_CMAKE_PATH "${LLVM_BINARY_DIR_CMAKE_STYLE}/lib${LLVM_LIBDIR_SUFFIX}/cmake/llvm")
-    endif()
-
-    list(APPEND CMAKE_MODULE_PATH "${LLVM_CMAKE_PATH}")
-    # Get some LLVM variables from LLVMConfig.
-    include("${LLVM_CMAKE_PATH}/LLVMConfig.cmake")
-
-    set(LLVM_LIBRARY_OUTPUT_INTDIR
-      ${LLVM_BINARY_DIR}/${CMAKE_CFG_INTDIR}/lib${LLVM_LIBDIR_SUFFIX})
+  if (NOT LLVM_FOUND)
+    # This configuration tries to configure without the prescence of `LLVMConfig.cmake`. It is
+    # intended for testing purposes (generating the lit test suites) and will likely not support
+    # a build of the runtimes in compiler-rt.
+    include(CheetahMockLLVMCMakeConfig)
+    cheetah_mock_llvm_cmake_config()
   endif()
 endmacro()
 
@@ -317,21 +331,23 @@ macro(construct_cheetah_default_triple)
     endif()
     set(CHEETAH_DEFAULT_TARGET_TRIPLE ${CMAKE_C_COMPILER_TARGET})
   else()
-    set(CHEETAH_DEFAULT_TARGET_TRIPLE ${TARGET_TRIPLE} CACHE STRING
+    set(CHEETAH_DEFAULT_TARGET_TRIPLE ${LLVM_TARGET_TRIPLE} CACHE STRING
           "Default triple for which cheetah runtime will be built.")
   endif()
 
-  if(DEFINED CHEETAH_TEST_TARGET_TRIPLE)
-    # Backwards compatibility: this variable used to be called
-    # CHEETAH_TEST_TARGET_TRIPLE.
-    set(CHEETAH_DEFAULT_TARGET_TRIPLE ${CHEETAH_TEST_TARGET_TRIPLE})
+  string(REPLACE "-" ";" LLVM_TARGET_TRIPLE_LIST ${CHEETAH_DEFAULT_TARGET_TRIPLE})
+  list(GET LLVM_TARGET_TRIPLE_LIST 0 CHEETAH_DEFAULT_TARGET_ARCH)
+
+  # Map various forms of the architecture names to the canonical forms
+  # (as they are used by clang, see getArchNameForCompilerRTLib).
+  if("${CHEETAH_DEFAULT_TARGET_ARCH}" MATCHES "^i.86$")
+    # Android uses i686, but that's remapped at a later stage.
+    set(CHEETAH_DEFAULT_TARGET_ARCH "i386")
   endif()
 
-  string(REPLACE "-" ";" TARGET_TRIPLE_LIST ${CHEETAH_DEFAULT_TARGET_TRIPLE})
-  list(GET TARGET_TRIPLE_LIST 0 CHEETAH_DEFAULT_TARGET_ARCH)
   # Determine if test target triple is specified explicitly, and doesn't match the
   # default.
-  if(NOT CHEETAH_DEFAULT_TARGET_TRIPLE STREQUAL TARGET_TRIPLE)
+  if(NOT CHEETAH_DEFAULT_TARGET_TRIPLE STREQUAL LLVM_TARGET_TRIPLE)
     set(CHEEETAH_HAS_EXPLICIT_DEFAULT_TARGET_TRIPLE TRUE)
   else()
     set(CHEETAH_HAS_EXPLICIT_DEFAULT_TARGET_TRIPLE FALSE)
@@ -372,6 +388,8 @@ function(get_cheetah_target arch variable)
     set(target "${CHEETAH_DEFAULT_TARGET_TRIPLE}")
   elseif(ANDROID AND ${arch} STREQUAL "i386")
     set(target "i686${triple_suffix}")
+  elseif(${arch} STREQUAL "amd64")
+    set(target "x86_64${triple_suffix}")
   else()
     set(target "${arch}${triple_suffix}")
   endif()
@@ -381,18 +399,18 @@ endfunction()
 function(get_cheetah_install_dir arch install_dir)
   if(CHEETAH_ENABLE_PER_TARGET_RUNTIME_DIR AND NOT APPLE)
     get_cheetah_target(${arch} target)
-    set(${install_dir} ${CHEETAH_INSTALL_PATH}/lib/${target} PARENT_SCOPE)
+    set(${install_dir} ${CHEETAH_INSTALL_LIBRARY_DIR}/${target} PARENT_SCOPE)
   else()
-    set(${install_dir} ${CHEETAH_LIBRARY_INSTALL_DIR} PARENT_SCOPE)
+    set(${install_dir} ${CHEETAH_INSTALL_LIBRARY_DIR} PARENT_SCOPE)
   endif()
 endfunction()
 
 function(get_cheetah_output_dir arch output_dir)
   if(CHEETAH_ENABLE_PER_TARGET_RUNTIME_DIR AND NOT APPLE)
     get_cheetah_target(${arch} target)
-    set(${output_dir} ${CHEETAH_OUTPUT_DIR}/lib/${target} PARENT_SCOPE)
+    set(${output_dir} ${CHEETAH_OUTPUT_LIBRARY_DIR}/${target} PARENT_SCOPE)
   else()
-    set(${output_dir} ${CHEETAH_LIBRARY_OUTPUT_DIR} PARENT_SCOPE)
+    set(${output_dir} ${CHEETAH_OUTPUT_LIBRARY_DIR} PARENT_SCOPE)
   endif()
 endfunction()
 

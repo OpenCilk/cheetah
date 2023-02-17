@@ -34,11 +34,13 @@
 
 #define BOSS_THIEF 1
 
-#define CILK_CACHE_LINE 64
+// Use 128-bit cache lines to account for adjacent-cache-line prefetchers.
+#define CILK_CACHE_LINE 128
 
 #define PROC_SPEED_IN_GHZ 2.2
 
-#define BUSY_LOOP_SPIN 4096
+#define BUSY_PAUSE 1
+#define BUSY_LOOP_SPIN 4096 / BUSY_PAUSE
 
 #define ENABLE_THIEF_SLEEP 1
 
@@ -49,16 +51,11 @@
 #define MIN_NUM_PAGES_PER_STACK 4
 #define MAX_NUM_PAGES_PER_STACK 2000
 
-/* The largest known stack alignment requirement is for AVX-512
-   which may access memory in aligned 64 byte units. */
-#define MAX_STACK_ALIGN 64
-
 #define DEFAULT_NPROC 0 // 0 for # of cores available
 #define DEFAULT_DEQ_DEPTH 1024
-#define DEFAULT_STACK_SIZE 0x100000 // 1 MBytes
+#define LG_STACK_SIZE 20 // 1 MBytes
 #define DEFAULT_FIBER_POOL_CAP 8  // initial per-worker fiber pool capacity
 #define DEFAULT_REDUCER_LIMIT 1024
-#define DEFAULT_FORCE_REDUCE 0 // do not self steal to force reduce
 
 #define MAX_CALLBACKS 32 // Maximum number of init or exit callbacks
 

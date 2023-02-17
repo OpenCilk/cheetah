@@ -113,6 +113,24 @@ macro(set_output_name output name arch)
   else()
     if(ANDROID AND ${arch} STREQUAL "i386")
       set(${output} "${name}-i686${CHEETAH_OS_SUFFIX}")
+    elseif("${arch}" MATCHES "^arm")
+      if(CHEETAH_DEFAULT_TARGET_ONLY)
+        set(triple "${CHEETAH_DEFAULT_TARGET_TRIPLE}")
+      else()
+        set(triple "${LLVM_TARGET_TRIPLE}")
+      endif()
+      # Except for baremetal, when using arch-suffixed runtime library names,
+      # clang only looks for libraries named "arm" or "armhf", see
+      # getArchNameForCompilerRTLib in clang. Therefore, try to inspect both
+      # the arch name and the triple if it seems like we're building an armhf
+      # target.
+      if (CHEETAH_BAREMETAL_BUILD)
+        set(${output} "${name}-${arch}${CHEETAH_OS_SUFFIX}")
+      elseif ("${arch}" MATCHES "hf$" OR "${triple}" MATCHES "hf$")
+        set(${output} "${name}-armhf${CHEETAH_OS_SUFFIX}")
+      else()
+        set(${output} "${name}-arm${CHEETAH_OS_SUFFIX}")
+      endif()
     else()
       set(${output} "${name}-${arch}${CHEETAH_OS_SUFFIX}")
     endif()
@@ -317,13 +335,33 @@ function(add_cheetah_runtime name type)
         set_target_properties(${libname} PROPERTIES IMPORT_PREFIX "")
         set_target_properties(${libname} PROPERTIES IMPORT_SUFFIX ".lib")
       endif()
-      if(APPLE)
-        # Ad-hoc sign the dylibs
-        add_custom_command(TARGET ${libname}
-          POST_BUILD  
-          COMMAND codesign --sign - $<TARGET_FILE:${libname}>
-          WORKING_DIRECTORY ${CHEETAH_LIBRARY_OUTPUT_DIR}
+      if (APPLE AND NOT CMAKE_LINKER MATCHES ".*lld.*")
+        # Ad-hoc sign the dylibs when using Xcode versions older than 12.
+        # Xcode 12 shipped with ld64-609.
+        # FIXME: Remove whole conditional block once everything uses Xcode 12+.
+        set(LD_V_OUTPUT)
+        execute_process(
+          COMMAND sh -c "${CMAKE_LINKER} -v 2>&1 | head -1"
+          RESULT_VARIABLE HAD_ERROR
+          OUTPUT_VARIABLE LD_V_OUTPUT
         )
+        if (HAD_ERROR)
+          message(FATAL_ERROR "${CMAKE_LINKER} failed with status ${HAD_ERROR}")
+        endif()
+        set(NEED_EXPLICIT_ADHOC_CODESIGN 1)
+        if ("${LD_V_OUTPUT}" MATCHES ".*ld64-([0-9.]+).*")
+          string(REGEX REPLACE ".*ld64-([0-9.]+).*" "\\1" HOST_LINK_VERSION ${LD_V_OUTPUT})
+          if (HOST_LINK_VERSION VERSION_GREATER_EQUAL 609)
+            set(NEED_EXPLICIT_ADHOC_CODESIGN 0)
+          endif()
+        endif()
+        if (NEED_EXPLICIT_ADHOC_CODESIGN)
+          add_custom_command(TARGET ${libname}
+            POST_BUILD
+            COMMAND codesign --sign - $<TARGET_FILE:${libname}>
+            WORKING_DIRECTORY ${CHEETAH_OUTPUT_LIBRARY_DIR}
+          )
+        endif()
       endif()
     endif()
 
@@ -466,7 +504,7 @@ function(add_cheetah_bitcode name)
     set(output_file_${libname} lib${output_name_${libname}}.bc)
     add_custom_command(
       OUTPUT ${output_dir_${libname}}/${output_file_${libname}}
-      COMMAND ${LLVM_LINK_PATH} -o ${output_dir_${libname}}/${output_file_${libname}} $<TARGET_OBJECTS:${libname}_compile>
+      COMMAND ${LLVM_LINK} -o ${output_dir_${libname}}/${output_file_${libname}} $<TARGET_OBJECTS:${libname}_compile>
       DEPENDS ${libname}_compile $<TARGET_OBJECTS:${libname}_compile>
       COMMENT "Building bitcode ${output_file_${libname}}"
       VERBATIM COMMAND_EXPAND_LISTS)

@@ -21,19 +21,23 @@ To clean the build, run `make clean`.
 $ mkdir build
 $ cd build
 ```
-2. Configure CMake.  In particular, make sure to specify `CMAKE_C_COMPILER`
-and `LLVM_CONFIG_PATH` to point to the corresponding OpenCilk compiler
-binaries.  For example:
+2. Configure CMake.  Make sure to specify `CMAKE_C_COMPILER` and
+`LLVM_CMAKE_DIR` to point to the corresponding build or installation
+of the OpenCilk compiler binaries.  In addition, set
+`CMAKE_BUILD_TYPE` to specify the build type, such as, `Debug`, for an
+unoptimized build with all assertions enabled; `Release`, for an fully
+optimized build with assertions disabled; or `RelWithDebInfo`, to
+enable some optimizations and assertions.  (The default build type is
+`Debug`.)
+
+Example configuration:
 ```
-$ cmake -DCMAKE_C_COMPILER=/path/to/opencilk-project/build/bin/clang -DLLVM_CONFIG_PATH=/path/to/opencilk-project/build/bin/llvm-config ../
+$ cmake -DCMAKE_C_COMPILER=/path/to/opencilk-project/build/bin/clang -DCMAKE_BUILD_TYPE=Release -DLLVM_CMAKE_DIR=/path/to/opencilk-project/build ../
 ```
 3. Build the runtime:
 ```
 $ cmake --build . -- -j<number of build threads>
 ```
-
-*Note:* During step 2, you can specify other CMake flags at this step as
-well, such as `CMAKE_BUILD_TYPE` or `CMAKE_C_FLAGS`.
 
 To clean the build, run `cmake --build . --target clean` from the build
 directory.

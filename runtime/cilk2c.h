@@ -4,6 +4,24 @@
 #include "cilk-internal.h"
 #include <stdlib.h>
 
+// Reducer structure for handling exceptions thrown in parallel.
+extern struct closure_exception exception_reducer;
+// Init method for exception reducer.
+CHEETAH_INTERNAL void init_exception_reducer(void *v);
+// Reduce method for exception reducer.
+CHEETAH_INTERNAL void reduce_exception_reducer(void *l, void *r);
+// Retrieve the exception stored in the local view of the exception reducer.
+CHEETAH_INTERNAL struct closure_exception *
+get_exception_reducer(__cilkrts_worker *w);
+// Retrieve the exception stored in the local view of the exception reducer, or
+// NULL if there is no local view..
+CHEETAH_INTERNAL struct closure_exception *
+get_exception_reducer_or_null(__cilkrts_worker *w);
+// Free resources used for a local view of the exception reducer.  This method
+// does not deallocate the exception
+CHEETAH_INTERNAL void clear_exception_reducer(__cilkrts_worker *w,
+                                              struct closure_exception *exn_r);
+
 // Returns 1 if the current exection is running on Cilk workers, 0 otherwise.
 CHEETAH_API int __cilkrts_running_on_workers(void);
 

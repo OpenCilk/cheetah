@@ -13,16 +13,10 @@
 
 #include "cilk-internal.h"
 #include "fiber.h"
+#include "fiber-header.h"
 #include "init.h"
 
 #include <string.h> /* DEBUG */
-
-struct cilk_fiber {
-    char *alloc_low;         // first byte of mmap-ed region
-    char *stack_low;         // lowest usable byte of stack
-    char *stack_high;        // one byte above highest usable byte of stack
-    char *alloc_high;        // last byte of mmap-ed region
-};
 
 #ifndef MAP_GROWSDOWN
 /* MAP_GROWSDOWN is implied on BSD */
@@ -59,17 +53,23 @@ static void __sanitizer_finish_switch_fiber_weak(void *fake_stack_save,
 static void __asan_unpoison_memory_region_weak(const void volatile *addr,
                                                size_t size)
     __attribute__((__weakref__("__asan_unpoison_memory_region")));
+static void __asan_poison_memory_region_weak(const void volatile *addr,
+                                               size_t size)
+    __attribute__((__weakref__("__asan_poison_memory_region")));
 
 typedef void (*SanitizerStartSwitchFiberFuncPtr)(void **, const void *, size_t);
 typedef void (*SanitizerFinishSwitchFiberFuncPtr)(void *, const void **,
                                                   size_t *);
+typedef void (*AsanPoisonMemoryRegionFuncPtr)(const void volatile *, size_t);
 typedef void (*AsanUnpoisonMemoryRegionFuncPtr)(const void volatile *, size_t);
 
 static bool have_sanitizer_start_switch_fiber_fn = false;
 static bool have_sanitizer_finish_switch_fiber_fn = false;
 static bool have_asan_unpoison_memory_region_fn = false;
+static bool have_asan_poison_memory_region_fn = false;
 static SanitizerStartSwitchFiberFuncPtr sanitizer_start_switch_fiber_fn = NULL;
 static SanitizerFinishSwitchFiberFuncPtr sanitizer_finish_switch_fiber_fn = NULL;
+static AsanPoisonMemoryRegionFuncPtr asan_poison_memory_region_fn = NULL;
 static AsanUnpoisonMemoryRegionFuncPtr asan_unpoison_memory_region_fn = NULL;
 
 __thread void *fake_stack_save = NULL;
@@ -112,6 +112,24 @@ static SanitizerFinishSwitchFiberFuncPtr getFinishSwitchFiberFunc() {
     return NULL;
 }
 
+static AsanPoisonMemoryRegionFuncPtr getPoisonMemoryRegionFunc() {
+    AsanPoisonMemoryRegionFuncPtr fn = NULL;
+
+    // Check whether weak reference points to statically linked function.
+    if (NULL != (fn = &__asan_poison_memory_region_weak)) {
+        return fn;
+    }
+
+    // Check whether we can find a dynamically linked function.
+    if (NULL != (fn = (AsanPoisonMemoryRegionFuncPtr)dlsym(
+                         RTLD_DEFAULT, "__asan_poison_memory_region"))) {
+        return fn;
+    }
+
+    // Couldn't find the function at all.
+    return NULL;
+}
+
 static AsanUnpoisonMemoryRegionFuncPtr getUnpoisonMemoryRegionFunc() {
     AsanUnpoisonMemoryRegionFuncPtr fn = NULL;
 
@@ -138,12 +156,11 @@ void sanitizer_start_switch_fiber(struct cilk_fiber *fiber) {
     if (NULL != sanitizer_start_switch_fiber_fn) {
         if (fiber) {
             sanitizer_start_switch_fiber_fn(
-                /* &fake_stack_save */NULL, fiber->stack_low,
+                &fake_stack_save, fiber->stack_low,
                 (size_t)(fiber->stack_high - fiber->stack_low));
         } else {
-            sanitizer_start_switch_fiber_fn(
-                    /* &fake_stack_save */NULL,
-                    old_thread_stack, old_thread_stacksize);
+            sanitizer_start_switch_fiber_fn(&fake_stack_save, old_thread_stack,
+                                            old_thread_stacksize);
         }
     }
 }
@@ -154,8 +171,7 @@ void sanitizer_finish_switch_fiber() {
         have_sanitizer_finish_switch_fiber_fn = true;
     }
     if (NULL != sanitizer_finish_switch_fiber_fn) {
-        sanitizer_finish_switch_fiber_fn(/* fake_stack_save */NULL,
-                                         &old_thread_stack,
+        sanitizer_finish_switch_fiber_fn(fake_stack_save, &old_thread_stack,
                                          &old_thread_stacksize);
     }
 }
@@ -171,19 +187,15 @@ void sanitizer_unpoison_fiber(struct cilk_fiber *fiber) {
     }
 }
 
-void sanitizer_fiber_deallocate(struct cilk_fiber *fiber) {
-    if (NULL != fake_stack_save && NULL != sanitizer_start_switch_fiber_fn &&
-        NULL != sanitizer_finish_switch_fiber_fn) {
-        void *local_fake_stack_save;
-        const void *stack_bottom;
-        size_t stacksize;
-        sanitizer_start_switch_fiber_fn(&local_fake_stack_save, NULL, 0);
-        sanitizer_finish_switch_fiber_fn(fake_stack_save, &stack_bottom,
-                                         &stacksize);
-        sanitizer_start_switch_fiber_fn(NULL, stack_bottom, stacksize);
-        sanitizer_finish_switch_fiber_fn(local_fake_stack_save, NULL, 0);
+void sanitizer_poison_fiber(struct cilk_fiber *fiber) {
+    if (!have_asan_poison_memory_region_fn) {
+        asan_poison_memory_region_fn = getPoisonMemoryRegionFunc();
+        have_asan_poison_memory_region_fn = true;
     }
-    sanitizer_unpoison_fiber(fiber);
+    if (NULL != asan_poison_memory_region_fn) {
+        asan_poison_memory_region_fn(
+            fiber->stack_low, (size_t)(fiber->stack_high - fiber->stack_low));
+    }
 }
 #endif // CILK_ENABLE_ASAN_HOOKS
 
@@ -194,9 +206,12 @@ void sanitizer_fiber_deallocate(struct cilk_fiber *fiber) {
 static void make_stack(struct cilk_fiber *f, size_t stack_size) {
     const int page_shift = cheetah_page_shift;
     const size_t page_size = 1U << page_shift;
+    CILK_ASSERT_G((stack_size & -stack_size) == stack_size &&
+                  "stack_size is not a power of 2");
 
     size_t stack_pages = (stack_size + page_size - 1) >> cheetah_page_shift;
-    stack_pages += LOW_GUARD_PAGES + HIGH_GUARD_PAGES;
+    // Overallocate pages so we can get a stack aligned to stack_size.
+    stack_pages += stack_pages - 1 + LOW_GUARD_PAGES + HIGH_GUARD_PAGES;
 
     /* Stacks must be at least MIN_NUM_PAGES_PER_STACK pages,
        a count which includes two guard pages. */
@@ -219,7 +234,9 @@ static void make_stack(struct cilk_fiber *f, size_t stack_size) {
         return;
     }
     char *alloc_high = alloc_low + stack_pages * page_size;
-    char *stack_high = alloc_high - page_size;
+    // Round down to the previous stack size.
+    char *stack_high =
+        (char *)((uintptr_t)(alloc_high - page_size) & -stack_size);
     char *stack_low = alloc_low + page_size;
     // mprotect guard pages.
     mprotect(alloc_low, page_size, PROT_NONE);
@@ -257,56 +274,12 @@ static void fiber_init(struct cilk_fiber *fiber) {
 // Supported public functions
 //===============================================================
 
-char *sysdep_get_stack_start(struct cilk_fiber *fiber) {
-    size_t align = 64;
-    char *sp = fiber->stack_high - align;
-    /* Debugging: make sure stack is accessible. */
-    ((volatile char *)sp)[-1];
-    return sp;
-}
-
-char *sysdep_reset_stack_for_resume(struct cilk_fiber *fiber,
-                                    __cilkrts_stack_frame *sf) {
-    CILK_ASSERT_G(fiber);
-    /* stack_high of the new fiber is aligned to a page size
-       boundary just after usable memory.  */
-    /* JFC: This may need to be more than 256 if the stolen function
-       has more than 256 bytes of outgoing arguments.  I think
-       Cilk++ looked at fp-sp in the stolen function. */
-    /* size_t align = MAX_STACK_ALIGN > 256 ? MAX_STACK_ALIGN : 256; */
-    /* TB: The OpenCilk compiler should ensure that sufficient space is
-       allocated for outgoing arguments of any function, so we don't need any
-       particular alignment here.  We use a positive alignment here for the
-       subsequent debugging step that checks the stack is accessible. */
-    size_t align = 64;
-    char *sp = fiber->stack_high - align;
-    SP(sf) = sp;
-
-    /* Debugging: make sure stack is accessible. */
-    ((volatile char *)sp)[-1];
-
-    return sp;
-}
-
-CHEETAH_INTERNAL_NORETURN
-void sysdep_longjmp_to_sf(__cilkrts_stack_frame *sf) {
-    cilkrts_alert(FIBER, sf->worker, "longjmp to sf, BP/SP/PC: %p/%p/%p",
-                  FP(sf), SP(sf), PC(sf));
-
-#if defined CHEETAH_SAVE_MXCSR
-    // Restore the floating point state that was set in this frame at the
-    // last spawn.
-    sysdep_restore_fp_state(sf);
-#endif
-    __builtin_longjmp(sf->ctx, 1);
-}
-
-
 struct cilk_fiber *cilk_fiber_allocate(__cilkrts_worker *w, size_t stacksize) {
     struct cilk_fiber *fiber =
         cilk_internal_malloc(w, sizeof(*fiber), IM_FIBER);
     fiber_init(fiber);
     make_stack(fiber, stacksize);
+    init_fiber_header(fiber);
     cilkrts_alert(FIBER, w, "Allocate fiber %p [%p--%p]", (void *)fiber,
                   (void *)fiber->stack_low, (void *)fiber->stack_high);
     return fiber;
@@ -316,7 +289,9 @@ void cilk_fiber_deallocate(__cilkrts_worker *w, struct cilk_fiber *fiber) {
     cilkrts_alert(FIBER, w, "Deallocate fiber %p [%p--%p]", (void *)fiber,
                   (void *)fiber->stack_low, (void *)fiber->stack_high);
     if (DEBUG_ENABLED_STATIC(FIBER))
-        CILK_ASSERT(w, !in_fiber(fiber, w->current_stack_frame));
+        CILK_ASSERT(
+            w, !in_fiber(fiber,
+                         get_header_from_fiber(fiber)->current_stack_frame));
     free_stack(fiber);
     cilk_internal_free(w, fiber, sizeof(*fiber), IM_FIBER);
 }

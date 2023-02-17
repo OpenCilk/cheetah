@@ -5,6 +5,7 @@
 #include <stdlib.h>
 
 #include "rts-config.h"
+#include "types.h"
 
 CHEETAH_INTERNAL extern int cheetah_page_shift;
 
@@ -21,17 +22,20 @@ CHEETAH_INTERNAL const char *name_for_im_tag(enum im_tag);
 /* Helper routine to round sizes to alignments, for use with cilk_aligned_alloc.
  */
 static inline size_t round_size_to_alignment(size_t alignment, size_t size) {
-    return ((size + alignment - 1) / alignment) * alignment;
+    return (size + alignment - 1) & -alignment;
 }
 
 /* Custom implementation of aligned_alloc. */
 static inline void *cilk_aligned_alloc(size_t alignment, size_t size) {
-#if defined(_ISOC11_SOURCE)
+#if (defined(__linux__) && (__STDC_VERSION__ >= 201112L)) ||                   \
+    defined(_ISOC11_SOURCE) || __FreeBSD__ >= 10 ||                            \
+    __ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__ >= 101500
     return aligned_alloc(alignment, size);
 #else
     void *ptr;
-    posix_memalign(&ptr, alignment, size);
-    return ptr;
+    if (posix_memalign(&ptr, alignment, size) == 0)
+        return ptr;
+    return NULL;
 #endif
 }
 
