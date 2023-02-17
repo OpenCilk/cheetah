@@ -586,12 +586,14 @@ void cilk_internal_malloc_per_worker_terminate(__cilkrts_worker *w) {
 void cilk_internal_malloc_per_worker_destroy(__cilkrts_worker *w) {
     /* The main closure and fiber have not yet been destroyed.  They are
        allocated with system malloc instead of internal malloc. */
+#if CILK_DEBUG
     local_state *l = w->l;
     for (unsigned int i = 0; i < NUM_BUCKETS; i++) {
         CILK_ASSERT_INDEX_ZERO(w, l->im_desc.buckets, i, .free_list_size, "%u");
         CILK_ASSERT_INDEX_ZERO(w, l->im_desc.buckets, i, .free_list, "%p");
         /* allocated may be nonzero due to memory migration */
     }
+#endif
 }
 
 const char *name_for_im_tag(enum im_tag tag) {
