@@ -219,8 +219,6 @@ static Closure *setup_call_parent_resumption(ReadyDeque *deques,
     Closure_assert_ownership(w, t);
 
     CILK_ASSERT_POINTER_EQUAL(w, w, __cilkrts_get_tls_worker());
-    CILK_ASSERT(w, t->frame != NULL);
-    CILK_ASSERT(w, __cilkrts_stolen(t->frame) != 0);
     CILK_ASSERT_POINTER_EQUAL(w, w->head, w->tail);
 
     Closure_change_status(w, t, CLOSURE_SUSPENDED, CLOSURE_RUNNING);
@@ -889,11 +887,44 @@ static Closure *promote_child(__cilkrts_stack_frame **head, ReadyDeque *deques,
         __cilkrts_set_stolen(frame_to_steal);
         Closure_set_status(w, spawn_parent, CLOSURE_RUNNING);
 
-        // ANGE: this is only temporary; will reset this after the stack has
-        // been remapped; so lets not set the callee in cl yet ... although
-        // we do need to set the has_callee in cl, so that cl does not get
-        // resumed by some other child performing provably good steal.
-        Closure_add_temp_callee(w, cl, spawn_parent);
+        // At this point, spawn_parent is a new Closure formally associated with
+        // the stolen frame, frame_to_steal, meaning that spawn_parent->frame is
+        // set to point to frame_to_steal.  The remainder of this function will
+        // insert spawn_parent as a callee of cl and create a new Closure,
+        // spawn_child, for the spawned child computation.  The spawn_child
+        // Closure is nominally associated with the child of the stolen frame,
+        // but the Closure's frame pointer is not set.
+        //
+        // Pictorially, this code path organizes the Closures and stack frames
+        // as follows, where cl->frame may or may not be set to point to a stack
+        // frame, as denoted by the dashed arrow.
+        //
+        //     *Closures*           *Stack frames*
+        //     +----+
+        //     | cl | - - - - - - > (called frame or spawn helper)
+        //     +----+                     ^
+        //       ^                  ...   |
+        //       |                  (zero or more called frames)
+        //       v                  ...   ^
+        //     +--------------+           |
+        //     | spawn_parent | --> (frame_to_steal)
+        //     +--------------+           ^
+        //       ^                        |
+        //       |                        |
+        //       v                        |
+        //     +-------------+            |
+        //     | spawn_child |      (spawn helper)
+        //     +-------------+
+        //
+        // There is no need to promote any of the called frames between the
+        // frame_to_steal and the frame (nominally) associated with cl.  All of
+        // those frames are called frames.  When frame_to_steal returns,
+        // spawn_parent will be popped, returning the closure tree to a familiar
+        // state: cl will be (nominally) associated with a frame that has called
+        // frames below it, and a worker will be working on the bottommost of
+        // those called frames.
+
+        Closure_add_callee(w, cl, spawn_parent);
         spawn_parent->call_parent = cl;
 
         // suspend cl & remove it from deque
@@ -1092,11 +1123,9 @@ static Closure *Closure_steal(__cilkrts_worker **workers, ReadyDeque *deques,
                 CILK_ASSERT(w, res->fiber);
                 Closure_assert_ownership(w, res);
 
-                // ANGE: if cl is not the spawning parent, then
-                // there is more frames in the stacklet to promote
-                bool has_frames_to_promote = (cl != res);
                 // ANGE: finish the promotion process in finish_promote
-                finish_promote(w, victim_w, res, has_frames_to_promote);
+                finish_promote(w, victim_w, res,
+                               /* has_frames_to_promote */ false);
 
                 cilkrts_alert(STEAL, w,
                               "(Closure_steal) success; res %p has "
@@ -1413,9 +1442,9 @@ static void do_what_it_says(ReadyDeque *deques, __cilkrts_worker *w,
                 t = NULL;
                 if (l->returning) {
                     l->returning = false;
-                // Attempt to get a closure from the bottom of our deque.
-                t = deque_xtract_bottom(deques, w, self);
-                deque_unlock_self(deques, w);
+                    // Attempt to get a closure from the bottom of our deque.
+                    t = deque_xtract_bottom(deques, w, self);
+                    deque_unlock_self(deques, w);
                 }
             }
 
