@@ -27,16 +27,6 @@ struct __cilkrts_stack_frame {
     // It forms a linked list ending at the first stolen frame.
     struct __cilkrts_stack_frame *call_parent;
 
-    // The client copies the worker from TLS here when initializing
-    // the structure.  The runtime ensures that the field always points
-    // to the __cilkrts_worker which currently "owns" the frame.
-    //
-    // TODO: Remove this pointer?  This pointer only seems to be needed for
-    // debugging purposes.  When the worker structure is genuinely needed, it
-    // seems to be accessible by calling __cilkrts_get_tls_worker(), which will
-    // be inlined and optimized to a simple move from TLS.
-    _Atomic(struct __cilkrts_worker *) worker;
-
     // Before every spawn and nontrivial sync the client function
     // saves its continuation here.
     jmpbuf ctx;
@@ -80,9 +70,7 @@ struct __cilkrts_stack_frame {
 #define CILK_FRAME_SYNC_READY        0x200
 
 static const uint32_t frame_magic =
-    (((((((((((((__CILKRTS_ABI_VERSION * 13) +
-                offsetof(struct __cilkrts_stack_frame, worker)) *
-               13) +
+    (((((((((((__CILKRTS_ABI_VERSION * 13) +
               offsetof(struct __cilkrts_stack_frame, ctx)) *
              13) +
             offsetof(struct __cilkrts_stack_frame, magic)) *

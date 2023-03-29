@@ -12,9 +12,11 @@
 #include "cilk2c.h"
 #include "debug.h"
 #include "fiber.h"
+#include "fiber-header.h"
 #include "frame.h"
 #include "global.h"
 #include "init.h"
+#include "jmpbuf.h"
 #include "local-reducer-api.h"
 #include "readydeque.h"
 #include "scheduler.h"
@@ -115,18 +117,18 @@ uncilkify(global_state *g, __cilkrts_stack_frame *sf) {
 // function must be inlined for correctness.
 __attribute__((always_inline)) void
 __cilkrts_enter_frame(__cilkrts_stack_frame *sf) {
-    __cilkrts_worker *w = __cilkrts_get_tls_worker();
     sf->flags = 0;
-    if (NULL == w) {
+    if (__cilkrts_need_to_cilkify) {
         cilkify(sf);
-        w = __cilkrts_get_tls_worker();
     }
+    __cilkrts_worker *w = get_worker_from_stack(sf);
     cilkrts_alert(CFRAME, w, "__cilkrts_enter_frame %p", (void *)sf);
+    __cilkrts_stack_frame **curr_sf =
+        &get_this_fiber_header()->current_stack_frame;
 
     sf->magic = frame_magic;
-    sf->call_parent = w->current_stack_frame;
-    atomic_store_explicit(&sf->worker, w, memory_order_relaxed);
-    w->current_stack_frame = sf;
+    sf->call_parent = *curr_sf;
+    *curr_sf = sf;
     // WHEN_CILK_DEBUG(sf->magic = CILK_STACKFRAME_MAGIC);
 }
 
@@ -136,14 +138,15 @@ __cilkrts_enter_frame(__cilkrts_stack_frame *sf) {
 // its counterpart, __cilkrts_enter_frame.
 __attribute__((always_inline)) void
 __cilkrts_enter_frame_helper(__cilkrts_stack_frame *sf) {
-    __cilkrts_worker *w = __cilkrts_get_tls_worker();
+    __cilkrts_worker *w = get_worker_from_stack(sf);
     cilkrts_alert(CFRAME, w, "__cilkrts_enter_frame_helper %p", (void *)sf);
+    __cilkrts_stack_frame **curr_sf =
+        &get_this_fiber_header()->current_stack_frame;
 
     sf->flags = 0;
     sf->magic = frame_magic;
-    sf->call_parent = w->current_stack_frame;
-    atomic_store_explicit(&sf->worker, w, memory_order_relaxed);
-    w->current_stack_frame = sf;
+    sf->call_parent = *curr_sf;
+    *curr_sf = sf;
 }
 
 __attribute__((always_inline)) int
@@ -156,20 +159,6 @@ __cilk_prepare_spawn(__cilkrts_stack_frame *sf) {
     return res;
 }
 
-static inline
-__cilkrts_worker *get_worker_from_stack(__cilkrts_stack_frame *sf) {
-    // In principle, we should be able to get the worker efficiently by calling
-    // __cilkrts_get_tls_worker().  But code-generation on many systems assumes
-    // that the thread on which a function runs never changes.  As a result, it
-    // may cache the address returned by __cilkrts_get_tls_worker() during
-    // enter_frame and load the cached value in later, even though the actual
-    // result of __cilkrts_get_tls_worker() may change between those two points.
-    // To avoid this buggy behavior, we therefore get the worker from sf.
-    //
-    // TODO: Fix code-generation of TLS lookups on these systems.
-    return atomic_load_explicit(&sf->worker, memory_order_relaxed);
-}
-
 // Detach the given Cilk stack frame, allowing other Cilk workers to steal the
 // parent frame.
 __attribute__((always_inline)) void
@@ -178,8 +167,6 @@ __cilkrts_detach(__cilkrts_stack_frame *sf) {
     cilkrts_alert(CFRAME, w, "__cilkrts_detach %p", (void *)sf);
 
     CILK_ASSERT(w, CHECK_CILK_FRAME_MAGIC(w->g, sf));
-    CILK_ASSERT(w, sf->worker == __cilkrts_get_tls_worker());
-    CILK_ASSERT(w, w->current_stack_frame == sf);
 
     struct __cilkrts_stack_frame *parent = sf->call_parent;
 
@@ -242,7 +229,6 @@ __cilkrts_leave_frame(__cilkrts_stack_frame *sf) {
     cilkrts_alert(CFRAME, w, "__cilkrts_leave_frame %p", (void *)sf);
 
     CILK_ASSERT(w, CHECK_CILK_FRAME_MAGIC(w->g, sf));
-    CILK_ASSERT(w, sf->worker == __cilkrts_get_tls_worker());
     // WHEN_CILK_DEBUG(sf->magic = ~CILK_STACKFRAME_MAGIC);
 
     __cilkrts_stack_frame *parent = sf->call_parent;
@@ -250,7 +236,7 @@ __cilkrts_leave_frame(__cilkrts_stack_frame *sf) {
     // Pop this frame off the cactus stack.  This logic used to be in
     // __cilkrts_pop_frame, but has been manually inlined to avoid reloading the
     // worker unnecessarily.
-    w->current_stack_frame = parent;
+    get_this_fiber_header()->current_stack_frame = parent;
     sf->call_parent = NULL;
 
     // Check if sf is the final stack frame, and if so, terminate the Cilkified
@@ -287,14 +273,13 @@ __cilkrts_leave_frame_helper(__cilkrts_stack_frame *sf) {
     cilkrts_alert(CFRAME, w, "__cilkrts_leave_frame_helper %p", (void *)sf);
 
     CILK_ASSERT(w, CHECK_CILK_FRAME_MAGIC(w->g, sf));
-    CILK_ASSERT(w, sf->worker == __cilkrts_get_tls_worker());
     // WHEN_CILK_DEBUG(sf->magic = ~CILK_STACKFRAME_MAGIC);
 
     // Pop this frame off the cactus stack.  This logic used to be in
     // __cilkrts_pop_frame, but has been manually inlined to avoid reloading the
     // worker unnecessarily.
     __cilkrts_stack_frame *parent = sf->call_parent;
-    w->current_stack_frame = parent;
+    get_this_fiber_header()->current_stack_frame = parent;
     if (USE_EXTENSION) {
         __cilkrts_extend_return_from_spawn(w, &w->extension);
         w->extension = parent->extension;
@@ -349,14 +334,13 @@ void __cilkrts_pause_frame(__cilkrts_stack_frame *sf, char *exn) {
     cilkrts_alert(CFRAME, w, "__cilkrts_pause_frame %p", (void *)sf);
 
     CILK_ASSERT(w, CHECK_CILK_FRAME_MAGIC(w->g, sf));
-    CILK_ASSERT(w, sf->worker == __cilkrts_get_tls_worker());
 
     __cilkrts_stack_frame *parent = sf->call_parent;
 
     // Pop this frame off the cactus stack.  This logic used to be in
     // __cilkrts_pop_frame, but has been manually inlined to avoid reloading the
     // worker unnecessarily.
-    w->current_stack_frame = parent;
+    get_this_fiber_header()->current_stack_frame = parent;
     sf->call_parent = NULL;
 
     // A __cilkrts_pause_frame may be reached before the spawn-helper frame has

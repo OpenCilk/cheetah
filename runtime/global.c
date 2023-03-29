@@ -57,15 +57,6 @@ static global_state *global_state_allocate() {
     return g;
 }
 
-// Methods for setting runtime options.
-static void set_stacksize(global_state *g, size_t stacksize) {
-    // TODO: Verify that g has not yet been initialized.
-    CILK_ASSERT_G(!g->workers_started);
-    CILK_ASSERT_G(stacksize >= 16384);
-    CILK_ASSERT_G(stacksize <= 100 * 1024 * 1024);
-    g->options.stacksize = stacksize;
-}
-
 static void set_deqdepth(global_state *g, unsigned int deqdepth) {
     // TODO: Verify that g has not yet been initialized.
     CILK_ASSERT_G(!g->workers_started);
@@ -93,9 +84,6 @@ void set_nworkers(global_state *g, unsigned int nworkers) {
 
 // Set global RTS options from environment variables.
 static void parse_rts_environment(global_state *g) {
-    size_t stacksize = env_get_int("CILK_STACKSIZE");
-    if (stacksize > 0)
-        set_stacksize(g, stacksize);
     unsigned int deqdepth = env_get_int("CILK_DEQDEPTH");
     if (deqdepth > 0)
         set_deqdepth(g, deqdepth);

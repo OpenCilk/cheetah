@@ -51,13 +51,9 @@
 #define MIN_NUM_PAGES_PER_STACK 4
 #define MAX_NUM_PAGES_PER_STACK 2000
 
-/* The largest known stack alignment requirement is for AVX-512
-   which may access memory in aligned 64 byte units. */
-#define MAX_STACK_ALIGN 64
-
 #define DEFAULT_NPROC 0 // 0 for # of cores available
 #define DEFAULT_DEQ_DEPTH 1024
-#define DEFAULT_STACK_SIZE 0x100000 // 1 MBytes
+#define LG_STACK_SIZE 20 // 1 MBytes
 #define DEFAULT_FIBER_POOL_CAP 8  // initial per-worker fiber pool capacity
 #define DEFAULT_REDUCER_LIMIT 1024
 

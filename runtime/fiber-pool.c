@@ -4,6 +4,7 @@
 
 #include "cilk-internal.h"
 #include "debug.h"
+#include "fiber-header.h"
 #include "fiber.h"
 #include "global.h"
 #include "local.h"
@@ -259,7 +260,7 @@ void cilk_fiber_pool_global_init(global_state *g) {
 
     unsigned int bufsize = g->options.nproc * g->options.fiber_pool_cap;
     struct cilk_fiber_pool *pool = &(g->fiber_pool);
-    fiber_pool_init(pool, g->options.stacksize, bufsize, NULL, 1 /*shared*/);
+    fiber_pool_init(pool, get_stack_size(), bufsize, NULL, 1 /*shared*/);
     CILK_ASSERT_G(NULL != pool->fibers);
     fiber_pool_stat_init(pool);
     /* let's not preallocate for global fiber pool for now */
@@ -308,7 +309,7 @@ void cilk_fiber_pool_per_worker_init(__cilkrts_worker *w) {
     global_state *g = w->g;
     unsigned int bufsize = g->options.fiber_pool_cap;
     struct cilk_fiber_pool *pool = &(w->l->fiber_pool);
-    fiber_pool_init(pool, g->options.stacksize, bufsize, &(g->fiber_pool),
+    fiber_pool_init(pool, get_stack_size(), bufsize, &(g->fiber_pool),
                     0 /* private */);
     CILK_ASSERT(w, NULL != pool->fibers);
     CILK_ASSERT(w, g->fiber_pool.stack_size == pool->stack_size);
@@ -352,6 +353,7 @@ struct cilk_fiber *cilk_fiber_allocate_from_pool(__cilkrts_worker *w) {
         pool->stats.max_in_use = pool->stats.in_use;
     }
     CILK_ASSERT(w, ret);
+    init_fiber_header(ret);
     return ret;
 }
 
@@ -370,6 +372,7 @@ void cilk_fiber_deallocate_to_pool(__cilkrts_worker *w,
                            (pool->capacity / BATCH_FRACTION));
     }
     if (fiber_to_return) {
+        deinit_fiber_header(fiber_to_return);
         pool->fibers[pool->size++] = fiber_to_return;
         pool->stats.in_use--;
         if (pool->size > pool->stats.max_free) {

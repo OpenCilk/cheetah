@@ -48,10 +48,33 @@ extern bool __cilkrts_use_extension;
 #endif
 extern __thread __cilkrts_worker *__cilkrts_tls_worker;
 CHEETAH_INTERNAL extern __thread bool is_boss_thread;
+extern bool __cilkrts_need_to_cilkify;
 
 static inline __attribute__((always_inline)) __cilkrts_worker *
 __cilkrts_get_tls_worker(void) {
     return __cilkrts_tls_worker;
+}
+
+static inline __attribute__((always_inline)) struct fiber_header *
+get_this_fiber_header(void) {
+    char *sp;
+    ASM_GET_SP(sp);
+    return get_fiber_header(sp);
+}
+
+static inline __attribute__((always_inline)) __cilkrts_worker *
+get_worker_from_stack(__cilkrts_stack_frame *sf) {
+    // In principle, we should be able to get the worker efficiently by calling
+    // __cilkrts_get_tls_worker().  But code-generation on many systems assumes
+    // that the thread on which a function runs never changes.  As a result, it
+    // may cache the address returned by __cilkrts_get_tls_worker() during
+    // enter_frame and load the cached value in later, even though the actual
+    // result of __cilkrts_get_tls_worker() may change between those two points.
+    // To avoid this buggy behavior, we therefore get the worker from
+    // fiber-local storage.
+    //
+    // TODO: Fix code-generation of TLS lookups on these systems.
+    return get_this_fiber_header()->worker;
 }
 
 void __cilkrts_register_extension(void *extension);

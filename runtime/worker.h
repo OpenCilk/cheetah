@@ -21,9 +21,6 @@ struct __cilkrts_worker {
 
     // 4 byte hole on 64 bit systems
 
-    // A slot that points to the currently executing Cilk frame.
-    struct __cilkrts_stack_frame *current_stack_frame;
-
     struct local_hyper_table *hyper_table;
 
     // Global state of the runtime system, opaque to the client.

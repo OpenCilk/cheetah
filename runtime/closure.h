@@ -128,12 +128,13 @@ static inline void Closure_unlock(__cilkrts_worker *const w, Closure *t) {
 // because the flag field is stored in the frame on the TLMM stack.  That
 // means, a frame can be stolen, in the process of being promoted, and
 // mean while, the stolen flag is not set until finish_promote.
-static inline int Closure_at_top_of_stack(__cilkrts_worker *const w) {
+static inline int Closure_at_top_of_stack(__cilkrts_worker *const w,
+                                          __cilkrts_stack_frame *const frame) {
     __cilkrts_stack_frame **head =
         atomic_load_explicit(&w->head, memory_order_relaxed);
     __cilkrts_stack_frame **tail =
         atomic_load_explicit(&w->tail, memory_order_relaxed);
-    return (head == tail && __cilkrts_stolen(w->current_stack_frame));
+    return (head == tail && __cilkrts_stolen(frame));
 }
 
 static inline int Closure_has_children(Closure *cl) {
@@ -326,7 +327,6 @@ void Closure_add_temp_callee(__cilkrts_worker *const w, Closure *caller,
 static inline
 void Closure_add_callee(__cilkrts_worker *const w, Closure *caller,
                         Closure *callee) {
-    CILK_ASSERT(w, callee->frame->call_parent == caller->frame);
 
     // ANGE: instead of checking has_cilk_callee, we just check if callee is
     // NULL, because we might have set the has_cilk_callee in
@@ -391,11 +391,8 @@ static inline void Closure_suspend(struct ReadyDeque *deques,
                        cl->call_parent);
     CILK_ASSERT(w, cl->frame != NULL);
     CILK_ASSERT(w, __cilkrts_stolen(cl->frame));
-    CILK_ASSERT(w, cl->frame->worker->self == self);
 
     Closure_change_status(w, cl, CLOSURE_RUNNING, CLOSURE_SUSPENDED);
-    atomic_store_explicit(&cl->frame->worker, INVALID_WORKER,
-                          memory_order_relaxed);
 
     cl1 = deque_xtract_bottom(deques, w, self);
 

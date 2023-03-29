@@ -26,7 +26,6 @@ struct Closure;
 // clang-format off
 #define DEFAULT_OPTIONS                                            \
     {                                                              \
-        DEFAULT_STACK_SIZE,     /* stack size to use for fiber */  \
         DEFAULT_NPROC,          /* num of workers to create */     \
         DEFAULT_REDUCER_LIMIT,  /* num of simultaneous reducers */ \
         DEFAULT_DEQ_DEPTH,      /* num of entries in deque */      \
@@ -35,7 +34,6 @@ struct Closure;
 // clang-format on
 
 struct rts_options {
-    size_t stacksize;            /* can be set via env variable CILK_STACKSIZE */
     unsigned int nproc;          /* can be set via env variable CILK_NWORKERS */
     unsigned int reducer_cap;
     unsigned int deqdepth;       /* can be set via env variable CILK_DEQDEPTH */

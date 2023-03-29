@@ -106,7 +106,6 @@ __cilkrts_worker *__cilkrts_init_tls_worker(worker_id i, global_state *g) {
     atomic_store_explicit(&w->tail, init, memory_order_relaxed);
     atomic_store_explicit(&w->head, init, memory_order_relaxed);
     atomic_store_explicit(&w->exc, init, memory_order_relaxed);
-    w->current_stack_frame = NULL;
     w->hyper_table = NULL;
     // initialize internal malloc first
     cilk_internal_malloc_per_worker_init(w);
@@ -264,7 +263,7 @@ global_state *__cilkrts_startup(int argc, char *argv[]) {
     // allocate the closure and fiber.
     __cilkrts_worker *w0 = g->workers[0];
     Closure *t = Closure_create(w0, NULL);
-    struct cilk_fiber *fiber = cilk_fiber_allocate(w0, g->options.stacksize);
+    struct cilk_fiber *fiber = cilk_fiber_allocate(w0, get_stack_size());
     t->fiber = fiber;
     g->root_closure = t;
 
@@ -358,6 +357,7 @@ static inline __attribute__((noinline)) void boss_wait_helper(void) {
     // Wait until the cilkified region is done executing.
     wait_until_cilk_done(g);
 
+    __cilkrts_need_to_cilkify = true;
 
     // At this point, some Cilk worker must have completed the
     // Cilkified region and executed uncilkify at the end of the Cilk
@@ -391,10 +391,12 @@ void __cilkrts_internal_invoke_cilkified_root(__cilkrts_stack_frame *sf) {
 #endif
         if (USE_EXTENSION) {
             g->root_closure->ext_fiber =
-                cilk_fiber_allocate(w0, g->options.stacksize);
+                cilk_fiber_allocate(w0, get_stack_size());
         }
         is_boss_thread = true;
     }
+
+    __cilkrts_need_to_cilkify = false;
 
     // The boss thread will impersonate the last exiting worker until it tries
     // to become a thief.
@@ -545,6 +547,7 @@ void __cilkrts_internal_exit_cilkified_root(global_state *g,
         atomic_store_explicit(&g->cilkified, 0, memory_order_relaxed);
         l->state = WORKER_IDLE;
         __cilkrts_tls_worker = NULL;
+        __cilkrts_need_to_cilkify = true;
 
         // Restore the boss's original rsp, so the boss completes the Cilk
         // function on its original stack.

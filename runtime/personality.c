@@ -43,8 +43,9 @@ _Unwind_Reason_Code __cilk_personality_internal(
     _Unwind_Action actions, uint64_t exception_class,
     struct _Unwind_Exception *ue_header, struct _Unwind_Context *context) {
 
-    __cilkrts_worker *w = __cilkrts_get_tls_worker();
-    __cilkrts_stack_frame *sf = w->current_stack_frame;
+    struct fiber_header *fh = get_this_fiber_header();
+    __cilkrts_worker *w = fh->worker;
+    __cilkrts_stack_frame *sf = fh->current_stack_frame;
     ReadyDeque *deques = w->g->deques;
 
     if (actions & _UA_SEARCH_PHASE) {
@@ -52,7 +53,7 @@ _Unwind_Reason_Code __cilk_personality_internal(
         return std_lib_personality(version, actions, exception_class, ue_header,
                                    context);
     } else if (actions & _UA_CLEANUP_PHASE) {
-        cilkrts_alert(EXCEPT, sf->worker,
+        cilkrts_alert(EXCEPT, w,
                       "cilk_personality called %p  CFA %p\n", (void *)sf,
                       (void *)get_cfa(context));
 
@@ -94,7 +95,7 @@ _Unwind_Reason_Code __cilk_personality_internal(
             t->reraise_cfa = NULL;
 
         if (t->user_exn.exn != NULL && t->user_exn.exn != (char *)ue_header) {
-            cilkrts_alert(EXCEPT, sf->worker,
+            cilkrts_alert(EXCEPT, w,
                           "cilk_personality calling RaiseException %p\n",
                           (void *)sf);
 
