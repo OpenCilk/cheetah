@@ -1213,7 +1213,8 @@ void longjmp_to_user_code(__cilkrts_worker *w, Closure *t) {
 
     CILK_ASSERT(w, sf && fiber || (t->simulated_stolen && fiber == NULL));
 
-    if (w->l->provably_good_steal) {
+    local_state *l = w->l;
+    if (l->provably_good_steal) {
         // in this case, we simply longjmp back into the original fiber
         // the SP(sf) has been updated with the right orig_rsp already
 
@@ -1228,13 +1229,13 @@ void longjmp_to_user_code(__cilkrts_worker *w, Closure *t) {
         }
         sf->flags &= ~CILK_FRAME_EXCEPTING;
 
-        w->l->provably_good_steal = false;
+        l->provably_good_steal = false;
     } else { // this is stolen work; the fiber is a new fiber
         // This is the first time we run the root closure in this Cilkified
         // region.  The closure has been completely setup at this point by
         // invoke_cilkified_root().  We just need jump to the user code.
         global_state *g = w->g;
-        volatile bool *initialized = &g->root_closure_initialized;
+        bool *initialized = &g->root_closure_initialized;
         if (t == g->root_closure && *initialized == false) {
             *initialized = true;
         } else if (!t->simulated_stolen) {

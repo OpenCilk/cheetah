@@ -68,7 +68,7 @@ struct global_state {
 
     jmpbuf boss_ctx __attribute__((aligned(CILK_CACHE_LINE)));
     void *orig_rsp;
-    volatile bool workers_started;
+    bool workers_started;
 
     // These fields are shared between the boss thread and a couple workers.
 
@@ -78,8 +78,8 @@ struct global_state {
     // cilkified field is helpful for debugging, and it seems unlikely that this
     // optimization would improve performance.
     _Atomic uint32_t cilkified_futex;
-    volatile worker_id exiting_worker;
-    volatile atomic_bool cilkified;
+    worker_id exiting_worker;
+    atomic_bool cilkified;
 
     pthread_mutex_t start_root_worker_lock;
     pthread_cond_t start_root_worker_cond_var;
@@ -88,9 +88,9 @@ struct global_state {
 
     // These fields are shared among all workers in the work-stealing loop.
 
-    volatile atomic_bool done __attribute__((aligned(CILK_CACHE_LINE)));
-    volatile bool terminate;
-    volatile bool root_closure_initialized;
+    atomic_bool done __attribute__((aligned(CILK_CACHE_LINE)));
+    bool terminate;
+    bool root_closure_initialized;
 
     worker_id *index_to_worker __attribute__((aligned(CILK_CACHE_LINE)));
     worker_id *worker_to_index;
