@@ -31,25 +31,16 @@ static inline const char *Closure_status_to_str(enum ClosureStatus status) {
 }
 
 #if CILK_DEBUG
-#define Closure_assert_ownership(w, t) Closure_assert_ownership(w, t)
-#define Closure_assert_alienation(w, t) Closure_assert_alienation(w, t)
-#define CILK_CLOSURE_MAGIC 0xDEADFACE
-#define Closure_checkmagic(w, t) Closure_checkmagic(w, t)
-#else
-#define Closure_assert_ownership(w, t)
-#define Closure_assert_alienation(w, t)
-#define Closure_checkmagic(w, t)
-#endif
-
-#if CILK_DEBUG
 static inline void Closure_assert_ownership(__cilkrts_worker *const w,
                                             Closure *t) {
-    CILK_ASSERT(w, t->mutex_owner == w->self);
+    CILK_ASSERT(
+        w, atomic_load_explicit(&t->mutex_owner, memory_order_relaxed) == w->self);
 }
 
 static inline void Closure_assert_alienation(__cilkrts_worker *const w,
                                              Closure *t) {
-    CILK_ASSERT(w, t->mutex_owner != w->self);
+    CILK_ASSERT(
+        w, atomic_load_explicit(&t->mutex_owner, memory_order_relaxed) != w->self);
 }
 
 static inline void Closure_checkmagic(__cilkrts_worker *const w, Closure *t) {
@@ -99,26 +90,36 @@ static inline void Closure_set_status(__cilkrts_worker *const w, Closure *t,
 
 static inline int Closure_trylock(__cilkrts_worker *const w, Closure *t) {
     Closure_checkmagic(w, t);
-    int ret = cilk_mutex_try(&(t->mutex));
-    if (ret) {
-        t->mutex_owner = w->self;
-    }
-    return ret;
+    worker_id current_owner =
+        atomic_load_explicit(&t->mutex_owner, memory_order_relaxed);
+    if ((current_owner == NO_WORKER) &&
+        atomic_compare_exchange_weak_explicit(&t->mutex_owner, &current_owner,
+                                              w->self, memory_order_acq_rel,
+                                              memory_order_relaxed))
+        return 1;
+
+    return 0;
 }
 
 static inline void Closure_lock(__cilkrts_worker *const w, Closure *t) {
     Closure_checkmagic(w, t);
-    t->lock_wait = true;
-    cilk_mutex_lock(&(t->mutex));
-    t->lock_wait = false;
-    t->mutex_owner = w->self;
+    worker_id self = w->self;
+    while (true) {
+        worker_id current_owner =
+            atomic_load_explicit(&t->mutex_owner, memory_order_relaxed);
+        if ((current_owner == NO_WORKER) &&
+            atomic_compare_exchange_weak_explicit(
+                &t->mutex_owner, &current_owner, self, memory_order_acq_rel,
+                memory_order_relaxed))
+            break;
+        busy_loop_pause();
+    }
 }
 
 static inline void Closure_unlock(__cilkrts_worker *const w, Closure *t) {
     Closure_checkmagic(w, t);
     Closure_assert_ownership(w, t);
-    t->mutex_owner = NO_WORKER;
-    cilk_mutex_unlock(&(t->mutex));
+    atomic_store_explicit(&t->mutex_owner, NO_WORKER, memory_order_release);
 }
 
 // need to be careful when calling this function --- we check whether a
@@ -143,12 +144,9 @@ static inline int Closure_has_children(Closure *cl) {
 }
 
 static inline void Closure_init(Closure *t, __cilkrts_stack_frame *frame) {
-    cilk_mutex_init(&t->mutex);
-
-    t->mutex_owner = NO_WORKER;
+    atomic_store_explicit(&t->mutex_owner, NO_WORKER, memory_order_relaxed);
     t->owner_ready_deque = NO_WORKER;
     t->status = CLOSURE_PRE_INVALID;
-    t->lock_wait = false;
     t->has_cilk_callee = false;
     t->simulated_stolen = false;
     t->join_counter = 0;
@@ -327,7 +325,6 @@ void Closure_add_temp_callee(__cilkrts_worker *const w, Closure *caller,
 static inline
 void Closure_add_callee(__cilkrts_worker *const w, Closure *caller,
                         Closure *callee) {
-
     // ANGE: instead of checking has_cilk_callee, we just check if callee is
     // NULL, because we might have set the has_cilk_callee in
     // Closure_add_tmp_callee to prevent the closure from being resumed.
@@ -403,7 +400,6 @@ static inline void Closure_suspend(struct ReadyDeque *deques,
 static inline void Closure_make_ready(Closure *cl) { cl->status = CLOSURE_READY; }
 
 static inline void Closure_clean(__cilkrts_worker *const w, Closure *t) {
-    CILK_ASSERT(w, !t->lock_wait);
 
     // sanity checks
     if (w) {
@@ -424,7 +420,6 @@ static inline void Closure_clean(__cilkrts_worker *const w, Closure *t) {
         CILK_ASSERT_G(t->right_ht == (hyper_table *)NULL);
     }
 
-    cilk_mutex_destroy(&t->mutex);
 }
 
 /* ANGE: destroy the closure and internally free it (put back to global

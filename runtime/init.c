@@ -61,7 +61,6 @@ static void deques_init(global_state *g) {
         g->deques[i].top = NULL;
         g->deques[i].bottom = NULL;
         g->deques[i].mutex_owner = NO_WORKER;
-        cilk_mutex_init(&(g->deques[i].mutex));
     }
 }
 
@@ -606,7 +605,6 @@ static void deques_deinit(global_state *g) {
     cilkrts_alert(BOOT, NULL, "(deques_deinit) Clean up deques");
     for (unsigned int i = 0; i < g->options.nproc; i++) {
         CILK_ASSERT_G(g->deques[i].mutex_owner == NO_WORKER);
-        cilk_mutex_destroy(&(g->deques[i].mutex));
     }
 }
 

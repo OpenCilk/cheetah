@@ -22,7 +22,6 @@ struct fiber_pool_stats {
 };
 
 struct cilk_fiber_pool {
-    cilk_mutex lock;
     worker_id mutex_owner;
     int shared;
     size_t stack_size;              // Size of stacks for fibers in this pool.
@@ -33,6 +32,8 @@ struct cilk_fiber_pool {
     unsigned int capacity;      // Limit on number of fibers in pool
     unsigned int size;          // Number of fibers currently in the pool
     struct fiber_pool_stats stats;
+
+    cilk_mutex lock __attribute__((aligned(CILK_CACHE_LINE)));
 };
 
 struct cilk_fiber {

@@ -32,7 +32,6 @@ struct closure_exception {
  * and locking.
  */
 struct Closure {
-    cilk_mutex mutex; /* mutual exclusion lock */
 
     __cilkrts_stack_frame *frame; /* rest of the closure */
 
@@ -43,11 +42,9 @@ struct Closure {
     struct cilk_fiber *ext_fiber_child;
 
     worker_id owner_ready_deque; /* debug only */
-    worker_id mutex_owner;       /* debug only */
 
     enum ClosureStatus status : 8; /* doubles as magic number */
     bool has_cilk_callee;
-    bool lock_wait;
     bool simulated_stolen;
     unsigned int join_counter; /* number of outstanding spawned children */
     char *orig_rsp; /* the rsp one should use when sync successfully */
@@ -106,6 +103,8 @@ struct Closure {
     struct closure_exception child_exn;
     // exception thrown from this closure
     struct closure_exception user_exn;
+
+    _Atomic(worker_id) mutex_owner __attribute__((aligned(CILK_CACHE_LINE)));       /* debug only */
 
 } __attribute__((aligned(CILK_CACHE_LINE)));
 
