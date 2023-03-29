@@ -15,13 +15,6 @@ enum __cilkrts_worker_state {
 };
 
 struct __cilkrts_worker {
-    // T, H, and E pointers in the THE protocol.
-    // T and E are frequently accessed and should be in a hot cache line.
-    // H could be moved elsewhere because it is only touched when stealing.
-    _Atomic(struct __cilkrts_stack_frame **) head;
-    _Atomic(struct __cilkrts_stack_frame **) tail;
-    _Atomic(struct __cilkrts_stack_frame **) exc;
-
     // Worker id, a small integer
     worker_id self;
 
@@ -44,6 +37,13 @@ struct __cilkrts_worker {
     // Optional state, only maintained if __cilkrts_use_extension == true.
     void *extension;
     void *ext_stack;
+
+    // T, H, and E pointers in the THE protocol.
+    // T and E are frequently accessed and should be in a hot cache line.
+    // H could be moved elsewhere because it is only touched when stealing.
+    _Atomic(struct __cilkrts_stack_frame **) tail;
+    _Atomic(struct __cilkrts_stack_frame **) exc __attribute__((aligned(64)));
+    _Atomic(struct __cilkrts_stack_frame **) head __attribute__((aligned(CILK_CACHE_LINE)));
 
     // Limit of the Lazy Task Queue, to detect queue overflow (debug only)
     struct __cilkrts_stack_frame **ltq_limit;

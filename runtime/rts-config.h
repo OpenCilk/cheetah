@@ -34,7 +34,8 @@
 
 #define BOSS_THIEF 1
 
-#define CILK_CACHE_LINE 64
+// Use 128-bit cache lines to account for adjacent-cache-line prefetchers.
+#define CILK_CACHE_LINE 128
 
 #define PROC_SPEED_IN_GHZ 2.2
 
