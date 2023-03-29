@@ -129,11 +129,11 @@ static void setup_for_execution(__cilkrts_worker *w, Closure *t) {
 
     __cilkrts_stack_frame **init = w->l->shadow_stack;
     atomic_store_explicit(&w->head, init, memory_order_relaxed);
+    atomic_store_explicit(&w->exc, init, memory_order_relaxed);
     atomic_store_explicit(&w->tail, init, memory_order_release);
 
     /* push the first frame on the current_stack_frame */
     fh->current_stack_frame = t->frame;
-    reset_exception_pointer(w, t);
 }
 
 // ANGE: When this is called, either a) a worker is about to pass a sync (though
@@ -224,7 +224,6 @@ static Closure *setup_call_parent_resumption(ReadyDeque *deques,
     CILK_ASSERT_POINTER_EQUAL(w, w->head, w->tail);
 
     Closure_change_status(w, t, CLOSURE_SUSPENDED, CLOSURE_RUNNING);
-    reset_exception_pointer(w, t);
 
     return t;
 }
@@ -571,6 +570,8 @@ static Closure *Closure_return(__cilkrts_worker *const w, Closure *child) {
         parent->child_ht = NULL;
         parent->user_ht = NULL;
         w->hyper_table = merge_two_hts(w, child_ht, active_ht);
+
+        setup_for_execution(w, res);
     }
 
     Closure_unlock(w, parent);
@@ -653,9 +654,9 @@ void Cilk_exception_handler(char *exn) {
             CILK_ASSERT(w, Closure_has_children(t) == 0);
             Closure_set_status(w, t, CLOSURE_RETURNING);
         }
+        w->l->returning = true;
 
         Closure_unlock(w, t);
-        deque_unlock_self(deques, w);
         sanitizer_unpoison_fiber(t->fiber);
         longjmp_to_runtime(w); // NOT returning back to user code
 
@@ -847,13 +848,15 @@ static Closure *promote_child(__cilkrts_stack_frame **head, ReadyDeque *deques,
     Closure *spawn_parent = NULL;
     __cilkrts_stack_frame *frame_to_steal = *head;
     // ANGE: this must be true if we get this far
-    // Note that it can be that H == T here; victim could have done T--
-    // after the thief passes Dekker; in which case, thief gets the last
-    // frame, and H == T.  Victim won't be able to proceed further until
-    // the thief finishes stealing, releasing the deque lock; at which
-    // point, the victim will realize that it should return back to runtime.
-    CILK_ASSERT(w, head <= victim_w->exc);
-    CILK_ASSERT(w, head <= victim_w->tail);
+    // Note that it can be that H == T here; victim could have done T-- after
+    // the thief passes Dekker; in which case, thief gets the last frame, and H
+    // == T.  Victim won't be able to proceed further until the thief finishes
+    // stealing, releasing the deque lock; at which point, the victim will
+    // realize that it should return back to runtime.
+    // These assertions are commented out because they can impact performance
+    // noticeably by introducing contention.
+    /* CILK_ASSERT(w, head <= victim_w->exc); */
+    /* CILK_ASSERT(w, head <= victim_w->tail); */
     CILK_ASSERT(w, frame_to_steal != NULL);
 
     // ANGE: if cl's frame is set AND equal to the frame at *HEAD, cl must be
@@ -1098,6 +1101,7 @@ static Closure *Closure_steal(__cilkrts_worker **workers, ReadyDeque *deques,
                               (void *)res, (void *)res->fiber,
                               (void *)res->right_most_child,
                               (void *)res->right_most_child->fiber);
+                setup_for_execution(w, res);
                 Closure_unlock(w, res);
             } else {
                 goto give_up;
@@ -1354,20 +1358,17 @@ static void do_what_it_says(ReadyDeque *deques, __cilkrts_worker *w,
 
     do {
         cilkrts_alert(SCHED, w, "(do_what_it_says) closure %p", (void *)t);
-        Closure_lock(w, t);
 
         switch (t->status) {
-        case CLOSURE_READY:
+        case CLOSURE_RUNNING:
             cilkrts_alert(SCHED, w, "(do_what_it_says) CLOSURE_READY");
             /* just execute it */
-            setup_for_execution(w, t);
             f = t->frame;
             // t->fiber->resume_sf = f; // I THINK this works
             cilkrts_alert(SCHED, w, "(do_what_it_says) resume_sf = %p",
                           (void *)f);
             CILK_ASSERT(w, f);
             USE_UNUSED(f);
-            Closure_unlock(w, t);
 
             // MUST unlock the closure before locking the queue
             // (rule A in file PROTOCOLS)
@@ -1406,26 +1407,27 @@ static void do_what_it_says(ReadyDeque *deques, __cilkrts_worker *w,
                     return;
                 }
 
+                t = NULL;
+                if (l->returning) {
+                    l->returning = false;
                 // Attempt to get a closure from the bottom of our deque.
-                deque_lock_self(deques, w);
                 t = deque_xtract_bottom(deques, w, self);
                 deque_unlock_self(deques, w);
+                }
             }
 
             break; // ?
 
         case CLOSURE_RETURNING:
             cilkrts_alert(SCHED, w, "(do_what_it_says) CLOSURE_RETURNING");
-            // the return protocol assumes t is not locked, and everybody
-            // will respect the fact that t is returning
-            Closure_unlock(w, t);
+            // the return protocol requires t to not be locked, so that it can
+            // acquire locks on t and t's parent in the correct order.
             t = return_value(w, t);
 
             break; // ?
 
         default:
-            cilkrts_bug(w, "do_what_it_says invalid status %d", t->status);
-            cilkrts_bug(w, "do_what_it_says() closure status %s",
+            cilkrts_bug(w, "do_what_it_says() invalid closure status: %s",
                         Closure_status_to_str(t->status));
             break;
         }
@@ -1439,6 +1441,7 @@ static void do_what_it_says(ReadyDeque *deques, __cilkrts_worker *w,
 // Cilk computation until it would enter the work-stealing loop.
 void do_what_it_says_boss(__cilkrts_worker *w, Closure *t) {
 
+    setup_for_execution(w, t);
     do_what_it_says(w->g->deques, w, t);
 
     // At this point, the boss has run out of work to do.  Rather than become a

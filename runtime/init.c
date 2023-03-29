@@ -44,6 +44,7 @@ static local_state *worker_local_init(local_state *l, global_state *g) {
     l->state = WORKER_IDLE;
     l->provably_good_steal = false;
     l->exiting = false;
+    l->returning = false;
     l->rand_next = 0; /* will be reset in scheduler loop */
     l->wake_val = 0;
     cilk_sched_stats_init(&(l->stats));
