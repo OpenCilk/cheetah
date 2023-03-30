@@ -37,15 +37,17 @@ typedef void *jmpbuf[JMPBUF_SIZE];
 #define MXCSR(SF) JMPBUF_MXCSR((SF)->ctx)
 #endif
 
-/* These macros are only for debugging. */
 #if defined __i386__
 #define ASM_GET_SP(osp) __asm__ volatile("movl %%esp, %0" : "=r"(osp))
 #elif defined __x86_64__
 #define ASM_GET_SP(osp) __asm__ volatile("movq %%rsp, %0" : "=r"(osp))
+#elif defined __aarch64__
+#define ASM_GET_SP(osp) __asm__ volatile("mov %0, sp" : "=r"(osp))
 #else
-#define ASM_GET_SP(osp) (osp) = 0
+#error "No defined method to get stack pointer on this architecture."
 #endif
 
+/* These macros are only for debugging. */
 #define ASM_GET_FP(ofp) (ofp) = __builtin_frame_address(0)
 
 #define DUMP_STACK(lvl, w)                                                     \
