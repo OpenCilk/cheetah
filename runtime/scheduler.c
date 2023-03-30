@@ -254,6 +254,8 @@ void Cilk_set_return(__cilkrts_worker *const w) {
     CILK_ASSERT(w, t == t1);
     CILK_ASSERT(w, __cilkrts_stolen(t->frame));
 
+    deque_add_bottom(deques, w, call_parent, self);
+
     t->frame = NULL;
     Closure_unlock(w, t);
 
@@ -269,14 +271,13 @@ void Cilk_set_return(__cilkrts_worker *const w) {
     setup_call_parent_resumption(deques, w, call_parent);
     Closure_unlock(w, call_parent);
 
+    deque_unlock_self(deques, w);
+
     if (t->saved_throwing_fiber) {
         cilk_fiber_deallocate_to_pool(w, t->saved_throwing_fiber);
         t->saved_throwing_fiber = NULL;
     }
     Closure_destroy(w, t);
-    deque_add_bottom(deques, w, call_parent, self);
-
-    deque_unlock_self(deques, w);
 }
 
 /***
