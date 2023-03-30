@@ -9,6 +9,7 @@
 #include "cilk2c.h"
 #include "closure.h"
 #include "readydeque.h"
+#include "worker.h"
 
 typedef _Unwind_Reason_Code (*__personality_routine)(
     int version, _Unwind_Action actions, uint64_t exception_class,
@@ -45,6 +46,7 @@ _Unwind_Reason_Code __cilk_personality_internal(
 
     struct fiber_header *fh = get_this_fiber_header();
     __cilkrts_worker *w = fh->worker;
+    worker_id self = w->self;
     __cilkrts_stack_frame *sf = fh->current_stack_frame;
     ReadyDeque *deques = w->g->deques;
 
@@ -63,8 +65,8 @@ _Unwind_Reason_Code __cilk_personality_internal(
 
             if (__builtin_setjmp(sf->ctx) == 0) {
 
-                deque_lock_self(deques, w);
-                Closure *t = deque_peek_bottom(deques, w, w->self);
+                deque_lock_self(deques, self);
+                Closure *t = deque_peek_bottom(deques, w, self, self);
 
                 // ensure that we return here after a cilk_sync.
                 t->parent_rsp = t->orig_rsp;
@@ -73,7 +75,7 @@ _Unwind_Reason_Code __cilk_personality_internal(
                 // set closure_exception
                 t->user_exn.exn = (char *)ue_header;
 
-                deque_unlock_self(deques, w);
+                deque_unlock_self(deques, self);
 
                 // For now, use this flag to indicate that we are setjmping from
                 // the personality function. This will "disable" some asserts in
@@ -86,9 +88,10 @@ _Unwind_Reason_Code __cilk_personality_internal(
 
         // after longjmping back, the worker may have changed.
         w = __cilkrts_get_tls_worker();
-        deque_lock_self(deques, w);
-        Closure *t = deque_peek_bottom(deques, w, w->self);
-        deque_unlock_self(deques, w);
+        self = w->self;
+        deque_lock_self(deques, self);
+        Closure *t = deque_peek_bottom(deques, w, self, self);
+        deque_unlock_self(deques, self);
         bool in_reraised_cfa = (t->reraise_cfa == (char *)get_cfa(context));
         bool skip_leaveframe = ((t->reraise_cfa != NULL) && !in_reraised_cfa);
         if (in_reraised_cfa)

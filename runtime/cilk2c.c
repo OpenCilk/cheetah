@@ -60,11 +60,12 @@ void __cilkrts_check_exception_raise(__cilkrts_stack_frame *sf) {
 
     __cilkrts_worker *w = get_worker_from_stack(sf);
     CILK_ASSERT(w, w == __cilkrts_get_tls_worker());
+    worker_id self = w->self;
     ReadyDeque *deques = w->g->deques;
 
-    deque_lock_self(deques, w);
-    Closure *t = deque_peek_bottom(deques, w, w->self);
-    Closure_lock(w, t);
+    deque_lock_self(deques, self);
+    Closure *t = deque_peek_bottom(deques, w, self, self);
+    Closure_lock(w, self, t);
     char *exn = t->user_exn.exn;
 
     // zero exception storage, so we don't unintentionally try to
@@ -72,8 +73,8 @@ void __cilkrts_check_exception_raise(__cilkrts_stack_frame *sf) {
     clear_closure_exception(&(t->user_exn));
     sf->flags &= ~CILK_FRAME_EXCEPTION_PENDING;
 
-    Closure_unlock(w, t);
-    deque_unlock_self(deques, w);
+    Closure_unlock(w, self, t);
+    deque_unlock_self(deques, self);
     if (exn != NULL) {
         _Unwind_RaiseException((struct _Unwind_Exception *)exn); // noreturn
     }
@@ -87,11 +88,12 @@ void __cilkrts_check_exception_resume(__cilkrts_stack_frame *sf) {
 
     __cilkrts_worker *w = get_worker_from_stack(sf);
     CILK_ASSERT(w, w == __cilkrts_get_tls_worker());
+    worker_id self = w->self;
     ReadyDeque *deques = w->g->deques;
 
-    deque_lock_self(deques, w);
-    Closure *t = deque_peek_bottom(deques, w, w->self);
-    Closure_lock(w, t);
+    deque_lock_self(deques, self);
+    Closure *t = deque_peek_bottom(deques, w, self, self);
+    Closure_lock(w, self, t);
     char *exn = t->user_exn.exn;
 
     // zero exception storage, so we don't unintentionally try to
@@ -99,8 +101,8 @@ void __cilkrts_check_exception_resume(__cilkrts_stack_frame *sf) {
     clear_closure_exception(&(t->user_exn));
     sf->flags &= ~CILK_FRAME_EXCEPTION_PENDING;
 
-    Closure_unlock(w, t);
-    deque_unlock_self(deques, w);
+    Closure_unlock(w, self, t);
+    deque_unlock_self(deques, self);
     if (exn != NULL) {
         _Unwind_Resume((struct _Unwind_Exception *)exn); // noreturn
     }
@@ -116,10 +118,11 @@ void __cilkrts_cleanup_fiber(__cilkrts_stack_frame *sf, int32_t sel) {
 
     __cilkrts_worker *w = get_worker_from_stack(sf);
     CILK_ASSERT(w, w == __cilkrts_get_tls_worker());
+    worker_id self = w->self;
     ReadyDeque *deques = w->g->deques;
 
-    deque_lock_self(deques, w);
-    Closure *t = deque_peek_bottom(deques, w, w->self);
+    deque_lock_self(deques, self);
+    Closure *t = deque_peek_bottom(deques, w, self, self);
 
     // If t->parent_rsp is non-null, then the Cilk personality function executed
     // __cilkrts_sync(sf), which implies that sf is at the top of the deque.
@@ -130,7 +133,7 @@ void __cilkrts_cleanup_fiber(__cilkrts_stack_frame *sf, int32_t sel) {
     // non-null.
 
     if (NULL == t->parent_rsp) {
-        deque_unlock_self(deques, w);
+        deque_unlock_self(deques, self);
         return;
     }
 
@@ -142,7 +145,7 @@ void __cilkrts_cleanup_fiber(__cilkrts_stack_frame *sf, int32_t sel) {
         t->saved_throwing_fiber = NULL;
     }
 
-    deque_unlock_self(deques, w);
+    deque_unlock_self(deques, self);
     __builtin_longjmp(sf->ctx, 1); // Does not return
     return;
 }
