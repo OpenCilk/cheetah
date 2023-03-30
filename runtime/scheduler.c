@@ -446,8 +446,8 @@ static Closure *Closure_return(__cilkrts_worker *const w, worker_id self,
 
         // If we have no hypermaps or exceptions on either the left or right,
         // deposit the active hypermap and exception and break from the loop.
-        if (left_exn.exn == NULL && right_exn.exn == NULL &&
-            lht == NULL && rht == NULL) {
+        if (left_exn.exn == NULL && right_exn.exn == NULL && lht == NULL &&
+            rht == NULL) {
             /* deposit views */
             *left_exn_ptr = active_exn;
             *lht_ptr = active_ht;
@@ -1041,16 +1041,9 @@ static Closure *extract_top_spawning_closure(__cilkrts_stack_frame **head,
         CILK_ASSERT(w, cl == res);
     }
 
-    // ANGE: if worker w is stealing from itself, this is a simulated steal
-    // only create a new fiber if it's a real steal
-    if (w == victim_w) {
-        res->fiber = NULL;
-        res->ext_fiber = NULL;
-    } else {
-        res->fiber = cilk_fiber_allocate_from_pool(w);
-        if (USE_EXTENSION) {
-            res->ext_fiber = cilk_fiber_allocate_from_pool(w);
-        }
+    res->fiber = cilk_fiber_allocate_from_pool(w);
+    if (USE_EXTENSION) {
+        res->ext_fiber = cilk_fiber_allocate_from_pool(w);
     }
 
     // make sure we are not hold lock on child
@@ -1079,7 +1072,6 @@ static Closure *Closure_steal(__cilkrts_worker **workers,
 
     // Fast test for an unsuccessful steal attempt using only read operations.
     // This fast test seems to improve parallel performance.
-    /* { */
     __cilkrts_stack_frame **head =
         atomic_load_explicit(&victim_w->head, memory_order_relaxed);
     __cilkrts_stack_frame **tail =
@@ -1087,7 +1079,6 @@ static Closure *Closure_steal(__cilkrts_worker **workers,
     if (head >= tail) {
         return NULL;
     }
-    /* } */
 
     //----- EVENT_STEAL_ATTEMPT
     if (deque_trylock(deques, self, victim) == 0) {
@@ -1374,8 +1365,6 @@ int Cilk_sync(__cilkrts_worker *const w, __cilkrts_stack_frame *frame) {
             t->child_ht = NULL;
             w->hyper_table = merge_two_hts(w, child_ht, w->hyper_table);
         }
-        if (t->simulated_stolen)
-            t->simulated_stolen = false;
 
         sanitizer_start_switch_fiber(t->fiber);
     }
@@ -1444,6 +1433,8 @@ static void do_what_it_says(ReadyDeque *deques, __cilkrts_worker *w,
                 if (l->returning) {
                     l->returning = false;
                     // Attempt to get a closure from the bottom of our deque.
+                    // We should already have the lock on the deque at this
+                    // point, as we jumped here from Cilk_exception_handler.
                     t = deque_xtract_bottom(deques, w, self, self);
                     deque_unlock_self(deques, self);
                 }

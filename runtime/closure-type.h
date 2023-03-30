@@ -32,7 +32,6 @@ struct closure_exception {
  * and locking.
  */
 struct Closure {
-
     __cilkrts_stack_frame *frame; /* rest of the closure */
 
     struct cilk_fiber *fiber;
@@ -104,7 +103,7 @@ struct Closure {
     // exception thrown from this closure
     struct closure_exception user_exn;
 
-    _Atomic(worker_id) mutex_owner __attribute__((aligned(CILK_CACHE_LINE)));       /* debug only */
+    _Atomic(worker_id) mutex_owner __attribute__((aligned(CILK_CACHE_LINE)));
 
 } __attribute__((aligned(CILK_CACHE_LINE)));
 

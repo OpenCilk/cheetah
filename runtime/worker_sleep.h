@@ -464,7 +464,6 @@ handle_failed_steal_attempts(global_state *const rts, worker_id self,
 #endif
 #if BOSS_THIEF
             if (is_boss_thread) {
-
                 if (fails % NAP_THRESHOLD == 0) {
                     // The boss thread should never disengage.  Sleep instead.
                     const struct timespec sleeptime = {
@@ -472,7 +471,6 @@ handle_failed_steal_attempts(global_state *const rts, worker_id self,
                         .tv_nsec =
                             (fails > SLEEP_THRESHOLD) ? SLEEP_NSEC : NAP_NSEC};
                     nanosleep(&sleeptime, NULL);
-                } else {
                 }
             } else {
 #else
@@ -555,11 +553,9 @@ handle_failed_steal_attempts(global_state *const rts, worker_id self,
                         .tv_nsec =
                             (fails > SLEEP_THRESHOLD) ? SLEEP_NSEC : NAP_NSEC};
                     nanosleep(&sleeptime, NULL);
-                } else {
                 }
             }
         }
-    } else {
     }
     CILK_STOP_TIMING(w, INTERVAL_SLEEP);
     return fails;
