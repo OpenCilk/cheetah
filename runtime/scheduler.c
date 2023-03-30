@@ -1557,7 +1557,9 @@ void worker_scheduler(__cilkrts_worker *w) {
                                               __builtin_clz(lg_sentinel)));
             const unsigned int NAP_THRESHOLD = SENTINEL_THRESHOLD * 64;
 
+#ifndef __aarch64__
             uint64_t start = __builtin_readcyclecounter();
+#endif // __aarch64__
             int attempt = ATTEMPTS;
             do {
                 // Choose a random victim not equal to self.
@@ -1594,6 +1596,7 @@ void worker_scheduler(__cilkrts_worker *w) {
                 &recent_sentinel_count);
 
             if (!t) {
+#ifndef __aarch64__
                 uint64_t stop = 450 * ATTEMPTS;
                 if (fails > stealable)
                     stop += 650 * ATTEMPTS;
@@ -1601,6 +1604,7 @@ void worker_scheduler(__cilkrts_worker *w) {
                 while ((__builtin_readcyclecounter() - start) < stop) {
                     busy_pause();
                 }
+#endif // __aarch64__
             }
         }
         CILK_START_TIMING(w, INTERVAL_SCHED);
