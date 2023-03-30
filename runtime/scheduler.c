@@ -150,23 +150,21 @@ static void setup_for_sync(__cilkrts_worker *w, Closure *t) {
     // the runtime before doing the provably good steal.
     CILK_ASSERT(w, t->fiber != t->fiber_child);
 
-    if (t->simulated_stolen == false) {
-        // ANGE: note that in case a) this fiber won't get freed for awhile,
-        // since we will longjmp back to the original function's fiber and
-        // never go back to the runtime; we will only free it either once
-        // when we get back to the runtime or when we encounter a case
-        // where we need to.
-        if (t->fiber)
-            cilk_fiber_deallocate_to_pool(w, t->fiber);
-        t->fiber = t->fiber_child;
-        t->fiber_child = NULL;
+    // ANGE: note that in case a) this fiber won't get freed for awhile,
+    // since we will longjmp back to the original function's fiber and
+    // never go back to the runtime; we will only free it either once
+    // when we get back to the runtime or when we encounter a case
+    // where we need to.
+    if (t->fiber)
+        cilk_fiber_deallocate_to_pool(w, t->fiber);
+    t->fiber = t->fiber_child;
+    t->fiber_child = NULL;
 
-        if (USE_EXTENSION) {
-            if (t->ext_fiber)
-                cilk_fiber_deallocate_to_pool(w, t->ext_fiber);
-            t->ext_fiber = t->ext_fiber_child;
-            t->ext_fiber_child = NULL;
-        }
+    if (USE_EXTENSION) {
+        if (t->ext_fiber)
+            cilk_fiber_deallocate_to_pool(w, t->ext_fiber);
+        t->ext_fiber = t->ext_fiber_child;
+        t->ext_fiber_child = NULL;
     }
 
     CILK_ASSERT(w, t->fiber);
@@ -540,13 +538,7 @@ static Closure *Closure_return(__cilkrts_worker *const w, Closure *child) {
 
     --parent->join_counter;
 
-    if (parent->simulated_stolen) {
-        // parent stolen via simulated steal on worker's own deque
-        res = unconditional_steal(w, parent); // must succeed
-        CILK_ASSERT(w, parent->fiber && (parent->fiber_child == NULL));
-    } else {
-        res = provably_good_steal_maybe(w, parent);
-    }
+    res = provably_good_steal_maybe(w, parent);
 
     if (res) {
         struct closure_exception child_exn = parent->child_exn;
