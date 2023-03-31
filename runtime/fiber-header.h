@@ -18,7 +18,7 @@ struct fiber_header {
 
 // Constant method to get the stack size.
 __attribute__((const)) static inline size_t get_stack_size(void) {
-    return 1 << LG_STACK_SIZE;
+    return 1UL << LG_STACK_SIZE;
 }
 
 // Get the fiber header from the given SP.

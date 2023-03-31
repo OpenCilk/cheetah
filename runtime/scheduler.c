@@ -508,6 +508,9 @@ static Closure *Closure_return(__cilkrts_worker *const w, Closure *child) {
     } else {
         // We are leftmost, pass stack/fiber up to parent.
         // Thus, no stack/fiber to free.
+        CILK_ASSERT_POINTER_EQUAL(
+            w, parent->frame,
+            get_header_from_fiber(child->fiber)->current_stack_frame);
         parent->fiber_child = child->fiber;
         if (USE_EXTENSION) {
             parent->ext_fiber_child = child->ext_fiber;
@@ -796,7 +799,7 @@ static __cilkrts_stack_frame **do_dekker_on(__cilkrts_worker *const w,
     __cilkrts_stack_frame **head =
         atomic_load_explicit(&victim_w->head, memory_order_relaxed);
     __cilkrts_stack_frame **tail =
-        atomic_load_explicit(&victim_w->tail, memory_order_relaxed);
+        atomic_load_explicit(&victim_w->tail, memory_order_acquire);
     if (head >= tail) {
         decrement_exception_pointer(w, victim_w, cl);
         return NULL;
