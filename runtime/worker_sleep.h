@@ -402,6 +402,9 @@ handle_failed_steal_attempts(global_state *const rts, worker_id self,
     // for an extended amount of time.  Must be at least SENTINEL_THRESHOLD and
     // a power of 2.
     const unsigned int SLEEP_THRESHOLD = NAP_THRESHOLD;
+    const unsigned int MAX_FAILS =
+        2 * ((SLEEP_THRESHOLD > DISENGAGE_THRESHOLD) ? SLEEP_THRESHOLD
+                                                     : DISENGAGE_THRESHOLD);
 
     CILK_START_TIMING(w, INTERVAL_SLEEP);
     fails += ATTEMPTS;
@@ -410,10 +413,10 @@ handle_failed_steal_attempts(global_state *const rts, worker_id self,
     // set of sentinel workers, and maybe disengage this worker if there are too
     // many sentinel workers.
     if (fails % SENTINEL_THRESHOLD == 0) {
-        if (fails > (1 << 30)) {
+        if (fails > MAX_FAILS) {
             // Prevent the fail count from exceeding this maximum, so we don't
             // have to worry about the fail count overflowing.
-            fails = (1 << 30);
+            fails = MAX_FAILS;
             const struct timespec sleeptime = {.tv_sec = 0, .tv_nsec = SLEEP_NSEC};
             nanosleep(&sleeptime, NULL);
         } else {
