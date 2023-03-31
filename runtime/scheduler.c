@@ -1604,6 +1604,13 @@ void worker_scheduler(__cilkrts_worker *w) {
                 while ((__builtin_readcyclecounter() - start) < stop) {
                     busy_pause();
                 }
+#else
+                int pause_count = 200 * ATTEMPTS;
+                if (fails > stealable)
+                    pause_count += 50 * ATTEMPTS;
+                pause_count *= sentinel_div_lg_sentinel;
+                for (int i = 0; i < pause_count; ++i)
+                    busy_pause();
 #endif // __aarch64__
             }
         }

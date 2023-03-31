@@ -232,8 +232,8 @@ is_efficient(worker_counts counts) {
 // Convert the elapsed time spent working into a fail count.
 __attribute__((const, always_inline)) static inline unsigned int
 get_scaled_elapsed(unsigned int elapsed) {
-#if defined(__aarch64__)
-    return ((elapsed * (1 * SENTINEL_THRESHOLD) / (16 * 65536)) / ATTEMPTS) *
+#ifdef __aarch64__
+    return ((elapsed * (2 * SENTINEL_THRESHOLD) / (1 * 65536)) / ATTEMPTS) *
            ATTEMPTS;
 #else
     return ((elapsed * (1 * SENTINEL_THRESHOLD) / (1 * 65536)) / ATTEMPTS) *
