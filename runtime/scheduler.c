@@ -1604,7 +1604,7 @@ void worker_scheduler(__cilkrts_worker *w) {
                 while ((__builtin_readcyclecounter() - start) < stop) {
                     busy_pause();
                 }
-#else
+#elif !defined(__APPLE__)
                 int pause_count = 200 * ATTEMPTS;
                 if (fails > stealable)
                     pause_count += 50 * ATTEMPTS;
