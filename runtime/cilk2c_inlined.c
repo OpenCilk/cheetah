@@ -65,9 +65,9 @@ void *__cilkrts_reducer_lookup(void *key, size_t size,
     // nor a reducer lookup that we can distinguish from a
     // registration (i.e., whether to use the key as the view or
     // create a new view).
-    __cilkrts_worker *w = __cilkrts_get_tls_worker();
-    if (NULL == w)
+    if (__cilkrts_need_to_cilkify)
         return key;
+    __cilkrts_worker *w = get_this_fiber_header()->worker;
     struct local_hyper_table *table = get_local_hyper_table(w);
     struct bucket *b = find_hyperobject(table, (uintptr_t)key);
     if (__builtin_expect(!!b, 1)) {
