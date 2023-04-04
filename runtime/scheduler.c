@@ -1596,12 +1596,31 @@ void worker_scheduler(__cilkrts_worker *w) {
                 &recent_sentinel_count);
 
             if (!t) {
+                // Add some delay to the time a worker takes between steal
+                // attempts.  On a variety of systems, this delay seems to
+                // improve parallel performance of Cilk computations where
+                // workers spend a signficant amount of time stealing.
+                //
+                // The computation for the delay is heuristic, based on the
+                // following:
+                // - Incorporate some delay for each steal attempt.
+                // - Increase the delay for workers who fail a lot of steal
+                //   attempts, and allow successful thieves to steal more
+                //   frequently.
+                // - Increase the delay based on the number of thieves failing
+                //   lots of steal attempts.  In this case, we use the number S
+                //   of sentinels and increase the delay by approximately S/lg
+                //   S, which seems to work better than a linear increase in
+                //   practice.
 #ifndef __APPLE__
 #ifndef __aarch64__
                 uint64_t stop = 450 * ATTEMPTS;
                 if (fails > stealable)
                     stop += 650 * ATTEMPTS;
                 stop *= sentinel_div_lg_sentinel;
+                // On x86-64, the latency of a pause instruction varies between
+                // microarchitectures.  We use the cycle counter to delay by a
+                // certain amount of time, regardless of the latency of pause.
                 while ((__builtin_readcyclecounter() - start) < stop) {
                     busy_pause();
                 }
@@ -1610,6 +1629,9 @@ void worker_scheduler(__cilkrts_worker *w) {
                 if (fails > stealable)
                     pause_count += 50 * ATTEMPTS;
                 pause_count *= sentinel_div_lg_sentinel;
+                // On arm64, we can't necessarily read the cycle counter without
+                // a kernel patch.  Instead, we just perform some number of
+                // pause instructions.
                 for (int i = 0; i < pause_count; ++i)
                     busy_pause();
 #endif // __aarch64__
