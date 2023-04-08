@@ -79,8 +79,7 @@ void *__cilkrts_reducer_lookup(void *key, size_t size,
 
     // Create a new view and initialize it with the identity function.
     /* void *new_view = __cilkrts_hyper_alloc(size); */
-    void *new_view =
-        cilk_aligned_alloc(round_size_to_alignment(64, size), size);
+    void *new_view = cilk_aligned_alloc(64, round_size_to_alignment(64, size));
     identity(new_view);
     // Insert the new view into the local hypertable.
     struct bucket new_bucket = {
