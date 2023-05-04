@@ -399,7 +399,8 @@ static inline void Closure_suspend(struct ReadyDeque *deques,
     CILK_ASSERT(w, cl->frame->worker->self == self);
 
     Closure_change_status(w, cl, CLOSURE_RUNNING, CLOSURE_SUSPENDED);
-    atomic_store_explicit(&cl->frame->worker, INVALID, memory_order_relaxed);
+    atomic_store_explicit(&cl->frame->worker, INVALID_WORKER,
+                          memory_order_relaxed);
 
     cl1 = deque_xtract_bottom(deques, w, self);
 

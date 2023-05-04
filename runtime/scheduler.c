@@ -302,7 +302,7 @@ static Closure *unconditional_steal(__cilkrts_worker *const w,
     CILK_ASSERT(w, parent->status == CLOSURE_SUSPENDED);
 
     CILK_ASSERT(w, parent->frame != NULL);
-    CILK_ASSERT(w, parent->frame->worker == INVALID);
+    CILK_ASSERT(w, parent->frame->worker == INVALID_WORKER);
     CILK_ASSERT(w, parent->owner_ready_deque == NO_WORKER);
     CILK_ASSERT(w, (parent->fiber == NULL) && parent->fiber_child);
     parent->fiber = parent->fiber_child;
@@ -329,7 +329,7 @@ static Closure *provably_good_steal_maybe(__cilkrts_worker *const w,
         //      "(provably_good_steal_maybe) completing a sync");
 
         CILK_ASSERT(w, parent->frame != NULL);
-        CILK_ASSERT(w, (intptr_t)parent->frame->worker & 1);
+        CILK_ASSERT(w, parent->frame->worker == INVALID_WORKER);
 
         /* do a provably-good steal; this is *really* simple */
         w->l->provably_good_steal = true;
@@ -726,7 +726,7 @@ static Closure *setup_call_parent_closure_helper(
     CILK_ASSERT(w, call_parent->fiber);
 
     Closure_set_status(w, curr_cl, CLOSURE_SUSPENDED);
-    atomic_store_explicit(&curr_cl->frame->worker, INVALID,
+    atomic_store_explicit(&curr_cl->frame->worker, INVALID_WORKER,
                           memory_order_relaxed);
     curr_cl->fiber = call_parent->fiber;
 
@@ -777,7 +777,7 @@ static void setup_closures_in_stacklet(__cilkrts_worker *const w,
         }
     }
     CILK_ASSERT(w, oldest->worker == victim_w);
-    atomic_store_explicit(&oldest_cl->frame->worker, INVALID,
+    atomic_store_explicit(&oldest_cl->frame->worker, INVALID_WORKER,
                           memory_order_relaxed);
 
     call_parent = setup_call_parent_closure_helper(
@@ -1197,7 +1197,7 @@ void promote_own_deque(__cilkrts_worker *w) {
             finish_promote(w, w, res, has_frames_to_promote);
 
             Closure_set_status(w, res, CLOSURE_SUSPENDED);
-            atomic_store_explicit(&res->frame->worker, INVALID,
+            atomic_store_explicit(&res->frame->worker, INVALID_WORKER,
                                   memory_order_relaxed);
             res->simulated_stolen = true;
             Closure_unlock(w, res);
