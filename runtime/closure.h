@@ -142,7 +142,7 @@ static inline int Closure_has_children(Closure *cl) {
     return (cl->has_cilk_callee || cl->join_counter != 0);
 }
 
-static inline void Closure_init(Closure *t) {
+static inline void Closure_init(Closure *t, __cilkrts_stack_frame *frame) {
     cilk_mutex_init(&t->mutex);
 
     t->mutex_owner = NO_WORKER;
@@ -153,7 +153,7 @@ static inline void Closure_init(Closure *t) {
     t->simulated_stolen = false;
     t->join_counter = 0;
 
-    t->frame = NULL;
+    t->frame = frame;
     t->fiber = NULL;
     t->fiber_child = NULL;
     t->ext_fiber = NULL;
@@ -185,17 +185,25 @@ static inline void Closure_init(Closure *t) {
     t->user_rmap = NULL;
 }
 
-static inline Closure *Closure_create(__cilkrts_worker *const w) {
+static inline Closure *Closure_create(__cilkrts_worker *const w,
+                                      __cilkrts_stack_frame *sf) {
     /* cilk_internal_malloc returns sufficiently aligned memory */
     Closure *new_closure =
         cilk_internal_malloc(w, sizeof(*new_closure), IM_CLOSURE);
     CILK_ASSERT(w, new_closure != NULL);
 
-    Closure_init(new_closure);
+    Closure_init(new_closure, sf);
 
     cilkrts_alert(CLOSURE, w, "Allocate closure %p", (void *)new_closure);
 
     return new_closure;
+}
+
+static inline void Closure_set_frame(__cilkrts_worker *w,
+                                     Closure *cl,
+                                      __cilkrts_stack_frame *sf) {
+    CILK_ASSERT(w, !cl->frame);
+    cl->frame = sf;
 }
 
 // double linking left and right; the right is always the new child

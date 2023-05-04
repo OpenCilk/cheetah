@@ -272,7 +272,7 @@ global_state *__cilkrts_startup(int argc, char *argv[]) {
 
     // Create the root closure and a fiber to go with it.  Use worker 0 to
     // allocate the closure and fiber.
-    Closure *t = Closure_create(g->workers[g->exiting_worker]);
+    Closure *t = Closure_create(g->workers[g->exiting_worker], 0);
     struct cilk_fiber *fiber = cilk_fiber_allocate(
         g->workers[g->exiting_worker], g->options.stacksize);
     t->fiber = fiber;
@@ -447,7 +447,7 @@ void __cilkrts_internal_invoke_cilkified_root(__cilkrts_stack_frame *sf) {
     __cilkrts_set_stolen(sf);
 
     // Associate sf with this root closure
-    g->root_closure->frame = sf;
+    Closure_set_frame(g->workers[0], g->root_closure, sf);
 
     // Now kick off execution of the Cilkified region by setting appropriate
     // flags.

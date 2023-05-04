@@ -720,8 +720,7 @@ static Closure *setup_call_parent_closure_helper(
     call_parent = setup_call_parent_closure_helper(
         w, victim_w, frame->call_parent, extension, oldest);
     __cilkrts_set_stolen(frame);
-    curr_cl = Closure_create(w);
-    curr_cl->frame = frame;
+    curr_cl = Closure_create(w, frame);
 
     CILK_ASSERT(w, frame->worker == victim_w);
     CILK_ASSERT(w, call_parent->fiber);
@@ -891,8 +890,7 @@ static Closure *promote_child(ReadyDeque *deques, __cilkrts_worker *const w,
         CILK_ASSERT(w, frame_to_steal->call_parent &&
                            __cilkrts_stolen(frame_to_steal->call_parent));
         CILK_ASSERT(w, (frame_to_steal->flags & CILK_FRAME_LAST) == 0);
-        CILK_ASSERT(w, cl->frame == NULL);
-        cl->frame = frame_to_steal;
+        Closure_set_frame(w, cl, frame_to_steal);
         spawn_parent = cl;
         __cilkrts_set_stolen(spawn_parent->frame);
     } else { // spawning a function and stacklet never gotten stolen before
@@ -901,8 +899,7 @@ static Closure *promote_child(ReadyDeque *deques, __cilkrts_worker *const w,
         // spawned, and the spawned frame is the frame_to_steal now). ANGE:
         // if this is the case, we must create a new Closure representing
         // the left-most frame (the one to be stolen and resume).
-        spawn_parent = Closure_create(w);
-        spawn_parent->frame = frame_to_steal;
+        spawn_parent = Closure_create(w, frame_to_steal);
         __cilkrts_set_stolen(frame_to_steal);
         Closure_set_status(w, spawn_parent, CLOSURE_RUNNING);
 
@@ -926,7 +923,8 @@ static Closure *promote_child(ReadyDeque *deques, __cilkrts_worker *const w,
     }
 
     CILK_ASSERT(w, spawn_parent->has_cilk_callee == 0);
-    Closure *spawn_child = Closure_create(w);
+    // ANGE: we set this frame lazily
+    Closure *spawn_child = Closure_create(w, NULL);
 
     spawn_child->spawn_parent = spawn_parent;
     Closure_set_status(w, spawn_child, CLOSURE_RUNNING);
@@ -942,8 +940,6 @@ static Closure *promote_child(ReadyDeque *deques, __cilkrts_worker *const w,
 
     atomic_store_explicit(&victim_w->head, head + 1, memory_order_release);
 
-    // ANGE: we set this frame lazily
-    spawn_child->frame = (__cilkrts_stack_frame *)NULL;
 
     /* insert the closure on the victim processor's deque */
     deque_add_bottom(deques, w, spawn_child, pn);
