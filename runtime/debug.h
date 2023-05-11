@@ -15,23 +15,28 @@ struct __cilkrts_worker;
 #ifndef ALERT_LVL
 #define ALERT_LVL 0x3d03
 #endif
-#define ALERT_NONE 0x0
-#define ALERT_FIBER 0x001
-#define ALERT_FIBER_SUMMARY 0x002
-#define ALERT_MEMORY 0x004
-#define ALERT_SYNC 0x010
-#define ALERT_SCHED 0x020
-#define ALERT_STEAL 0x040
-#define ALERT_RETURN 0x080
-#define ALERT_EXCEPT 0x100
-#define ALERT_CFRAME 0x200
-#define ALERT_REDUCE 0x400
-#define ALERT_REDUCE_ID 0x800
-#define ALERT_BOOT 0x1000
-#define ALERT_START 0x2000
-#define ALERT_CLOSURE 0x4000
+#define ALERT_NONE             0x0000
+#define ALERT_FIBER            0x0001
+#define ALERT_FIBER_SUMMARY    0x0002
+#define ALERT_MEMORY           0x0004
+#define ALERT_SYNC             0x0010
+#define ALERT_SCHED            0x0020
+#define ALERT_STEAL            0x0040
+#define ALERT_RETURN           0x0080
+#define ALERT_EXCEPT           0x0100
+#define ALERT_CFRAME           0x0200
+#define ALERT_REDUCE           0x0400
+#define ALERT_REDUCE_ID        0x0800
+#define ALERT_BOOT             0x1000
+#define ALERT_START            0x2000
+#define ALERT_CLOSURE          0x4000
+#define ALERT_NOBUF            0x80000000
 
+#if ALERT_LVL & (ALERT_CFRAME|ALERT_RETURN)
+extern unsigned int alert_level;
+#else
 extern CHEETAH_INTERNAL unsigned int alert_level;
+#endif
 #define ALERT_ENABLED(flag) (alert_level & (ALERT_LVL & ALERT_##flag))
 
 #ifndef DEBUG_LVL
