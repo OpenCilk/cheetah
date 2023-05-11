@@ -199,6 +199,10 @@ static inline Closure *Closure_create(__cilkrts_worker *const w,
     return new_closure;
 }
 
+static inline void Closure_clear_frame(Closure *cl) {
+    cl->frame = NULL;
+}
+
 static inline void Closure_set_frame(__cilkrts_worker *w,
                                      Closure *cl,
                                       __cilkrts_stack_frame *sf) {

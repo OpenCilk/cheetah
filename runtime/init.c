@@ -447,6 +447,7 @@ void __cilkrts_internal_invoke_cilkified_root(__cilkrts_stack_frame *sf) {
     __cilkrts_set_stolen(sf);
 
     // Associate sf with this root closure
+    Closure_clear_frame(g->root_closure);
     Closure_set_frame(g->workers[0], g->root_closure, sf);
 
     // Now kick off execution of the Cilkified region by setting appropriate
