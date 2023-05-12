@@ -63,7 +63,11 @@ static inline __attribute__((always_inline)) uint64_t gettime_fast(void) {
     return clock_gettime_nsec_np(CLOCK_MONOTONIC_RAW);
 #elif defined(__aarch64__)
     struct timespec res;
+#ifdef __FreeBSD__
+    clock_gettime(CLOCK_MONOTONIC_PRECISE, &res);
+#else
     clock_gettime(CLOCK_MONOTONIC_RAW, &res);
+#endif
     return (res.tv_sec * 1e9) + (res.tv_nsec);
 #else
     return __builtin_readcyclecounter();
