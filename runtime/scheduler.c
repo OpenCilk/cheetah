@@ -1533,6 +1533,7 @@ void worker_scheduler(__cilkrts_worker *w) {
                 &rts->disengaged_sentinel, memory_order_relaxed);
             uint32_t disengaged = GET_DISENGAGED(disengaged_sentinel);
             uint32_t stealable = nworkers - disengaged;
+            __attribute__((unused))
             uint32_t sentinel = recent_sentinel_count / SENTINEL_COUNT_HISTORY;
 
             if (__builtin_expect(stealable == 1, false))
@@ -1542,8 +1543,10 @@ void worker_scheduler(__cilkrts_worker *w) {
 
 #else // ENABLE_THIEF_SLEEP
             uint32_t stealable = nworkers;
+            __attribute__((unused))
             uint32_t sentinel = nworkers / 2;
 #endif // ENABLE_THIEF_SLEEP
+#ifndef __APPLE__
             uint32_t lg_sentinel = sentinel == 0 ? 1
                                                  : (8 * sizeof(sentinel)) -
                                                        __builtin_clz(sentinel);
@@ -1551,6 +1554,7 @@ void worker_scheduler(__cilkrts_worker *w) {
                 sentinel == 0 ? 1
                               : (sentinel >> (8 * sizeof(lg_sentinel) -
                                               __builtin_clz(lg_sentinel)));
+#endif
             const unsigned int NAP_THRESHOLD = SENTINEL_THRESHOLD * 64;
 
 #if !defined(__aarch64__) && !defined(__APPLE__)
