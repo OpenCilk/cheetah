@@ -312,6 +312,104 @@ bool insert_hyperobject(hyper_table *table, struct bucket b) {
 
     // Search for the place to insert b.
     index_t i = tgt;
+
+    // Searching for an appropriate insertion point requires handling four
+    // conditions based on tgt --- the target index of the item being inserted
+    // --- i --- the current index in the hash table being examined in the
+    // search --- and hash --- the target index of the item at index i.
+    //
+    // Generally speaking, items that hash to the same index appear next to each
+    // other in the table, and items that hash to adjacent indices (modulo the
+    // table's capacity) appear next to each other in sorted order based on the
+    // indices they hash to.  These invariants hold with the exception that
+    // tombstones can exist between items in the table that would otherwise be
+    // adjacent.  Let a _run_ be a sequence of hash values for consecutive valid
+    // entries in the table (modulo the table's capacity).
+    //
+    // The search must accommodate the following 4 conditions:
+    // - Non-wrapped search (NS): tgt <= i
+    // - Wrapped search (WS):     tgt > i
+    // - Non-wrapped run (NR):    hash <= i
+    // - Wrapped run (WR):        hash > i
+    //
+    // These conditions lead to 4 cases:
+    // - NS+NR: hash <= tgt <= i:
+    //   Common case.  Search terminates when hash > tgt.
+    // - WS+WR: i < hash <= tgt:
+    //   Like NS+NR, search terminates when hash > tgt.
+    // - NS+WR: tgt <= i < hash:
+    //   The search needs to treat tgt as larger than hash.
+    //   Given init --- the hash of the first non-tombstone encountered ---
+    //   comparing shifted values of tgt and hash --- specifically, X-init+2^k
+    //   mod 2^k, where X \in {tgt, hash} --- causes tgt to become large and
+    //   allows the search to terminate when shifted hash > shifted tgt.
+    // - WS+NR: hash <= i < tgt:
+    //   The search needs to stop search before wrapping and treat hash as
+    //   larger than tgt.
+    //   Given init, computing on shifted values of tgt and hash --- i.e.,
+    //   X-init+2^k mod 2^k where X \in {tgt, hash} --- causes hash to become
+    //   large and allows the search to terminate when shifted hash > shifted
+    //   tgt.
+
+    // Probe to find either a place to insert b or another valid entry in the
+    // hash table, whose hash is then stored in init_hash.
+    index_t init_hash = (index_t)(-1);
+    do {
+        uintptr_t curr_key = buckets[i].key;
+        // If we find the key, overwrite that bucket.
+        // TODO: Reconsider what we do in this case.
+        if (b.key == curr_key) {
+            buckets[i].value = b.value;
+            return true;
+        }
+
+        // If we find an empty entry, insert b there.
+        if (is_empty(curr_key)) {
+            buckets[i] = b;
+            ++table->occupancy;
+            ++table->ins_rm_count;
+            return true;
+        }
+
+        if (is_tombstone(curr_key)) {
+            // Check whether the next entry is valid.
+            index_t next_i = inc_index(i, capacity);
+            uintptr_t next_key = buckets[next_i].key;
+            if (is_valid(next_key)) {
+                // Record the hash of the first valid entry found and exit the
+                // loop.
+                init_hash = get_table_entry(capacity, next_key);
+                // Check if the search can be terminated early, either because
+                // init_hash == tgt, or we're in the WS+NR case, or we're
+                // terminating the search in the NS+NR or WS+WR cases.
+                if ((tgt == init_hash) ||
+                    (tgt > next_i && next_i >= init_hash) ||
+                    (tgt < init_hash &&
+                     ((tgt > next_i) == (init_hash > next_i)))) {
+                    // The hash at the end of this run of tombstones would
+                    // terminate the search.  Because there are only tombstones
+                    // between tgt and next_i, inserting b at tgt is safe.
+                    buckets[tgt] = b;
+                    ++table->occupancy;
+                    ++table->ins_rm_count;
+                    return true;
+                }
+                break;
+            }
+            // We found a tombstone followed by an invalid entry (tombstone or
+            // empty).  Continue searching.
+            i = next_i;
+            continue;
+        }
+
+        // Record the hash of the first valid entry found and exit the loop.
+        init_hash = get_table_entry(capacity, curr_key);
+        break;
+
+    } while (i != tgt);
+    assert(init_hash != (index_t)(-1));
+
+    // Use init_hash to continue probing to find a place to insert b.
     do {
         uintptr_t curr_key = buckets[i].key;
         // If we find the key, overwrite that bucket.
@@ -332,34 +430,35 @@ bool insert_hyperobject(hyper_table *table, struct bucket b) {
         // If we find a tombstone, check whether to insert b here, and
         // finish the insert if so.
         if (is_tombstone(curr_key)) {
-            // Check that the search would not continue through the next
-            // index.
+            index_t current_tomb = i;
+            // Scan all consecutive tombstones from i.
             index_t next_i = inc_index(i, capacity);
-            index_t next_key = buckets[next_i].key;
-            if (is_empty(next_key)) {
-                // If the next entry is empty, then the search would
-                // stop.  Go ahead and insert the bucket.
-                buckets[i] = b;
-                ++table->occupancy;
-                ++table->ins_rm_count;
-                return true;
-            } else if (is_tombstone(next_key)) {
-                // If the next entry is a tombstone, then the search
-                // would continue.
-                i = next_i;
-                continue;
+            uintptr_t tomb_end = buckets[next_i].key;
+            while (is_tombstone(tomb_end)) {
+                next_i = inc_index(next_i, capacity);
+                tomb_end = buckets[next_i].key;
             }
-            index_t next_hash = get_table_entry(capacity, next_key);
-            if (!continue_search(tgt, next_hash, next_i, b.key, next_key)) {
-                // This location is appropriate for inserting the bucket.
-                buckets[i] = b;
+            // If the next entry is empty, then the search would stop.  It's
+            // safe to insert the bucket at the tombstone.
+            if (is_empty(tomb_end)) {
+                buckets[current_tomb] = b;
                 ++table->occupancy;
                 ++table->ins_rm_count;
                 return true;
             }
-            // This location is not appropriate for this bucket.
-            // Continue the search.
-            i = next_i;
+            // Check if the hash of the element at the end of this run of
+            // tombstones would terminate the search.
+            index_t tomb_end_hash = get_table_entry(capacity, tomb_end);
+            if (stop_insert_scan(tgt, tomb_end_hash, init_hash)) {
+                // It's safe to insert the element at the current tombstone.
+                buckets[current_tomb] = b;
+                ++table->occupancy;
+                ++table->ins_rm_count;
+                return true;
+            }
+            // None of the locations among these consecutive tombstones are
+            // appropriate for this bucket.  Continue the search.
+            i = inc_index(next_i, capacity);
             continue;
         }
 
@@ -367,7 +466,7 @@ bool insert_hyperobject(hyper_table *table, struct bucket b) {
         // Compare the hashes to decide whether or not to continue the
         // search.
         index_t curr_hash = get_table_entry(capacity, curr_key);
-        if (continue_search(tgt, curr_hash, i, b.key, curr_key)) {
+        if (continue_search(tgt, curr_hash, init_hash)) {
             i = inc_index(i, capacity);
             continue;
         }
@@ -404,6 +503,8 @@ bool insert_hyperobject(hyper_table *table, struct bucket b) {
     return false;
 }
 
+// Merge two hypertables, left and right.  Returns the merged hypertable and
+// deletes the other.
 hyper_table *merge_two_hts(__cilkrts_worker *restrict w,
                            hyper_table *restrict left,
                            hyper_table *restrict right) {
@@ -456,7 +557,7 @@ hyper_table *merge_two_hts(__cilkrts_worker *restrict w,
             } else {
                 dst_rb.reduce_fn(b.value.view, dst_rb.view);
                 free(dst_rb.view);
-                dst_rb.view = b.value.view;
+                dst_bucket->value.view = b.value.view;
             }
         }
     }

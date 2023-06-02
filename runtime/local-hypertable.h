@@ -77,22 +77,20 @@ static inline index_t inc_index(index_t i, index_t capacity) {
     return i;
 }
 
-static inline bool continue_search(index_t tgt, index_t hash, index_t i,
-                                   uintptr_t tgt_key, uintptr_t key) {
-    // Continue the search if the current hash is smaller than the
-    // target or if the hashes match and the current key is smaller
-    // than the target key.
-    //
-    // It's possible that the current hash is larger than the target
-    // because it belongs to a run that wraps from the end of the
-    // table to the beginning.  We want to treat such hashes as
-    // smaller than the target, unless the target itself is part of
-    // such a wrapping run.  To detect such cases, check that the
-    // target is smaller than the current index i --- meaning the
-    // search has not wrapped --- and the current hash is larger than
-    // i --- meaning the current hash is part of a wrapped run.
-    return hash <= tgt || // (hash == tgt && key < tgt_key) ||
-           (tgt < i && hash > i);
+static inline bool continue_search(index_t tgt, index_t hash,
+                                   index_t init_hash) {
+    // NOTE: index_t must be unsigned for this check to work.
+    index_t norm_tgt = tgt - init_hash;
+    index_t norm_hash = hash - init_hash;
+    return norm_tgt >= norm_hash;
+}
+
+static inline bool stop_insert_scan(index_t tgt, index_t hash,
+                                    index_t init_hash) {
+    // NOTE: index_t must be unsigned for this check to work.
+    index_t norm_tgt = tgt - init_hash;
+    index_t norm_hash = hash - init_hash;
+    return norm_tgt <= norm_hash;
 }
 
 static inline struct bucket *find_hyperobject(hyper_table *table,
@@ -118,6 +116,35 @@ static inline struct bucket *find_hyperobject(hyper_table *table,
     struct bucket *buckets = table->buckets;
     // Start the search at the target hash
     index_t i = tgt;
+    index_t init_hash = (index_t)(-1);
+    do {
+        uintptr_t curr_key = buckets[i].key;
+        // If we find the key, return that bucket.
+        // TODO: Consider moving this bucket to the front of the run.
+        if (key == curr_key)
+            return &buckets[i];
+
+        // If we find an empty entry, the search failed.
+        if (is_empty(curr_key))
+            return NULL;
+
+        // If we find a tombstone, continue the search.
+        if (is_tombstone(curr_key)) {
+            i = inc_index(i, capacity);
+            continue;
+        }
+
+        // Otherwise we have another valid key that does not match.
+        // Record this hash for future search steps.
+        init_hash = get_table_entry(capacity, curr_key);
+        if ((tgt > i && i >= init_hash) ||
+            (tgt < init_hash && ((tgt > i) == (init_hash > i)))) {
+            // The search will stop at init_hash anyway, so return early.
+            return NULL;
+        }
+        break;
+    } while (i != tgt);
+
     do {
         uintptr_t curr_key = buckets[i].key;
         // If we find the key, return that bucket.
@@ -139,7 +166,7 @@ static inline struct bucket *find_hyperobject(hyper_table *table,
         // Compare the hashes to decide whether or not to continue the
         // search.
         index_t curr_hash = get_table_entry(capacity, curr_key);
-        if (continue_search(tgt, curr_hash, i, key, curr_key)) {
+        if (continue_search(tgt, curr_hash, init_hash)) {
             i = inc_index(i, capacity);
             continue;
         }
