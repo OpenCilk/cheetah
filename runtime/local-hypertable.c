@@ -8,9 +8,7 @@
 
 static void reducer_base_init(reducer_base *rb) {
     rb->view = NULL;
-    // rb->view_size = 0;
     rb->reduce_fn = NULL;
-    // rb->identity_fn = NULL;
 }
 
 static void make_tombstone(uintptr_t *key) { *key = KEY_DELETED; }
@@ -135,31 +133,6 @@ static struct bucket *rebuild_table(hyper_table *table, int32_t new_capacity) {
 
 ///////////////////////////////////////////////////////////////////////////
 // Query, insert, and delete methods for the hash table.
-
-/* static index_t inc_index(index_t i, index_t capacity) { */
-/*     ++i; */
-/*     if (i == capacity) */
-/*         i = 0; */
-/*     return i; */
-/* } */
-
-/* static bool continue_search(index_t tgt, index_t hash, index_t i, */
-/*                             uintptr_t tgt_key, uintptr_t key) { */
-/*     // Continue the search if the current hash is smaller than the */
-/*     // target or if the hashes match and the current key is smaller */
-/*     // than the target key. */
-/*     // */
-/*     // It's possible that the current hash is larger than the target */
-/*     // because it belongs to a run that wraps from the end of the */
-/*     // table to the beginning.  We want to treat such hashes as */
-/*     // smaller than the target, unless the target itself is part of */
-/*     // such a wrapping run.  To detect such cases, check that the */
-/*     // target is smaller than the current index i --- meaning the */
-/*     // search has not wrapped --- and the current hash is larger than */
-/*     // i --- meaning the current hash is part of a wrapped run. */
-/*     return hash <= tgt || // (hash == tgt && key < tgt_key) || */
-/*            (tgt < i && hash > i); */
-/* } */
 
 /* struct bucket *find_hyperobject(hyper_table *table, uintptr_t key) { */
 /*     int32_t capacity = table->capacity; */
