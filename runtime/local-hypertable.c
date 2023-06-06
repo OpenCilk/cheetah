@@ -53,7 +53,7 @@ static bool time_to_rebuild(int32_t ins_rm_count, int32_t capacity) {
 
 static struct bucket *bucket_array_create(int32_t array_size) {
     struct bucket *buckets =
-        (struct bucket *)malloc(sizeof(struct bucket) * array_size);
+        (struct bucket *)calloc(array_size, sizeof(struct bucket));
     if (array_size < MIN_HT_CAPACITY) {
         for (int32_t i = 0; i < array_size; ++i) {
             bucket_init(&buckets[i]);
