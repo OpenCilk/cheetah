@@ -26,7 +26,9 @@ static void bucket_init(struct bucket *b) {
 // Constant used to determine the target maximum load factor.  The
 // table will aim for a maximum load factor of
 // 1 - (1 / LOAD_FACTOR_CONSTANT).
-const int32_t LOAD_FACTOR_CONSTANT = 16;
+static const int32_t LOAD_FACTOR_CONSTANT = 16;
+// Prevent integer overflow computing load factor
+static const int32_t MAX_CAPACITY = 0x7fffffff / (LOAD_FACTOR_CONSTANT - 1);
 
 static bool is_overloaded(int32_t occupancy, int32_t capacity) {
     // Set the upper load threshold to be 15/16ths of the capacity.
@@ -111,6 +113,8 @@ static struct bucket *rebuild_table(hyper_table *table, int32_t new_capacity) {
     struct bucket *old_buckets = table->buckets;
     int32_t old_capacity = table->capacity;
     int32_t old_occupancy = table->occupancy;
+
+    assert(new_capacity <= MAX_CAPACITY);
 
     table->buckets = bucket_array_create(new_capacity);
     table->capacity = new_capacity;
@@ -241,6 +245,7 @@ bool remove_hyperobject(hyper_table *table, uintptr_t key) {
 }
 
 bool insert_hyperobject(hyper_table *table, struct bucket b) {
+    assert(b.key != KEY_EMPTY && b.key != KEY_DELETED);
     int32_t capacity = table->capacity;
     struct bucket *buckets = table->buckets;
     if (capacity < MIN_HT_CAPACITY) {
