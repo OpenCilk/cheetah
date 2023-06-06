@@ -488,10 +488,18 @@ hyper_table *merge_two_hts(__cilkrts_worker *restrict w,
                            hyper_table *restrict right) {
     // In the trivial case of an empty hyper_table, return the other
     // hyper_table.
-    if (!left || left->occupancy == 0)
+    if (!left)
         return right;
-    if (!right || right->occupancy == 0)
+    if (!right)
         return left;
+    if (left->occupancy == 0) {
+        local_hyper_table_free(left);
+        return right;
+    }
+    if (right->occupancy == 0) {
+        local_hyper_table_free(right);
+        return left;
+    }
 
     // Pick the smaller hyper_table to be the source, which we will iterate
     // over.
