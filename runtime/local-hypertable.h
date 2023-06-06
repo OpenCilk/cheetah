@@ -35,8 +35,8 @@ typedef struct local_hyper_table {
     struct bucket *buckets;
 } hyper_table;
 
-void local_hyper_table_init(hyper_table *table);
-void local_hyper_table_destroy(hyper_table *table);
+hyper_table *local_hyper_table_alloc();
+void local_hyper_table_free(hyper_table *table);
 
 /* struct bucket *find_hyperobject(hyper_table *table, uintptr_t key); */
 bool remove_hyperobject(hyper_table *table, uintptr_t key);

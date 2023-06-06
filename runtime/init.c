@@ -634,8 +634,7 @@ static void worker_terminate(__cilkrts_worker *w, void *data) {
     }
     hyper_table *ht = w->hyper_table;
     if (ht) {
-        local_hyper_table_destroy(ht);
-        free(ht);
+        local_hyper_table_free(ht);
         w->hyper_table = NULL;
     }
     worker_local_destroy(w->l, w->g);

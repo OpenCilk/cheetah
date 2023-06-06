@@ -92,15 +92,20 @@ static struct bucket *bucket_array_create(int32_t array_size) {
 /*     return hash(key) & (capacity - 1); */
 /* } */
 
-void local_hyper_table_init(hyper_table *table) {
+hyper_table * local_hyper_table_alloc() {
+    hyper_table *table = malloc(sizeof (hyper_table));
     int32_t capacity = MIN_CAPACITY;
     table->capacity = capacity;
     table->occupancy = 0;
     table->ins_rm_count = 0;
     table->buckets = bucket_array_create(capacity);
+    return table;
 }
 
-void local_hyper_table_destroy(hyper_table *table) { free(table->buckets); }
+void local_hyper_table_free(hyper_table *table) {
+    free(table->buckets);
+    free(table);
+}
 
 static struct bucket *rebuild_table(hyper_table *table, int32_t new_capacity) {
     struct bucket *old_buckets = table->buckets;
@@ -536,8 +541,7 @@ hyper_table *merge_two_hts(__cilkrts_worker *restrict w,
     }
 
     // Destroy the source hyper_table, and return the destination.
-    local_hyper_table_destroy(src);
-    free(src);
+    local_hyper_table_free(src);
 
     return dst;
 }
