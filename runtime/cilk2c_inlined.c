@@ -68,8 +68,7 @@ void *__cilkrts_reducer_lookup(void *key, size_t size,
         return key;
     struct local_hyper_table *table = get_local_hyper_table(w);
     struct bucket *b = find_hyperobject(table, (uintptr_t)key);
-    if (b) {
-        CILK_ASSERT(w, key == (void *)b->key);
+    if (__builtin_expect(!!b, 1)) {
         // Return the existing view.
         return b->value.view;
     }
