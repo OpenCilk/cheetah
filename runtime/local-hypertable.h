@@ -93,91 +93,35 @@ static inline bool stop_insert_scan(index_t tgt, index_t hash,
     return norm_tgt <= norm_hash;
 }
 
-static inline struct bucket *find_hyperobject(hyper_table *table,
-                                              uintptr_t key) {
-    int32_t capacity = table->capacity;
-    if (capacity < MIN_HT_CAPACITY) {
-        // If the table is small enough, just scan the array.
-        struct bucket *buckets = table->buckets;
-        int32_t occupancy = table->occupancy;
-
-        // Scan the array backwards, since inserts add new entries to
-        // the end of the array, and we anticipate that the program
-        // will exhibit locality of reference.
-        for (int32_t i = occupancy - 1; i >= 0; --i)
-            if (buckets[i].key == key)
-                return &buckets[i];
-
-        return NULL;
-    }
-
-    // Target hash
-    index_t tgt = get_table_entry(capacity, key);
+static inline struct bucket *find_hyperobject_linear(hyper_table *table,
+                                                     uintptr_t key) {
+    // If the table is small enough, just scan the array.
     struct bucket *buckets = table->buckets;
-    // Start the search at the target hash
-    index_t i = tgt;
-    index_t init_hash = (index_t)(-1);
-    do {
-        uintptr_t curr_key = buckets[i].key;
-        // If we find the key, return that bucket.
-        // TODO: Consider moving this bucket to the front of the run.
-        if (key == curr_key)
+    int32_t occupancy = table->occupancy;
+
+    // Scan the array backwards, since inserts add new entries to
+    // the end of the array, and we anticipate that the program
+    // will exhibit locality of reference.
+    for (int32_t i = occupancy - 1; i >= 0; --i)
+        if (buckets[i].key == key)
             return &buckets[i];
 
-        // If we find an empty entry, the search failed.
-        if (is_empty(curr_key))
-            return NULL;
-
-        // If we find a tombstone, continue the search.
-        if (is_tombstone(curr_key)) {
-            i = inc_index(i, capacity);
-            continue;
-        }
-
-        // Otherwise we have another valid key that does not match.
-        // Record this hash for future search steps.
-        init_hash = get_table_entry(capacity, curr_key);
-        if ((tgt > i && i >= init_hash) ||
-            (tgt < init_hash && ((tgt > i) == (init_hash > i)))) {
-            // The search will stop at init_hash anyway, so return early.
-            return NULL;
-        }
-        break;
-    } while (i != tgt);
-
-    do {
-        uintptr_t curr_key = buckets[i].key;
-        // If we find the key, return that bucket.
-        // TODO: Consider moving this bucket to the front of the run.
-        if (key == curr_key)
-            return &buckets[i];
-
-        // If we find an empty entry, the search failed.
-        if (is_empty(curr_key))
-            return NULL;
-
-        // If we find a tombstone, continue the search.
-        if (is_tombstone(curr_key)) {
-            i = inc_index(i, capacity);
-            continue;
-        }
-
-        // Otherwise we have another valid key that does not match.
-        // Compare the hashes to decide whether or not to continue the
-        // search.
-        index_t curr_hash = get_table_entry(capacity, curr_key);
-        if (continue_search(tgt, curr_hash, init_hash)) {
-            i = inc_index(i, capacity);
-            continue;
-        }
-
-        // If none of the above cases match, then the search failed to
-        // find the key.
-        return NULL;
-    } while (i != tgt);
-
-    // The search failed to find the key.
     return NULL;
 }
+
+struct bucket *find_hyperobject_hash(hyper_table *table, uintptr_t key);
+
+static inline struct bucket *find_hyperobject(hyper_table *table,
+                                              uintptr_t key) {
+    if (table->capacity < MIN_HT_CAPACITY) {
+        return find_hyperobject_linear(table, key);
+    } else {
+        return find_hyperobject_hash(table, key);
+    }
+}
+
+void *insert_new_view(hyper_table *table, uintptr_t key, size_t size,
+                      __cilk_identity_fn identity,
+                      __cilk_reduce_fn reduce);
 
 #endif // _LOCAL_HYPERTABLE_H

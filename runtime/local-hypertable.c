@@ -3,6 +3,8 @@
 #include <stdint.h>
 #include <stdlib.h>
 
+#include "internal-malloc.h" /* only needed for new view allocation */
+
 #include "debug.h"
 #include "local-hypertable.h"
 
@@ -142,6 +144,79 @@ static struct bucket *rebuild_table(hyper_table *table, int32_t new_capacity) {
 
 ///////////////////////////////////////////////////////////////////////////
 // Query, insert, and delete methods for the hash table.
+
+
+struct bucket *find_hyperobject_hash(hyper_table *table, uintptr_t key) {
+    int32_t capacity = table->capacity;
+
+    // Target hash
+    index_t tgt = get_table_entry(capacity, key);
+    struct bucket *buckets = table->buckets;
+    // Start the search at the target hash
+    index_t i = tgt;
+    index_t init_hash = (index_t)(-1);
+    do {
+        uintptr_t curr_key = buckets[i].key;
+        // If we find the key, return that bucket.
+        // TODO: Consider moving this bucket to the front of the run.
+        if (key == curr_key)
+            return &buckets[i];
+
+        // If we find an empty entry, the search failed.
+        if (is_empty(curr_key))
+            return NULL;
+
+        // If we find a tombstone, continue the search.
+        if (is_tombstone(curr_key)) {
+            i = inc_index(i, capacity);
+            continue;
+        }
+
+        // Otherwise we have another valid key that does not match.
+        // Record this hash for future search steps.
+        init_hash = get_table_entry(capacity, curr_key);
+        if ((tgt > i && i >= init_hash) ||
+            (tgt < init_hash && ((tgt > i) == (init_hash > i)))) {
+            // The search will stop at init_hash anyway, so return early.
+            return NULL;
+        }
+        break;
+    } while (i != tgt);
+
+    do {
+        uintptr_t curr_key = buckets[i].key;
+        // If we find the key, return that bucket.
+        // TODO: Consider moving this bucket to the front of the run.
+        if (key == curr_key)
+            return &buckets[i];
+
+        // If we find an empty entry, the search failed.
+        if (is_empty(curr_key))
+            return NULL;
+
+        // If we find a tombstone, continue the search.
+        if (is_tombstone(curr_key)) {
+            i = inc_index(i, capacity);
+            continue;
+        }
+
+        // Otherwise we have another valid key that does not match.
+        // Compare the hashes to decide whether or not to continue the
+        // search.
+        index_t curr_hash = get_table_entry(capacity, curr_key);
+        if (continue_search(tgt, curr_hash, init_hash)) {
+            i = inc_index(i, capacity);
+            continue;
+        }
+
+        // If none of the above cases match, then the search failed to
+        // find the key.
+        return NULL;
+    } while (i != tgt);
+
+    // The search failed to find the key.
+    return NULL;
+}
 
 /* struct bucket *find_hyperobject(hyper_table *table, uintptr_t key) { */
 /*     int32_t capacity = table->capacity; */
@@ -484,6 +559,24 @@ bool insert_hyperobject(hyper_table *table, struct bucket b) {
 
     assert(i != insert_tgt && "Insertion failed.");
     return false;
+}
+
+void *insert_new_view(hyper_table *table, uintptr_t key, size_t size,
+                      __cilk_identity_fn identity,
+                      __cilk_reduce_fn reduce) {
+    // Create a new view and initialize it with the identity function.
+    void *new_view = cilk_aligned_alloc(64, round_size_to_alignment(64, size));
+    identity(new_view);
+    // Insert the new view into the local hypertable.
+    struct bucket new_bucket = {
+        .key = (uintptr_t)key,
+        .value = {.view = new_view, .reduce_fn = reduce}};
+    bool success = insert_hyperobject(table, new_bucket);
+    assert(success);
+    (void)success;
+    // Return the new view.
+    return new_view;
+
 }
 
 // Merge two hypertables, left and right.  Returns the merged hypertable and

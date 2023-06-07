@@ -73,23 +73,9 @@ void *__cilkrts_reducer_lookup(void *key, size_t size,
         return b->value.view;
     }
 
-    __cilk_identity_fn identity = (__cilk_identity_fn)identity_ptr;
-    __cilk_reduce_fn reduce = (__cilk_reduce_fn)reduce_ptr;
-
-    // Create a new view and initialize it with the identity function.
-    /* void *new_view = __cilkrts_hyper_alloc(size); */
-    void *new_view = cilk_aligned_alloc(64, round_size_to_alignment(64, size));
-    identity(new_view);
-    // Insert the new view into the local hypertable.
-    struct bucket new_bucket = {
-        .key = (uintptr_t)key,
-        .value = {.view = new_view, .reduce_fn = reduce}};
-    bool success = insert_hyperobject(table, new_bucket);
-    CILK_ASSERT(
-        w, success && "__cilkrts_reducer_lookup failed to insert new reducer.");
-    (void)success;
-    // Return the new view.
-    return new_view;
+    return insert_new_view(table, (uintptr_t)key, size,
+                           (__cilk_identity_fn)identity_ptr,
+                           (__cilk_reduce_fn)reduce_ptr);
 }
 
 // Begin a Cilkified region.  The routine runs on a Cilkifying thread to
