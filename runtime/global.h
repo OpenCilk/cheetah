@@ -30,8 +30,7 @@ struct Closure;
         DEFAULT_NPROC,          /* num of workers to create */     \
         DEFAULT_REDUCER_LIMIT,  /* num of simultaneous reducers */ \
         DEFAULT_DEQ_DEPTH,      /* num of entries in deque */      \
-        DEFAULT_FIBER_POOL_CAP, /* alloc_batch_size */             \
-        DEFAULT_FORCE_REDUCE,   /* whether to force self steal and reduce */\
+        DEFAULT_FIBER_POOL_CAP  /* alloc_batch_size */             \
     }
 // clang-format on
 
@@ -41,7 +40,6 @@ struct rts_options {
     unsigned int reducer_cap;
     unsigned int deqdepth;       /* can be set via env variable CILK_DEQDEPTH */
     unsigned int fiber_pool_cap; /* can be set via env variable CILK_FIBER_POOL */
-    unsigned int force_reduce;   /* can be set via env variable CILK_FORCE_REDUCE */
 };
 
 struct worker_args {
@@ -116,8 +114,6 @@ struct global_state {
 
     struct reducer_id_manager *id_manager; /* null while Cilk is running */
 
-    struct hyper_table *hyper_table;
-
     // This dummy worker structure is used to support lazy initialization of
     // worker structures.  In particular, the global workers array is initially
     // populated with pointers to this dummy worker, so that the main steal loop
@@ -134,8 +130,6 @@ CHEETAH_INTERNAL extern global_state *default_cilkrts;
 CHEETAH_INTERNAL
 __cilkrts_worker *__cilkrts_init_tls_worker(worker_id i, global_state *g);
 CHEETAH_INTERNAL void set_nworkers(global_state *g, unsigned int nworkers);
-CHEETAH_INTERNAL void set_force_reduce(global_state *g,
-                                       unsigned int force_reduce);
 CHEETAH_INTERNAL global_state *global_state_init(int argc, char *argv[]);
 CHEETAH_INTERNAL void for_each_worker(global_state *,
                                       void (*)(__cilkrts_worker *, void *),

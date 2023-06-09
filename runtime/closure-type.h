@@ -2,7 +2,6 @@
 #define _CLOSURE_TYPE_H
 
 #include "cilk-internal.h"
-#include "cilkred_map.h"
 #include "fiber.h"
 #include "local-hypertable.h"
 #include "mutex.h"
@@ -82,16 +81,6 @@ struct Closure {
      */
     Closure *next_ready;
     Closure *prev_ready;
-
-    /* Stores of non-null values to right_rmap and child_rmap must
-       have release ordering to make sure values pointed to by the
-       map are visible.  Loads must have acquire ordering. */
-    /* Accumulated reducer maps from right siblings */
-    _Atomic(cilkred_map *) volatile right_rmap;
-    /* Accumulated reducer maps from children */
-    _Atomic(cilkred_map *) volatile child_rmap;
-    /* Reducer map for this closure when suspended at sync */
-    cilkred_map *user_rmap;
 
     hyper_table *right_ht;
     hyper_table *child_ht;

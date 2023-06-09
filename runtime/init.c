@@ -24,15 +24,12 @@
 #include "debug.h"
 #include "fiber.h"
 #include "global.h"
-#include "hypertable.h"
 #include "init.h"
 #include "local.h"
 #include "readydeque.h"
 #include "sched_stats.h"
 #include "scheduler.h"
 #include "worker_coord.h"
-
-#include "reducer_impl.h"
 
 #if defined __FreeBSD__ && __FreeBSD__ < 13
 typedef cpuset_t cpu_set_t;
@@ -44,8 +41,6 @@ static local_state *worker_local_init(local_state *l, global_state *g) {
     for (int i = 0; i < JMPBUF_SIZE; i++) {
         l->rts_ctx[i] = NULL;
     }
-    l->hyper_table =
-        g->hyper_table ? hyper_table_cache_create(g->hyper_table) : NULL;
     l->state = WORKER_IDLE;
     l->provably_good_steal = false;
     l->exiting = false;
@@ -57,10 +52,7 @@ static local_state *worker_local_init(local_state *l, global_state *g) {
 }
 
 static void worker_local_destroy(local_state *l, global_state *g) {
-    if (l->hyper_table) {
-        hyper_table_cache_destroy(l->hyper_table);
-        l->hyper_table = NULL;
-    }
+    /* currently nothing to do here */
 }
 
 static void deques_init(global_state *g) {
@@ -115,7 +107,6 @@ __cilkrts_worker *__cilkrts_init_tls_worker(worker_id i, global_state *g) {
     atomic_store_explicit(&w->head, init, memory_order_relaxed);
     atomic_store_explicit(&w->exc, init, memory_order_relaxed);
     w->current_stack_frame = NULL;
-    w->reducer_map = NULL;
     w->hyper_table = NULL;
     // initialize internal malloc first
     cilk_internal_malloc_per_worker_init(w);
@@ -264,12 +255,10 @@ static void threads_init(global_state *g) {
 global_state *__cilkrts_startup(int argc, char *argv[]) {
     cilkrts_alert(BOOT, NULL, "(__cilkrts_startup) argc %d", argc);
     global_state *g = global_state_init(argc, argv);
-    reducers_init(g);
     /* __cilkrts_init_tls_variables(); */
     workers_init(g);
     deques_init(g);
     CILK_ASSERT_G(0 == g->exiting_worker);
-    reducers_import(g, g->workers[0]);
 
     // Create the root closure and a fiber to go with it.  Use worker 0 to
     // allocate the closure and fiber.
@@ -295,10 +284,6 @@ __attribute__((constructor)) void __default_cilkrts_startup() {
 
 void __cilkrts_internal_set_nworkers(unsigned int nworkers) {
     set_nworkers(default_cilkrts, nworkers);
-}
-
-void __cilkrts_internal_set_force_reduce(unsigned int force_reduce) {
-    set_force_reduce(default_cilkrts, force_reduce);
 }
 
 // Start the Cilk workers in g, for example, by creating their underlying
@@ -517,8 +502,6 @@ void __cilkrts_internal_exit_cilkified_root(global_state *g,
         w->l->exiting = true;
         __cilkrts_worker **workers = g->workers;
         __cilkrts_worker *w0 = workers[0];
-        w0->reducer_map = w->reducer_map;
-        w->reducer_map = NULL;
         w0->hyper_table = w->hyper_table;
         w->hyper_table = NULL;
         w0->extension = w->extension;
@@ -626,12 +609,6 @@ static void deques_deinit(global_state *g) {
 
 static void worker_terminate(__cilkrts_worker *w, void *data) {
     cilk_fiber_pool_per_worker_terminate(w);
-    cilkred_map *rm = w->reducer_map;
-    w->reducer_map = NULL;
-    // Workers can have NULL reducer maps now.
-    if (rm) {
-        cilkred_map_destroy_map(w, rm);
-    }
     hyper_table *ht = w->hyper_table;
     if (ht) {
         local_hyper_table_free(ht);
@@ -700,7 +677,6 @@ CHEETAH_INTERNAL void __cilkrts_shutdown(global_state *g) {
     Closure_destroy_global(g, g->root_closure);
 
     // Cleanup the global state
-    reducers_deinit(g);
     workers_terminate(g);
     flush_alert_log();
     /* This needs to be before global_state_terminate for good stats. */

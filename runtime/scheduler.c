@@ -25,8 +25,6 @@
 #include "worker_coord.h"
 #include "worker_sleep.h"
 
-#include "reducer_impl.h"
-
 bool __cilkrts_use_extension = false;
 
 __thread __cilkrts_worker *__cilkrts_tls_worker = NULL;
@@ -246,9 +244,7 @@ void Cilk_set_return(__cilkrts_worker *const w) {
     CILK_ASSERT(w, t->status == CLOSURE_RUNNING);
     CILK_ASSERT(w, Closure_has_children(t) == 0);
 
-    // all rmaps from child or right sibling must have been reduced
-    CILK_ASSERT(w, t->child_rmap == (cilkred_map *)NULL &&
-                       t->right_rmap == (cilkred_map *)NULL);
+    // all hyperobjects from child or right sibling must have been reduced
     CILK_ASSERT(w, t->child_ht == (hyper_table *)NULL &&
                        t->right_ht == (hyper_table *)NULL);
     CILK_ASSERT(w, t->call_parent);
@@ -357,24 +353,24 @@ static Closure *provably_good_steal_maybe(__cilkrts_worker *const w,
  * Some notes on reducer implementation (which was taken out):
  *
  * If any reducer is accessed by the child closure, we need to reduce the
- * reducer view with the child's right_rmap, and its left sibling's
- * right_rmap (or parent's child_rmap if it's the left most child)
+ * reducer view with the child's right_ht, and its left sibling's
+ * right_ht (or parent's child_ht if it's the left most child)
  * before we unlink the child from its sibling closure list.
  *
  * When we modify the sibling links (left_sib / right_sib), we always lock
  * the parent and the child.  When we retrieve the reducer maps from left
- * sibling or parent from their place holders (right_rmap / child_rmap),
- * we always lock the closure from whom we are getting the rmap from.
+ * sibling or parent from their place holders (right_ht / child_ht),
+ * we always lock the closure from whom we are getting the maps from.
  * The locking order is always parent first then child, right child first,
  * then left.
  *
- * Once we have done the reduce operation, we try to deposit the rmap from
- * the child to either it's left sibling's right_rmap or parent's
- * child_rmap.  Note that even though we have performed the reduce, by the
- * time we deposit the rmap, the child's left sibling may have changed,
- * or child may become the new left most child.  Similarly, the child's
- * right_rmap may have something new again.  If that's the case, we
- * need to do the reduce again (in deposit_reducer_map).
+ * Once we have done the reduce operation, we try to deposit reducers
+ * from the child to either its left sibling's right_ht or parent's
+ * child_ht.  Note that even though we have performed the reduce, by
+ * the time we deposit the views, the child's left sibling may have
+ * changed, or child may become the new left most child.  Similarly,
+ * the child's right_ht may have something new again.  If that's the
+ * case, we need to do the reduce again.
  *
  * This function returns a closure to be executed next, or NULL if none.
  * The child must not be locked by ourselves, and be in no deque.
@@ -400,7 +396,7 @@ static Closure *Closure_return(__cilkrts_worker *const w, Closure *child) {
     /* The frame should have passed a sync successfully meaning it
        has not accumulated any maps from its children and the
        active map is in the worker rather than the closure. */
-    CILK_ASSERT(w, !child->child_rmap && !child->user_rmap);
+    CILK_ASSERT(w, !child->child_ht && !child->user_ht);
 
     /* If in the future the worker's map is not created lazily,
        assert it is not null here. */
@@ -421,9 +417,6 @@ static Closure *Closure_return(__cilkrts_worker *const w, Closure *child) {
         // so what this points to cannot change while we have lock on parent
 
         // Get the right-sibling hypermap and exception.
-        cilkred_map *right =
-            atomic_load_explicit(&child->right_rmap, memory_order_acquire);
-        atomic_store_explicit(&child->right_rmap, NULL, memory_order_relaxed);
         struct closure_exception right_exn = child->right_exn;
         clear_closure_exception(&(child->right_exn));
 
@@ -432,40 +425,31 @@ static Closure *Closure_return(__cilkrts_worker *const w, Closure *child) {
 
         // Get the "left" hypermap and exception, which either belongs to a
         // left sibling, if it exists, or the parent, otherwise.
-        _Atomic(cilkred_map *) volatile *left_ptr;
         struct closure_exception *left_exn_ptr;
         hyper_table **lht_ptr;
         Closure *const left_sib = child->left_sib;
         if (left_sib != NULL) {
-            left_ptr = &left_sib->right_rmap;
             left_exn_ptr = &left_sib->right_exn;
             lht_ptr = &left_sib->right_ht;
         } else {
-            left_ptr = &parent->child_rmap;
             left_exn_ptr = &parent->child_exn;
             lht_ptr = &parent->child_ht;
         }
-        cilkred_map *left =
-            atomic_load_explicit(left_ptr, memory_order_acquire);
-        atomic_store_explicit(left_ptr, NULL, memory_order_relaxed);
         struct closure_exception left_exn = *left_exn_ptr;
         clear_closure_exception(left_exn_ptr);
         hyper_table *lht = *lht_ptr;
         *lht_ptr = NULL;
 
         // Get the current active hypermap and exception.
-        cilkred_map *active = w->reducer_map;
-        w->reducer_map = NULL;
         struct closure_exception active_exn = child->user_exn;
         hyper_table *active_ht = w->hyper_table;
         w->hyper_table = NULL;
 
         // If we have no hypermaps or exceptions on either the left or right,
         // deposit the active hypermap and exception and break from the loop.
-        if (left == NULL && right == NULL && left_exn.exn == NULL &&
-            right_exn.exn == NULL && lht == NULL && rht == NULL) {
+        if (left_exn.exn == NULL && right_exn.exn == NULL &&
+            lht == NULL && rht == NULL) {
             /* deposit views */
-            atomic_store_explicit(left_ptr, active, memory_order_release);
             *left_exn_ptr = active_exn;
             *lht_ptr = active_ht;
             break;
@@ -501,14 +485,6 @@ static Closure *Closure_return(__cilkrts_worker *const w, Closure *child) {
         child->user_exn = active_exn;
 
         // merge reducers
-        if (left) {
-            active = merge_two_rmaps(w, left, active);
-        }
-        if (right) {
-            active = merge_two_rmaps(w, active, right);
-        }
-        w->reducer_map = active;
-
         if (lht) {
             active_ht = merge_two_hts(w, lht, active_ht);
         }
@@ -545,11 +521,11 @@ static Closure *Closure_return(__cilkrts_worker *const w, Closure *child) {
     Closure_remove_child(w, parent, child); // unlink child from tree
     // we have deposited our views and unlinked; we can quit now
     // invariant: we can only decide to quit when we see no more maps
-    // from the right, we have deposited our own rmap, and unlink from
+    // from the right, we have deposited our own views, and unlink from
     // the tree.  All these are done while holding lock on the parent.
-    // Before, another worker could deposit more rmap into our
-    // right_rmap slot after we decide to quit, but now this cannot
-    // occur as the worker depositing the rmap to our right_rmap also
+    // Before, another worker could deposit more views into our
+    // right_ht slot after we decide to quit, but now this cannot
+    // occur as the worker depositing the views to our right_ht also
     // must hold lock on the parent to do so.
     Closure_unlock(w, child);
     /*    Closure_unlock(w, parent);*/
@@ -591,26 +567,11 @@ static Closure *Closure_return(__cilkrts_worker *const w, Closure *child) {
             parent->frame->flags |= CILK_FRAME_EXCEPTION_PENDING;
         }
 
-        CILK_ASSERT(w, !w->reducer_map);
-        cilkred_map *child =
-            atomic_load_explicit(&parent->child_rmap, memory_order_acquire);
-        cilkred_map *active = parent->user_rmap;
-        atomic_store_explicit(&parent->child_rmap, NULL, memory_order_relaxed);
-        parent->user_rmap = NULL;
-        w->reducer_map = merge_two_rmaps(w, child, active);
-
         hyper_table *child_ht = parent->child_ht;
         hyper_table *active_ht = parent->user_ht;
         parent->child_ht = NULL;
         parent->user_ht = NULL;
         w->hyper_table = merge_two_hts(w, child_ht, active_ht);
-
-        if (parent->simulated_stolen) {
-            atomic_store_explicit(&parent->child_rmap, w->reducer_map,
-                                  memory_order_relaxed);
-            // force the continuation to create new views
-            w->reducer_map = NULL;
-        }
     }
 
     Closure_unlock(w, parent);
@@ -1333,9 +1294,8 @@ int Cilk_sync(__cilkrts_worker *const w, __cilkrts_stack_frame *frame) {
     CILK_ASSERT(w, t->has_cilk_callee == 0);
     // CILK_ASSERT(w, w, t->frame->magic == CILK_STACKFRAME_MAGIC);
 
-    // each sync is executed only once; since we occupy user_rmap only
-    // when sync fails, the user_rmap should remain NULL at this point.
-    CILK_ASSERT(w, t->user_rmap == (cilkred_map *)NULL);
+    // each sync is executed only once; since we occupy user_ht only
+    // when sync fails, the user_ht should remain NULL at this point.
     CILK_ASSERT(w, t->user_ht == (hyper_table *)NULL);
 
     if (Closure_has_children(t)) {
@@ -1359,15 +1319,11 @@ int Cilk_sync(__cilkrts_worker *const w, __cilkrts_stack_frame *frame) {
         // place holder for reducer map; the view in tlmm (if any) are
         // updated by the last strand in Closure t before sync; need to
         // reduce these when successful provably good steal occurs
-        cilkred_map *reducers = w->reducer_map;
-        w->reducer_map = NULL;
-
         hyper_table *ht = w->hyper_table;
         w->hyper_table = NULL;
 
         Closure_suspend(deques, w, t);
-        t->user_rmap = reducers; /* set this after state change to suspended */
-        t->user_ht = ht;
+        t->user_ht = ht; /* set this after state change to suspended */
         res = SYNC_NOT_READY;
     } else {
         cilkrts_alert(SYNC, w, "(Cilk_sync) closure %p sync successfully",
@@ -1389,13 +1345,6 @@ int Cilk_sync(__cilkrts_worker *const w, __cilkrts_stack_frame *frame) {
             t->user_exn = child_exn;
             clear_closure_exception(&(t->child_exn));
             frame->flags |= CILK_FRAME_EXCEPTION_PENDING;
-        }
-        cilkred_map *child_rmap =
-            atomic_load_explicit(&t->child_rmap, memory_order_acquire);
-        if (child_rmap) {
-            atomic_store_explicit(&t->child_rmap, NULL, memory_order_relaxed);
-            /* reducer_map may be accessed without lock */
-            w->reducer_map = merge_two_rmaps(w, child_rmap, w->reducer_map);
         }
         hyper_table *child_ht = t->child_ht;
         if (child_ht) {
@@ -1558,7 +1507,6 @@ void worker_scheduler(__cilkrts_worker *w) {
     while (!atomic_load_explicit(&rts->done, memory_order_acquire)) {
         /* A worker entering the steal loop must have saved its reducer map into
            the frame to which it belongs. */
-        CILK_ASSERT(w, !w->reducer_map);
         CILK_ASSERT(w, !w->hyper_table);
 
         CILK_STOP_TIMING(w, INTERVAL_SCHED);

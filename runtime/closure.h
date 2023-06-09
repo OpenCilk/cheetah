@@ -6,7 +6,6 @@
 #include "debug.h"
 
 #include "cilk-internal.h"
-#include "cilkred_map.h"
 #include "fiber.h"
 #include "mutex.h"
 
@@ -180,9 +179,6 @@ static inline void Closure_init(Closure *t, __cilkrts_stack_frame *frame) {
     t->parent_rsp = NULL;
     t->saved_throwing_fiber = NULL;
 
-    atomic_store_explicit(&t->child_rmap, NULL, memory_order_relaxed);
-    atomic_store_explicit(&t->right_rmap, NULL, memory_order_relaxed);
-    t->user_rmap = NULL;
     t->user_ht = NULL;
     t->child_ht = NULL;
     t->right_ht = NULL;
@@ -278,7 +274,7 @@ void Closure_add_child(__cilkrts_worker *const w, Closure *parent,
 
 /***
  * Remove the child from the closure tree.
- * At this point we should already have reduced all rmaps that this
+ * At this point we should already have reduced all views that this
  * child has.  We need to unlink it from its left/right sibling, and reset
  * the right most child pointer in parent if this child is currently the
  * right most child.
@@ -302,7 +298,6 @@ void Closure_remove_child(__cilkrts_worker *const w, Closure *parent,
         parent->right_most_child = child->left_sib;
     }
 
-    CILK_ASSERT(w, child->right_rmap == (cilkred_map *)NULL);
     CILK_ASSERT(w, child->right_ht == (hyper_table *)NULL);
 
     unlink_child(w, child);
@@ -366,8 +361,6 @@ static inline void Closure_suspend_victim(struct ReadyDeque *deques,
     Closure *cl1;
     worker_id victim_id = victim->self;
 
-    CILK_ASSERT(thief, !cl->user_rmap);
-
     Closure_checkmagic(thief, cl);
     Closure_assert_ownership(thief, cl);
     deque_assert_ownership(deques, thief, victim_id);
@@ -387,8 +380,6 @@ static inline void Closure_suspend(struct ReadyDeque *deques,
 
     Closure *cl1;
     worker_id self = w->self;
-
-    CILK_ASSERT(w, !cl->user_rmap);
 
     cilkrts_alert(SCHED, w, "Closure_suspend %p", (void *)cl);
 
@@ -422,9 +413,6 @@ static inline void Closure_clean(__cilkrts_worker *const w, Closure *t) {
         CILK_ASSERT(w, t->left_sib == (Closure *)NULL);
         CILK_ASSERT(w, t->right_sib == (Closure *)NULL);
         CILK_ASSERT(w, t->right_most_child == (Closure *)NULL);
-        CILK_ASSERT(w, t->user_rmap == (cilkred_map *)NULL);
-        CILK_ASSERT(w, t->child_rmap == (cilkred_map *)NULL);
-        CILK_ASSERT(w, t->right_rmap == (cilkred_map *)NULL);
 
         CILK_ASSERT(w, t->user_ht == (hyper_table *)NULL);
         CILK_ASSERT(w, t->child_ht == (hyper_table *)NULL);
@@ -433,9 +421,6 @@ static inline void Closure_clean(__cilkrts_worker *const w, Closure *t) {
         CILK_ASSERT_G(t->left_sib == (Closure *)NULL);
         CILK_ASSERT_G(t->right_sib == (Closure *)NULL);
         CILK_ASSERT_G(t->right_most_child == (Closure *)NULL);
-        CILK_ASSERT_G(t->user_rmap == (cilkred_map *)NULL);
-        CILK_ASSERT_G(t->child_rmap == (cilkred_map *)NULL);
-        CILK_ASSERT_G(t->right_rmap == (cilkred_map *)NULL);
 
         CILK_ASSERT_G(t->user_ht == (hyper_table *)NULL);
         CILK_ASSERT_G(t->child_ht == (hyper_table *)NULL);

@@ -5,11 +5,8 @@
 
 #include "internal-malloc-impl.h" /* for cilk_im_desc */
 
-struct hyper_table_cache;
-
 struct local_state {
     struct __cilkrts_stack_frame **shadow_stack;
-    struct hyper_table_cache *hyper_table;
 
     unsigned short state; /* __cilkrts_worker_state */
     bool provably_good_steal;

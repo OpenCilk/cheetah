@@ -24,9 +24,6 @@ struct __cilkrts_worker {
     // A slot that points to the currently executing Cilk frame.
     struct __cilkrts_stack_frame *current_stack_frame;
 
-    // Map from reducer names to reducer values
-    cilkred_map *reducer_map;
-
     struct local_hyper_table *hyper_table;
 
     // Global state of the runtime system, opaque to the client.

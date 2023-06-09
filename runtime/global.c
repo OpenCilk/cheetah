@@ -13,10 +13,8 @@
 
 #include "debug.h"
 #include "global.h"
-#include "hypertable.h"
 #include "init.h"
 #include "readydeque.h"
-#include "reducer_impl.h"
 
 #if defined __FreeBSD__ && __FreeBSD__ < 13
 typedef cpuset_t cpu_set_t;
@@ -93,13 +91,6 @@ void set_nworkers(global_state *g, unsigned int nworkers) {
     g->nworkers = nworkers;
 }
 
-// not marked as static as it's called by __cilkrts_internal_set_force_reduce
-// used by Cilksan to set force reduction
-void set_force_reduce(global_state *g, unsigned int force_reduce) {
-    CILK_ASSERT_G(!g->workers_started);
-    g->options.force_reduce = force_reduce;
-}
-
 // Set global RTS options from environment variables.
 static void parse_rts_environment(global_state *g) {
     size_t stacksize = env_get_int("CILK_STACKSIZE");
@@ -140,23 +131,6 @@ static void parse_rts_environment(global_state *g) {
 #endif
     } else {
         CILK_ASSERT_G(g->options.nproc < 10000);
-    }
-
-    // an environment variable indicating whether we are running a bench
-    // with cilksan and should check for reducer race.
-    g->options.force_reduce = env_get_int("CILK_FORCE_REDUCE");
-    if (g->options.force_reduce != 0) {
-        if (proc_override != 1) {
-            printf("CILK_FORCE_REDUCE is set to non-zero\n"
-                   "but CILK_NWORKERS is not set to 1.  Running normally.\n");
-            g->options.force_reduce = 0;
-        } else {
-            printf("Assuming running with cilksan and checking races "
-                   "for reducer.\n");
-            // may need to set explicitly if the user had used --cheetah-nproc
-            g->options.nproc = 1;
-        }
-        fflush(stdout);
     }
 }
 
@@ -202,8 +176,6 @@ global_state *global_state_init(int argc, char *argv[]) {
     cilk_global_sched_stats_init(&(g->stats));
 
     g->id_manager = NULL;
-
-    g->hyper_table = hyper_table_get_or_create(0);
 
     return g;
 }
