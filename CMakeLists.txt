@@ -1,13 +1,6 @@
 # CMake build for Cheetah.
 
-cmake_minimum_required(VERSION 3.9)
-
-# Add path for custom cheetah modules.
-set(CMAKE_MODULE_PATH
-  "${CMAKE_CURRENT_SOURCE_DIR}/cmake"
-  "${CMAKE_CURRENT_SOURCE_DIR}/cmake/Modules"
-  ${CMAKE_MODULE_PATH}
-  )
+cmake_minimum_required(VERSION 3.13.4)
 
 # Check if cheetah is built as a standalone project.
 if (CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR OR CHEETAH_STANDALONE_BUILD)
@@ -21,22 +14,33 @@ if (CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR OR CHEETAH_STANDALONE_BUI
   set(PACKAGE_BUGREPORT "https://github.com/OpenCilk/cheetah/issues/")
 endif()
 
-# Require out of source build.
-include(MacroEnsureOutOfSourceBuild)
-MACRO_ENSURE_OUT_OF_SOURCE_BUILD(
-  "${PROJECT_NAME} requires an out of source build. Please create a separate
- build directory and run 'cmake /path/to/${PROJECT_NAME} [options]' there."
+set(LLVM_COMMON_CMAKE_UTILS "${CMAKE_CURRENT_SOURCE_DIR}/../cmake")
+
+# Add path for custom cheetah modules.
+list(INSERT CMAKE_MODULE_PATH 0
+  "${CMAKE_CURRENT_SOURCE_DIR}/cmake"
+  "${CMAKE_CURRENT_SOURCE_DIR}/cmake/Modules"
+  "${LLVM_COMMON_CMAKE_UTILS}"
+  "${LLVM_COMMON_CMAKE_UTILS}/Modules"
   )
+
+# # Require out of source build.
+# include(MacroEnsureOutOfSourceBuild)
+# MACRO_ENSURE_OUT_OF_SOURCE_BUILD(
+#   "${PROJECT_NAME} requires an out of source build. Please create a separate
+#  build directory and run 'cmake /path/to/${PROJECT_NAME} [options]' there."
+#   )
 
 # Option to build cheetah into separate directories per target.
 # Defaults to true.
-option(CHEETAH_DIRECTORY_PER_TARGET "Build cheetah into a separate directory per target." ON)
+option(CHEETAH_DIRECTORY_PER_TARGET "Build cheetah into a separate directory per target." OFF)
 if (LLVM_ENABLE_PER_TARGET_RUNTIME_DIR)
   set(CHEETAH_ENABLE_PER_TARGET_RUNTIME_DIR ${LLVM_ENABLE_PER_TARGET_RUNTIME_DIR})
 else()
   set(CHEETAH_ENABLE_PER_TARGET_RUNTIME_DIR ${CHEETAH_DIRECTORY_PER_TARGET})
 endif()
 
+include(SetPlatformToolchainTools)
 include(base-config-ix)
 include(CheetahUtils)
 
