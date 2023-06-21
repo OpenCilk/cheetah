@@ -3,6 +3,7 @@
 # .o files. This is particularly useful in producing larger, more complex
 # runtime libraries.
 
+include(CheetahTests)
 include(CheckIncludeFile)
 include(CheckCXXSourceCompiles)
 include(TestBigEndian)

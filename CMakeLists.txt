@@ -172,7 +172,7 @@ set(CHEETAH_HAS_UNDEFINED_SYMBOLS ON)
 if (CHEETAH_HAS_UNDEFINED_SYMBOLS)
   # Need to allow unresolved symbols if this is to work with shared library builds
   if (APPLE)
-    list(APPEND CHEETAH_LINK_FLAGS "-undefined dynamic_lookup")
+    list(APPEND CHEETAH_LINK_FLAGS -undefined dynamic_lookup)
   else()
     # Relax this restriction from HandleLLVMOptions
     string(REPLACE "-Wl,-z,defs" "" CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS}")
