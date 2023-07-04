@@ -73,11 +73,6 @@ static inline void Closure_checkmagic(__cilkrts_worker *const w, Closure *t) {
 #include "internal-malloc.h"
 #include "readydeque.h"
 
-// TODO: maybe make this look more like the other closure functions.
-static inline void clear_closure_exception(struct closure_exception *exn) {
-    exn->exn = NULL;
-}
-
 static inline void Closure_change_status(__cilkrts_worker *const w, Closure *t,
                                          enum ClosureStatus old,
                                          enum ClosureStatus status) {
@@ -150,6 +145,7 @@ static inline void Closure_init(Closure *t, __cilkrts_stack_frame *frame) {
     t->status = CLOSURE_PRE_INVALID;
     t->has_cilk_callee = false;
     t->simulated_stolen = false;
+    t->exception_pending = false;
     t->join_counter = 0;
 
     t->frame = frame;
@@ -171,13 +167,6 @@ static inline void Closure_init(Closure *t, __cilkrts_stack_frame *frame) {
 
     t->next_ready = NULL;
     t->prev_ready = NULL;
-
-    clear_closure_exception(&(t->right_exn));
-    clear_closure_exception(&(t->child_exn));
-    clear_closure_exception(&(t->user_exn));
-    t->reraise_cfa = NULL;
-    t->parent_rsp = NULL;
-    t->saved_throwing_fiber = NULL;
 
     t->user_ht = NULL;
     t->child_ht = NULL;
@@ -427,7 +416,6 @@ static inline void Closure_destroy(struct __cilkrts_worker *const w,
                                    Closure *t) {
     cilkrts_alert(CLOSURE, w, "Deallocate closure %p", (void *)t);
     Closure_checkmagic(w, t);
-    CILK_ASSERT(w, NULL == t->saved_throwing_fiber);
     t->status = CLOSURE_POST_INVALID;
     Closure_clean(w, t);
     cilk_internal_free(w, t, sizeof(*t), IM_CLOSURE);

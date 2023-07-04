@@ -14,13 +14,15 @@
 #endif
 
 #include "cilk-internal.h"
+#include "cilk2c.h"
 #include "closure.h"
-#include "fiber.h"
 #include "fiber-header.h"
+#include "fiber.h"
+#include "frame.h"
 #include "global.h"
 #include "jmpbuf.h"
-#include "local.h"
 #include "local-hypertable.h"
+#include "local.h"
 #include "readydeque.h"
 #include "scheduler.h"
 #include "worker_coord.h"
@@ -275,10 +277,6 @@ void Cilk_set_return(__cilkrts_worker *const w) {
 
     deque_unlock_self(deques, self);
 
-    if (t->saved_throwing_fiber) {
-        cilk_fiber_deallocate_to_pool(w, t->saved_throwing_fiber);
-        t->saved_throwing_fiber = NULL;
-    }
     Closure_destroy(w, t);
 }
 
@@ -415,73 +413,35 @@ static Closure *Closure_return(__cilkrts_worker *const w, worker_id self,
         // invariant: a closure cannot unlink itself w/out lock on parent
         // so what this points to cannot change while we have lock on parent
 
-        // Get the right-sibling hypermap and exception.
-        struct closure_exception right_exn = child->right_exn;
-        clear_closure_exception(&(child->right_exn));
-
         hyper_table *rht = child->right_ht;
         child->right_ht = NULL;
 
         // Get the "left" hypermap and exception, which either belongs to a
         // left sibling, if it exists, or the parent, otherwise.
-        struct closure_exception *left_exn_ptr;
         hyper_table **lht_ptr;
         Closure *const left_sib = child->left_sib;
         if (left_sib != NULL) {
-            left_exn_ptr = &left_sib->right_exn;
             lht_ptr = &left_sib->right_ht;
         } else {
-            left_exn_ptr = &parent->child_exn;
             lht_ptr = &parent->child_ht;
         }
-        struct closure_exception left_exn = *left_exn_ptr;
-        clear_closure_exception(left_exn_ptr);
         hyper_table *lht = *lht_ptr;
         *lht_ptr = NULL;
 
         // Get the current active hypermap and exception.
-        struct closure_exception active_exn = child->user_exn;
         hyper_table *active_ht = w->hyper_table;
         w->hyper_table = NULL;
 
         // If we have no hypermaps or exceptions on either the left or right,
         // deposit the active hypermap and exception and break from the loop.
-        if (left_exn.exn == NULL && right_exn.exn == NULL && lht == NULL &&
-            rht == NULL) {
+        if (lht == NULL && rht == NULL) {
             /* deposit views */
-            *left_exn_ptr = active_exn;
             *lht_ptr = active_ht;
             break;
         }
 
         Closure_unlock(w, self, child);
         Closure_unlock(w, self, parent);
-        // clean up exception objects
-        if (left_exn.exn) {
-            active_exn = left_exn;
-            // can safely delete any exceptions to the right of left_exn.
-            if (child->user_exn.exn) {
-                _Unwind_DeleteException(
-                    (struct _Unwind_Exception *)child->user_exn.exn);
-                clear_closure_exception(&child->user_exn);
-            }
-            if (right_exn.exn) {
-                _Unwind_DeleteException(
-                    (struct _Unwind_Exception *)right_exn.exn);
-                clear_closure_exception(&right_exn);
-            }
-        } else if (child->user_exn.exn) {
-            // can safely delete right_exn.
-            if (right_exn.exn) {
-                _Unwind_DeleteException(
-                    (struct _Unwind_Exception *)right_exn.exn);
-                clear_closure_exception(&right_exn);
-            }
-        } else if (right_exn.exn) {
-            // save right_exn.
-            active_exn = right_exn;
-        }
-        child->user_exn = active_exn;
 
         // merge reducers
         if (lht) {
@@ -520,6 +480,12 @@ static Closure *Closure_return(__cilkrts_worker *const w, worker_id self,
     child->fiber = NULL;
     child->ext_fiber = NULL;
 
+    // Propagate whether the parent needs to handle an exception.
+    if (child->exception_pending) {
+        parent->exception_pending = true;
+        parent->frame->flags |= CILK_FRAME_EXCEPTION_PENDING;
+    }
+
     Closure_remove_child(w, self, parent, child); // unlink child from tree
     // we have deposited our views and unlinked; we can quit now
     // invariant: we can only decide to quit when we see no more maps
@@ -546,23 +512,6 @@ static Closure *Closure_return(__cilkrts_worker *const w, worker_id self,
     res = provably_good_steal_maybe(w, self, parent);
 
     if (res) {
-        struct closure_exception child_exn = parent->child_exn;
-        struct closure_exception active_exn = parent->user_exn;
-        clear_closure_exception(&(parent->child_exn));
-        clear_closure_exception(&(parent->user_exn));
-        // reduce the exception
-        if (!child_exn.exn) {
-            parent->user_exn = active_exn;
-        } else {
-            if (active_exn.exn) {
-                _Unwind_DeleteException(
-                    (struct _Unwind_Exception *)active_exn.exn);
-                clear_closure_exception(&active_exn);
-            }
-            parent->user_exn = child_exn;
-            parent->frame->flags |= CILK_FRAME_EXCEPTION_PENDING;
-        }
-
         hyper_table *child_ht = parent->child_ht;
         hyper_table *active_ht = parent->user_ht;
         parent->child_ht = NULL;
@@ -597,10 +546,10 @@ static Closure *return_value(__cilkrts_worker *const w, worker_id self,
     if (t->call_parent == NULL) {
         res = Closure_return(w, self, t);
     } /* else {
-     // ANGE: the ONLY way a closure with call parent can reach here
-     // is when the user program calls Cilk_exit, leading to global abort
-     // Not supported at the moment
-     }*/
+      // ANGE: the ONLY way a closure with call parent can reach here
+      // is when the user program calls Cilk_exit, leading to global abort
+      // Not supported at the moment
+    }*/
 
     cilkrts_alert(RETURN, w, "(return_value) returning closure %p", (void *)t);
 
@@ -648,8 +597,14 @@ void Cilk_exception_handler(char *exn) {
         atomic_load_explicit(&w->tail, memory_order_relaxed);
     if (head > tail) {
         cilkrts_alert(EXCEPT, w, "(Cilk_exception_handler) this is a steal!");
-        if (NULL != exn)
-            t->user_exn.exn = exn;
+        if (NULL != exn) {
+            struct closure_exception *exn_r =
+                (struct closure_exception *)internal_reducer_lookup(
+                    w, &exception_reducer, sizeof(exception_reducer),
+                    init_exception_reducer, reduce_exception_reducer);
+            exn_r->exn = exn;
+            t->exception_pending = true;
+        }
 
         if (t->status == CLOSURE_RUNNING) {
             CILK_ASSERT(w, Closure_has_children(t) == 0);
@@ -1046,7 +1001,7 @@ static Closure *extract_top_spawning_closure(__cilkrts_stack_frame **head,
         res->ext_fiber = cilk_fiber_allocate_from_pool(w);
     }
 
-    // make sure we are not hold lock on child
+    // make sure we are not holding the lock on child
     Closure_assert_alienation(w, self, child);
     child->fiber = parent_fiber;
     if (USE_EXTENSION) {
@@ -1233,15 +1188,14 @@ void longjmp_to_user_code(__cilkrts_worker *w, Closure *t) {
         // the SP(sf) has been updated with the right orig_rsp already
 
         // NOTE: this is a hack to disable these asserts if we are
-        // longjmping to the personality function. (CILK_FRAME_EXCEPTING is
+        // longjmping to the personality function. (CILK_FRAME_THROWING is
         // only set in the personality function.)
-        if ((sf->flags & CILK_FRAME_EXCEPTING) == 0) {
+        if (!__cilkrts_throwing(sf)) {
             CILK_ASSERT(w, t->orig_rsp == NULL);
             CILK_ASSERT(w, (sf->flags & CILK_FRAME_LAST) ||
                                in_fiber(fiber, (char *)FP(sf)));
             CILK_ASSERT(w, in_fiber(fiber, (char *)SP(sf)));
         }
-        sf->flags &= ~CILK_FRAME_EXCEPTING;
 
         l->provably_good_steal = false;
     } else { // this is stolen work; the fiber is a new fiber
@@ -1316,14 +1270,8 @@ int Cilk_sync(__cilkrts_worker *const w, __cilkrts_stack_frame *frame) {
         cilkrts_alert(SYNC, w,
                       "(Cilk_sync) Closure %p has outstanding children",
                       (void *)t);
-
-        // if we are syncing from the personality function (i.e. if an
-        // exception in the continuation was thrown), we still need this
-        // fiber for unwinding.
-        if (t->user_exn.exn == NULL) {
+        if (t->fiber) {
             cilk_fiber_deallocate_to_pool(w, t->fiber);
-        } else {
-            t->saved_throwing_fiber = t->fiber;
         }
         if (USE_EXTENSION && t->ext_fiber) {
             cilk_fiber_deallocate_to_pool(w, t->ext_fiber);
@@ -1349,23 +1297,11 @@ int Cilk_sync(__cilkrts_worker *const w, __cilkrts_stack_frame *frame) {
     deque_unlock_self(deques, self);
 
     if (res == SYNC_READY) {
-        struct closure_exception child_exn = t->child_exn;
-        if (child_exn.exn) {
-            if (t->user_exn.exn) {
-                _Unwind_DeleteException(
-                    (struct _Unwind_Exception *)t->user_exn.exn);
-                clear_closure_exception(&t->user_exn);
-            }
-            t->user_exn = child_exn;
-            clear_closure_exception(&(t->child_exn));
-            frame->flags |= CILK_FRAME_EXCEPTION_PENDING;
-        }
         hyper_table *child_ht = t->child_ht;
         if (child_ht) {
             t->child_ht = NULL;
             w->hyper_table = merge_two_hts(w, child_ht, w->hyper_table);
         }
-
         sanitizer_start_switch_fiber(t->fiber);
     }
 

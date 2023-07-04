@@ -320,6 +320,11 @@ __cilk_helper_epilogue(__cilkrts_stack_frame *sf) {
 
 __attribute__((always_inline))
 void __cilkrts_enter_landingpad(__cilkrts_stack_frame *sf, int32_t sel) {
+    if (__cilkrts_need_to_cilkify)
+        return;
+
+    get_this_fiber_header()->current_stack_frame = sf;
+
     // Don't do anything special during cleanups.
     if (sel == 0)
         return;
@@ -330,6 +335,9 @@ void __cilkrts_enter_landingpad(__cilkrts_stack_frame *sf, int32_t sel) {
 
 __attribute__((always_inline))
 void __cilkrts_pause_frame(__cilkrts_stack_frame *sf, char *exn) {
+    if (0 == __builtin_setjmp(sf->ctx))
+        __cilkrts_cleanup_fiber(sf, 1);
+
     __cilkrts_worker *w = get_worker_from_stack(sf);
     cilkrts_alert(CFRAME, w, "__cilkrts_pause_frame %p", (void *)sf);
 

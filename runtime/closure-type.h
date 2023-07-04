@@ -20,13 +20,6 @@ enum ClosureStatus {
 };
 
 /*
- * All the data needed to properly handle a thrown exception.
- */
-struct closure_exception {
-    char *exn;
-};
-
-/*
  * the list of children is not distributed among
  * the children themselves, in order to avoid extra protocols
  * and locking.
@@ -45,6 +38,7 @@ struct Closure {
     enum ClosureStatus status : 8; /* doubles as magic number */
     bool has_cilk_callee;
     bool simulated_stolen;
+    bool exception_pending;
     unsigned int join_counter; /* number of outstanding spawned children */
     char *orig_rsp; /* the rsp one should use when sync successfully */
 
@@ -81,27 +75,6 @@ struct Closure {
     hyper_table *right_ht;
     hyper_table *child_ht;
     hyper_table *user_ht;
-
-    // Exceptions (roughly follows the reducer protocol)
-
-    /* Canonical frame address (CFA) of the call-stack frame from which an
-       exception was rethrown.  Used to ensure that the rethrown exception
-       appears to be rethrown from the correct frame and to avoid repeated calls
-       to __cilkrts_leave_frame during stack unwinding. */
-    char *reraise_cfa;
-    /* Stack pointer for the parent fiber.  used to restore the stack pointer
-       properly after entering a landingpad. */
-    char *parent_rsp;
-    /* Pointer to a fiber whose destruction was delayed for
-       exception-handling. */
-    struct cilk_fiber *saved_throwing_fiber;
-
-    // exception propagated from our right siblings
-    struct closure_exception right_exn;
-    // exception propagated from our children
-    struct closure_exception child_exn;
-    // exception thrown from this closure
-    struct closure_exception user_exn;
 
     _Atomic(worker_id) mutex_owner __attribute__((aligned(CILK_CACHE_LINE)));
 

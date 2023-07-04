@@ -36,6 +36,27 @@ void __cilkrts_reducer_unregister(void *key) {
     (void)success;
 }
 
+void *internal_reducer_lookup(__cilkrts_worker *w, void *key, size_t size,
+                              void *identity_ptr, void *reduce_ptr) {
+    struct local_hyper_table *table = get_local_hyper_table(w);
+    struct bucket *b = find_hyperobject(table, (uintptr_t)key);
+    if (__builtin_expect(!!b, true)) {
+        CILK_ASSERT(w, key == (void *)b->key);
+        // Return the existing view.
+        return b->value.view;
+    }
+
+    return insert_new_view(table, (uintptr_t)key, size,
+                           (__cilk_identity_fn)identity_ptr,
+                           (__cilk_reduce_fn)reduce_ptr);
+}
+
+void internal_reducer_remove(__cilkrts_worker *w, void *key) {
+    struct local_hyper_table *table = get_local_hyper_table(w);
+    bool success = remove_hyperobject(table, (uintptr_t)key);
+    (void)success;
+}
+
 /* /\* void *__cilkrts_reducer_lookup(void *key, size_t size, *\/ */
 /* /\*                                __cilk_identity_fn identity, *\/ */
 /* /\*                                __cilk_reduce_fn reduce) { *\/ */

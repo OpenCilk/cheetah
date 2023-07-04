@@ -11,6 +11,8 @@
 #include "readydeque.h"
 #include "scheduler.h"
 
+struct closure_exception exception_reducer = {.exn = NULL};
+
 extern void _Unwind_Resume(struct _Unwind_Exception *);
 extern _Unwind_Reason_Code _Unwind_RaiseException(struct _Unwind_Exception *);
 
@@ -58,23 +60,16 @@ int __cilkrts_atexit(void (*callback)(void)) {
 // was thrown.
 void __cilkrts_check_exception_raise(__cilkrts_stack_frame *sf) {
 
-    __cilkrts_worker *w = get_worker_from_stack(sf);
-    CILK_ASSERT(w, w == __cilkrts_get_tls_worker());
-    worker_id self = w->self;
-    ReadyDeque *deques = w->g->deques;
+    __cilkrts_worker *w = __cilkrts_get_tls_worker();
 
-    deque_lock_self(deques, self);
-    Closure *t = deque_peek_bottom(deques, w, self, self);
-    Closure_lock(w, self, t);
-    char *exn = t->user_exn.exn;
+    struct closure_exception *exn_r = get_exception_reducer(w);
+    char *exn = exn_r->exn;
 
     // zero exception storage, so we don't unintentionally try to
     // handle/propagate this exception again
-    clear_closure_exception(&(t->user_exn));
+    clear_exception_reducer(w, exn_r);
     sf->flags &= ~CILK_FRAME_EXCEPTION_PENDING;
 
-    Closure_unlock(w, self, t);
-    deque_unlock_self(deques, self);
     if (exn != NULL) {
         _Unwind_RaiseException((struct _Unwind_Exception *)exn); // noreturn
     }
@@ -86,23 +81,16 @@ void __cilkrts_check_exception_raise(__cilkrts_stack_frame *sf) {
 // resumes unwinding with that exception.
 void __cilkrts_check_exception_resume(__cilkrts_stack_frame *sf) {
 
-    __cilkrts_worker *w = get_worker_from_stack(sf);
-    CILK_ASSERT(w, w == __cilkrts_get_tls_worker());
-    worker_id self = w->self;
-    ReadyDeque *deques = w->g->deques;
+    __cilkrts_worker *w = __cilkrts_get_tls_worker();
 
-    deque_lock_self(deques, self);
-    Closure *t = deque_peek_bottom(deques, w, self, self);
-    Closure_lock(w, self, t);
-    char *exn = t->user_exn.exn;
+    struct closure_exception *exn_r = get_exception_reducer(w);
+    char *exn = exn_r->exn;
 
     // zero exception storage, so we don't unintentionally try to
     // handle/propagate this exception again
-    clear_closure_exception(&(t->user_exn));
+    clear_exception_reducer(w, exn_r);
     sf->flags &= ~CILK_FRAME_EXCEPTION_PENDING;
 
-    Closure_unlock(w, self, t);
-    deque_unlock_self(deques, self);
     if (exn != NULL) {
         _Unwind_Resume((struct _Unwind_Exception *)exn); // noreturn
     }
@@ -116,36 +104,39 @@ void __cilkrts_check_exception_resume(__cilkrts_stack_frame *sf) {
 // handlers in that frame execute.
 void __cilkrts_cleanup_fiber(__cilkrts_stack_frame *sf, int32_t sel) {
 
-    __cilkrts_worker *w = get_worker_from_stack(sf);
-    CILK_ASSERT(w, w == __cilkrts_get_tls_worker());
-    worker_id self = w->self;
-    ReadyDeque *deques = w->g->deques;
+    __cilkrts_worker *w = __cilkrts_get_tls_worker();
+    CILK_ASSERT(w, __cilkrts_synced(sf));
 
-    deque_lock_self(deques, self);
-    Closure *t = deque_peek_bottom(deques, w, self, self);
+    struct closure_exception *exn_r = get_exception_reducer_or_null(w);
+    struct cilk_fiber *throwing_fiber = NULL;
+    char *parent_rsp = NULL;
+    if (exn_r != NULL) {
+        throwing_fiber = exn_r->throwing_fiber;
+        parent_rsp = exn_r->parent_rsp;
 
-    // If t->parent_rsp is non-null, then the Cilk personality function executed
+        exn_r->throwing_fiber = NULL;
+        clear_exception_reducer(w, exn_r);
+    }
+
+    // If parent_rsp is non-null, then the Cilk personality function executed
     // __cilkrts_sync(sf), which implies that sf is at the top of the deque.
     // Because we're executing a non-cleanup landingpad, execution is continuing
     // within this function frame, rather than unwinding further to a parent
     // frame, which would belong to a distinct closure.  Hence, if we reach this
-    // point, set the stack pointer in sf to t->parent_rsp if t->parent_rsp is
+    // point, set the stack pointer in sf to parent_rsp if parent_rsp is
     // non-null.
 
-    if (NULL == t->parent_rsp) {
-        deque_unlock_self(deques, self);
+    if (NULL == parent_rsp) {
         return;
     }
 
-    SP(sf) = (void *)t->parent_rsp;
-    t->parent_rsp = NULL;
+    SP(sf) = (void *)parent_rsp;
 
-    if (t->saved_throwing_fiber) {
-        cilk_fiber_deallocate_to_pool(w, t->saved_throwing_fiber);
-        t->saved_throwing_fiber = NULL;
+    // Since we're longjmping to another fiber, we don't need to save
+    // throwing_fiber anymore.
+    if (throwing_fiber) {
+        cilk_fiber_deallocate_to_pool(w, throwing_fiber);
     }
-
-    deque_unlock_self(deques, self);
     __builtin_longjmp(sf->ctx, 1); // Does not return
     return;
 }

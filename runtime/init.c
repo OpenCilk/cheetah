@@ -665,6 +665,7 @@ static void workers_deinit(global_state *g) {
 }
 
 CHEETAH_INTERNAL void __cilkrts_shutdown(global_state *g) {
+    CILK_ASSERT_G(NULL == exception_reducer.exn);
     // If the workers are still running, stop them now.
     if (g->workers_started)
         __cilkrts_stop_workers(g);

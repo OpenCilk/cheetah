@@ -56,8 +56,8 @@ struct __cilkrts_stack_frame {
    to handle after syncing. */
 #define CILK_FRAME_EXCEPTION_PENDING 0x008
 
-/* Is this frame excepting, meaning that a stolen continuation threw? */
-#define CILK_FRAME_EXCEPTING         0x010
+/* Is this frame throwing, specifically, from a stolen continuation? */
+#define CILK_FRAME_THROWING          0x010
 
 /* Is this the last (oldest) Cilk frame? */
 #define CILK_FRAME_LAST              0x080
@@ -118,6 +118,11 @@ static inline int __cilkrts_synced(struct __cilkrts_stack_frame *sf) {
 /* Returns nonzero if the frame has never been stolen. */
 static inline int __cilkrts_not_stolen(struct __cilkrts_stack_frame *sf) {
     return ((sf->flags & CILK_FRAME_STOLEN) == 0);
+}
+
+/* Returns nonzero if the frame is throwing an exception. */
+static inline int __cilkrts_throwing(struct __cilkrts_stack_frame *sf) {
+    return (sf->flags & CILK_FRAME_THROWING);
 }
 
 #endif /* _CILK_FRAME_H */
