@@ -39,6 +39,7 @@ set(CHEETAH_PERSONALITY_CPP_SOURCES
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 # Add dependent libraries
+set(CHEETAH_COMPILE_FLAGS ${CHEETAH_COMMON_CFLAGS})
 append_list_if(CHEETAH_HAS_PTHREAD_LIB pthread CHEETAH_COMMON_LIBS)
 append_list_if(CHEETAH_HAS_DL_LIB dl CHEETAH_COMMON_LIBS)
 if (CHEETAH_USE_COMPILER_RT)
@@ -50,10 +51,13 @@ endif()
 
 set(CHEETAH_DYNAMIC_LIBS ${CHEETAH_COMMON_LIBS})
 
-add_flags_if_supported(-g3)
-add_flags_if_supported(-Wno-covered-switch-default)
-add_flags_if_supported(-fdebug-default-version=4)
-add_flags_if_supported(-Werror=int-conversion)
+append_list_if(CHEETAH_HAS_G3_FLAG -g3 CHEETAH_COMPILE_FLAGS)
+append_list_if(CHEETAH_HAS_WNO_COVERED_SWITCH_DEFAULT
+  -Wno-covered-switch-default CHEETAH_COMPILE_FLAGS)
+append_list_if(CHEETAH_HAS_FDEBUG_DEFAULT_VERSION_EQ_4_FLAG
+  -fdebug-default-version=4 CHEETAH_COMPILE_FLAGS)
+append_list_if(CHEETAH_HAS_WERROR_EQ_INT_CONVERSION
+  -Werror=int-conversion CHEETAH_COMPILE_FLAGS)
 if (CHEETAH_HAS_FOMIT_FRAME_POINTER_FLAG)
   set_source_files_properties(invoke-main.c PROPERTIES COMPILE_FLAGS -fno-omit-frame-pointer)
 endif()

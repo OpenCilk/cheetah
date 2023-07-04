@@ -22,12 +22,53 @@ check_library_exists(rt clock_gettime "" CHEETAH_HAS_RT_LIB)
 
 # Check compiler flags
 check_c_compiler_flag(-fomit-frame-pointer CHEETAH_HAS_FOMIT_FRAME_POINTER_FLAG)
-check_c_compiler_flag(-mavx -Werror CHEETAH_HAS_MAVX_FLAG)
-check_c_compiler_flag(-march=sandybridge -Werror CHEETAH_HAS_MARCH_SANDYBRIDGE_FLAG)
+check_c_compiler_flag("-mavx -Werror" CHEETAH_HAS_MAVX_FLAG)
+check_c_compiler_flag("-march=sandybridge -Werror" CHEETAH_HAS_MARCH_SANDYBRIDGE_FLAG)
+check_c_compiler_flag(-femulated-tls CHEETAH_HAS_FEMULATED_TLS_FLAG)
+check_c_compiler_flag(-fdebug-default-version=4 CHEETAH_HAS_FDEBUG_DEFAULT_VERSION_EQ_4_FLAG)
 
 set(CMAKE_REQUIRED_FLAGS -fsanitize=address)
 check_c_compiler_flag(-fsanitize=address CHEETAH_HAS_ASAN)
 unset(CMAKE_REQUIRED_FLAGS)
+
+# Debug info flags.
+check_c_compiler_flag(-gline-tables-only CHEETAH_HAS_GLINE_TABLES_ONLY_FLAG)
+check_c_compiler_flag(-g CHEETAH_HAS_G_FLAG)
+check_c_compiler_flag(-g3 CHEETAH_HAS_G3_FLAG)
+check_c_compiler_flag(/Zi CHEETAH_HAS_Zi_FLAG)
+
+# Warnings.
+check_c_compiler_flag(-Wall CHEETAH_HAS_WALL_FLAG)
+check_c_compiler_flag(-Werror CHEETAH_HAS_WERROR_FLAG)
+check_c_compiler_flag("-Werror -Wframe-larger-than=512" CHEETAH_HAS_WFRAME_LARGER_THAN_FLAG)
+check_c_compiler_flag("-Werror -Wglobal-constructors"   CHEETAH_HAS_WGLOBAL_CONSTRUCTORS_FLAG)
+check_c_compiler_flag("-Werror -Wc99-extensions"     CHEETAH_HAS_WC99_EXTENSIONS_FLAG)
+check_c_compiler_flag("-Werror -Wgnu"                CHEETAH_HAS_WGNU_FLAG)
+check_c_compiler_flag("-Werror -Wnon-virtual-dtor"   CHEETAH_HAS_WNON_VIRTUAL_DTOR_FLAG)
+check_c_compiler_flag("-Werror -Wvariadic-macros"    CHEETAH_HAS_WVARIADIC_MACROS_FLAG)
+check_c_compiler_flag("-Werror -Wunused-parameter"   CHEETAH_HAS_WUNUSED_PARAMETER_FLAG)
+check_c_compiler_flag("-Werror -Wcovered-switch-default" CHEETAH_HAS_WCOVERED_SWITCH_DEFAULT_FLAG)
+check_c_compiler_flag("-Werror -Wthread-safety" CHEETAH_HAS_WTHREAD_SAFETY_FLAG)
+check_c_compiler_flag("-Werror -Wthread-safety-reference" CHEETAH_HAS_WTHREAD_SAFETY_REFERENCE_FLAG)
+check_c_compiler_flag("-Werror -Wthread-safety-beta" CHEETAH_HAS_WTHREAD_SAFETY_BETA_FLAG)
+check_c_compiler_flag(-Werror=int-conversion CHEETAH_HAS_WERROR_EQ_INT_CONVERSION)
+check_c_compiler_flag(-Wno-pedantic CHEETAH_HAS_WNO_PEDANTIC)
+check_c_compiler_flag(-Wno-format CHEETAH_HAS_WNO_FORMAT)
+check_c_compiler_flag(-Wno-format-pedantic CHEETAH_HAS_WNO_FORMAT_PEDANTIC)
+check_c_compiler_flag(-Wno-covered-switch-default CHEETAH_HAS_WNO_COVERED_SWITCH_DEFAULT)
+
+check_c_compiler_flag(/W4 CHEETAH_HAS_W4_FLAG)
+check_c_compiler_flag(/WX CHEETAH_HAS_WX_FLAG)
+check_c_compiler_flag(/wd4146 CHEETAH_HAS_WD4146_FLAG)
+check_c_compiler_flag(/wd4291 CHEETAH_HAS_WD4291_FLAG)
+check_c_compiler_flag(/wd4221 CHEETAH_HAS_WD4221_FLAG)
+check_c_compiler_flag(/wd4391 CHEETAH_HAS_WD4391_FLAG)
+check_c_compiler_flag(/wd4722 CHEETAH_HAS_WD4722_FLAG)
+check_c_compiler_flag(/wd4800 CHEETAH_HAS_WD4800_FLAG)
+
+# Linker flags.
+check_linker_flag("-Wl,-z,text" CHEETAH_HAS_Z_TEXT)
+check_linker_flag("-fuse-ld=lld" CHEETAH_HAS_FUSE_LD_LLD_FLAG)
 
 # Architectures.
 
@@ -69,13 +110,13 @@ endfunction()
 
 # Returns a compiler and CFLAGS that should be used to run tests for the
 # specific architecture.  When cross-compiling, this is controled via
-# CILKTOOLS_TEST_COMPILER and CILKTOOLS_TEST_COMPILER_CFLAGS.
+# CHEETAH_TEST_COMPILER and CHEETAH_TEST_COMPILER_CFLAGS.
 macro(get_test_cc_for_arch arch cc_out cflags_out)
   if(ANDROID OR ${arch} MATCHES "arm|aarch64")
     # This is only true if we are cross-compiling.
     # Build all tests with host compiler and use host tools.
-    set(${cc_out} ${CILKTOOLS_TEST_COMPILER})
-    set(${cflags_out} ${CILKTOOLS_TEST_COMPILER_CFLAGS})
+    set(${cc_out} ${CHEETAH_TEST_COMPILER})
+    set(${cflags_out} ${CHEETAH_TEST_COMPILER_CFLAGS})
   else()
     get_target_flags_for_arch(${arch} ${cflags_out})
     if(APPLE)
@@ -96,7 +137,7 @@ function(get_test_cflags_for_apple_platform platform arch cflags_out)
   get_target_flags_for_arch(${arch} test_cflags)
   list(APPEND test_cflags ${DARWIN_${platform}_CFLAGS})
   string(REPLACE ";" " " test_cflags_str "${test_cflags}")
-  string(APPEND test_cflags_str "${CILKTOOLS_TEST_COMPILER_CFLAGS}")
+  string(APPEND test_cflags_str "${CHEETAH_TEST_COMPILER_CFLAGS}")
   set(${cflags_out} "${test_cflags_str}" PARENT_SCOPE)
 endfunction()
 
@@ -123,29 +164,7 @@ function(is_valid_apple_platform platform is_valid_out)
   set(${is_valid_out} ${is_valid} PARENT_SCOPE)
 endfunction()
 
-set(ARM64 aarch64)
-set(ARM32 arm armhf)
-set(HEXAGON hexagon)
-set(X86 i386)
-set(X86_64 x86_64)
-set(MIPS32 mips mipsel)
-set(MIPS64 mips64 mips64el)
-set(PPC64 powerpc64 powerpc64le)
-set(RISCV32 riscv32)
-set(RISCV64 riscv64)
-set(S390X s390x)
-set(SPARC sparc)
-set(SPARCV9 sparcv9)
-set(WASM32 wasm32)
-set(WASM64 wasm64)
-
-if(APPLE)
-  set(ARM64 arm64)
-  set(ARM32 armv7 armv7s armv7k)
-  set(X86_64 x86_64 x86_64h)
-endif()
-
-set(ALL_CHEETAH_SUPPORTED_ARCH ${X86_64} ${ARM64})
+include(AllSupportedArchDefs)
 
 if(APPLE)
   include(CheetahDarwinUtils)
@@ -202,6 +221,7 @@ if(APPLE)
 
   # Note: In order to target x86_64h on OS X the minimum deployment target must
   # be 10.8 or higher.
+  set(DEFAULT_CHEETAH_MIN_OSX_VERSION 10.14)
   set(DARWIN_osx_MIN_VER_FLAG "-mmacosx-version-min")
   if(NOT CHEETAH_MIN_OSX_VERSION)
     string(REGEX MATCH "${DARWIN_osx_MIN_VER_FLAG}=([.0-9]+)"
@@ -306,8 +326,36 @@ if(APPLE)
     )
 
 else()
-  # for filter_available_targets
-  include(CheetahUtils)
-
   filter_available_targets(CHEETAH_SUPPORTED_ARCH ${ALL_CHEETAH_SUPPORTED_ARCH})
 endif()
+
+if (MSVC)
+  # Allow setting clang-cl's /winsysroot flag.
+  set(LLVM_WINSYSROOT "" CACHE STRING
+    "If set, argument to clang-cl's /winsysroot")
+
+  if (LLVM_WINSYSROOT)
+    set(MSVC_DIA_SDK_DIR "${LLVM_WINSYSROOT}/DIA SDK" CACHE PATH
+        "Path to the DIA SDK")
+  else()
+    set(MSVC_DIA_SDK_DIR "$ENV{VSINSTALLDIR}DIA SDK" CACHE PATH
+        "Path to the DIA SDK")
+  endif()
+
+  # See if the DIA SDK is available and usable.
+  if (IS_DIRECTORY ${MSVC_DIA_SDK_DIR})
+    set(CAN_SYMBOLIZE 1)
+  else()
+    set(CAN_SYMBOLIZE 0)
+  endif()
+else()
+  set(CAN_SYMBOLIZE 1)
+endif()
+
+find_program(GNU_LD_EXECUTABLE NAMES ${LLVM_DEFAULT_TARGET_TRIPLE}-ld.bfd ld.bfd DOC "GNU ld")
+find_program(GOLD_EXECUTABLE NAMES ${LLVM_DEFAULT_TARGET_TRIPLE}-ld.gold ld.gold DOC "GNU gold")
+
+if(CHEETAH_SUPPORTED_ARCH)
+  list(REMOVE_DUPLICATES CHEETAH_SUPPORTED_ARCH)
+endif()
+message(STATUS "Cheetah supported architectures: ${CHEETAH_SUPPORTED_ARCH}")

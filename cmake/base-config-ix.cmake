@@ -6,16 +6,11 @@
 include(CheetahTests)
 include(CheckIncludeFile)
 include(CheckCXXSourceCompiles)
-include(TestBigEndian)
-include(CMakePushCheckState)
+include(GNUInstallDirs)
+include(ExtendPath)
+include(CheetahDarwinUtils)
 
 check_include_file(unwind.h HAVE_UNWIND_H)
-
-# Used by sanitizer_common and tests.
-check_include_file(rpc/xdr.h HAVE_RPC_XDR_H)
-if (NOT HAVE_RPC_XDR_H)
-  set(HAVE_RPC_XDR_H 0)
-endif()
 
 # Top level target used to build all cheetah libraries.
 add_custom_target(cheetah ALL)
@@ -30,7 +25,7 @@ set_property(
     FOLDER "Cheetah Misc"
 )
 
-# Setting these variables from an LLVM build is sufficient that cilktools can
+# Setting these variables from an LLVM build is sufficient that cheetah can
 # construct the output paths, so it can behave as if it were in-tree here.
 if (LLVM_LIBRARY_OUTPUT_INTDIR AND LLVM_RUNTIME_OUTPUT_INTDIR AND PACKAGE_VERSION)
   set(LLVM_TREE_AVAILABLE On)
@@ -48,7 +43,6 @@ if (LLVM_TREE_AVAILABLE)
   set(CHEETAH_INSTALL_PATH lib${LLVM_LIBDIR_SUFFIX}/clang/${CLANG_VERSION_MAJOR})
   set(CHEETAH_CMAKE_BUILDDIR ${LLVM_LIBRARY_OUTPUT_INTDIR}/cmake/clang)
   set(CHEETAH_CMAKE_INSTALLDIR lib${LLVM_LIBDIR_SUFFIX}/cmake/clang)
-
   option(CHEETAH_INCLUDE_TESTS "Generate and build cheetah unit tests."
          ${LLVM_INCLUDE_TESTS})
   option(CHEETAH_ENABLE_WERROR "Fail and stop if warning is triggered"
@@ -85,28 +79,31 @@ else()
   set(CHEETAH_TEST_CXX_COMPILER ${CMAKE_CXX_COMPILER} CACHE PATH "C++ Compiler to use for testing")
 endif()
 
-if("${CHEETAH_TEST_COMPILER}" MATCHES "clang[+]*$")
-  set(CHEETAH_TEST_COMPILER_ID Clang)
-elseif("${CHEETAH_TEST_COMPILER}" MATCHES "clang.*.exe$")
-  set(CHEETAH_TEST_COMPILER_ID Clang)
-else()
-  set(CHEETAH_TEST_COMPILER_ID GNU)
-endif()
-
 if(NOT DEFINED CHEETAH_OS_DIR)
   string(TOLOWER ${CMAKE_SYSTEM_NAME} CHEETAH_OS_DIR)
 endif()
 if(CHEETAH_ENABLE_PER_TARGET_RUNTIME_DIR AND NOT APPLE)
-  set(CHEETAH_LIBRARY_OUTPUT_DIR
-    ${CHEETAH_OUTPUT_DIR})
-  set(CHEETAH_LIBRARY_INSTALL_DIR
-    ${CHEETAH_INSTALL_PATH})
+  set(CHEETAH_OUTPUT_LIBRARY_DIR
+    ${CHEETAH_OUTPUT_DIR}/lib)
+  extend_path(default_install_path "${CHEETAH_INSTALL_PATH}" lib)
+  set(CHEETAH_INSTALL_LIBRARY_DIR "${default_install_path}" CACHE PATH
+    "Path where built cheetah libraries should be installed.")
 else(CHEETAH_ENABLE_PER_TARGET_RUNTIME_DIR)
-  set(CHEETAH_LIBRARY_OUTPUT_DIR
+  set(CHEETAH_OUTPUT_LIBRARY_DIR
     ${CHEETAH_OUTPUT_DIR}/lib/${CHEETAH_OS_DIR})
-  set(CHEETAH_LIBRARY_INSTALL_DIR
-    ${CHEETAH_INSTALL_PATH}/lib/${CHEETAH_OS_DIR})
+  extend_path(default_install_path "${CHEETAH_INSTALL_PATH}" "lib/${CHEETAH_OS_DIR}")
+  set(CHEETAH_INSTALL_LIBRARY_DIR "${default_install_path}" CACHE PATH
+    "Path where built cheetah libraries should be installed.")
 endif()
+extend_path(default_install_path "${CHEETAH_INSTALL_PATH}" "${CMAKE_INSTALL_BINDIR}")
+set(CHEETAH_INSTALL_BINARY_DIR "${default_install_path}" CACHE PATH
+  "Path where built cheetah executables should be installed.")
+extend_path(default_install_path "${CHEETAH_INSTALL_PATH}" "${CMAKE_INSTALL_INCLUDEDIR}")
+set(CHEETAH_INSTALL_INCLUDE_DIR "${default_install_path}" CACHE PATH
+  "Path where cheetah headers should be installed.")
+extend_path(default_install_path "${CHEETAH_INSTALL_PATH}" "${CMAKE_INSTALL_DATADIR}")
+set(CHEETAH_INSTALL_DATA_DIR "${default_install_path}" CACHE PATH
+  "Path where cheetah data files should be installed.")
 
 if(APPLE)
   # On Darwin if /usr/include/c++ doesn't exist, the user probably has Xcode but

@@ -445,8 +445,8 @@ macro(darwin_add_builtin_libraries)
                       PARENT_TARGET builtins
                       LIPO_FLAGS ${${os}_cc_kext_lipo_flags}
                       DEPENDS ${${os}_cc_kext_libs}
-                      OUTPUT_DIR ${CHEETAH_LIBRARY_OUTPUT_DIR}
-                      INSTALL_DIR ${CHEETAH_LIBRARY_INSTALL_DIR})
+                      OUTPUT_DIR ${CHEETAH_OUTPUT_LIBRARY_DIR}
+                      INSTALL_DIR ${CHEETAH_INSTALL_LIBRARY_DIR})
     endif()
   endforeach()
 
@@ -457,8 +457,8 @@ macro(darwin_add_builtin_libraries)
                         PARENT_TARGET builtins
                         LIPO_FLAGS ${${os}_builtins_lipo_flags} ${${os}sim_builtins_lipo_flags}
                         DEPENDS ${${os}_builtins_libs} ${${os}sim_builtins_libs}
-                        OUTPUT_DIR ${CHEETAH_LIBRARY_OUTPUT_DIR}
-                        INSTALL_DIR ${CHEETAH_LIBRARY_INSTALL_DIR})
+                        OUTPUT_DIR ${CHEETAH_OUTPUT_LIBRARY_DIR}
+                        INSTALL_DIR ${CHEETAH_INSTALL_LIBRARY_DIR})
     endif()
   endforeach()
   darwin_add_embedded_builtin_libraries()
