@@ -130,13 +130,13 @@ void sysdep_longjmp_to_sf(__cilkrts_stack_frame *sf) {
 
 static inline void init_fiber_header(const struct cilk_fiber *fiber) {
     struct fiber_header *fh = get_header_from_fiber(fiber);
-    fh->worker = NULL;
+    fh->worker = INVALID_WORKER;
     fh->current_stack_frame = NULL;
 }
 
 static inline void deinit_fiber_header(const struct cilk_fiber *fiber) {
     struct fiber_header *fh = get_header_from_fiber(fiber);
-    fh->worker = NULL;
+    fh->worker = INVALID_WORKER;
     fh->current_stack_frame = NULL;
 }
 

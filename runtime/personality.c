@@ -159,7 +159,7 @@ uncilkify(global_state *g, __cilkrts_stack_frame *sf) {
     }
 }
 
-__attribute__((always_inline, noreturn)) static void
+__attribute__((always_inline)) static void
 resume_from_last_frame(__cilkrts_worker *w, __cilkrts_stack_frame *sf,
                  struct _Unwind_Exception *ue_header) {
     cilkrts_alert(CFRAME, w, "__cilkrts_leave_last_frame %p", (void *)sf);
@@ -174,7 +174,7 @@ resume_from_last_frame(__cilkrts_worker *w, __cilkrts_stack_frame *sf,
 
     // Terminate the Cilkified region.
     uncilkify(w->g, sf);
-    _Unwind_Resume(ue_header);
+    _Unwind_Resume(ue_header); // noreturn, although not marked as such
 }
 
 _Unwind_Reason_Code __cilk_personality_internal(

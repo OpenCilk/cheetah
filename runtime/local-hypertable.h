@@ -4,7 +4,6 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-// #include <cilk/cilk_api.h>
 #include "hyperobject_base.h"
 #include "types.h"
 

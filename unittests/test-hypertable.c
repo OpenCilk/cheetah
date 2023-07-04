@@ -145,6 +145,7 @@ int main(int argc, char *argv[]) {
         {TABLE_DELETE, 0xf},
     };
     test_insert_remove(test1, sizeof(test1)/sizeof(table_command));
+    printf("test1 PASSED\n");
 
     // Test case derived from trace that led to errors.
     table_command test2[] = {
@@ -192,5 +193,6 @@ int main(int argc, char *argv[]) {
         {TABLE_INSERT, 0x7f2a10bfe480},
     };
     test_insert_remove(test2, sizeof(test2)/sizeof(table_command));
+    printf("test2 PASSED\n");
     return 0;
 }

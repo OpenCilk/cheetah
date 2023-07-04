@@ -319,8 +319,8 @@ static void __cilkrts_stop_workers(global_state *g) {
     for (unsigned int i = worker_start; i < g->nworkers; i++) {
         int status = pthread_join(g->threads[i], NULL);
         if (status != 0)
-            cilkrts_bug(NULL, "Cilk runtime error: thread join (%u) failed: %d",
-                        i, status);
+            cilkrts_bug(NULL, "Cilk runtime error: thread join (%u) failed: %s",
+                        i, strerror(status));
     }
     cilkrts_alert(BOOT, NULL, "(threads_join) All workers joined!");
     g->workers_started = false;

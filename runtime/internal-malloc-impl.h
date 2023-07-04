@@ -7,7 +7,6 @@
 #include "internal-malloc.h"
 
 #define NUM_BUCKETS 7
-#define NUM_IM_CALLERS 4
 
 /* struct for managing global memory pool; each memory block in mem_list starts
    out with size INTERNAL_MALLOC_CHUNK.  We will allocate small pieces off the

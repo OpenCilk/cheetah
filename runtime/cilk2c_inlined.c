@@ -70,7 +70,7 @@ void *__cilkrts_reducer_lookup(void *key, size_t size,
     __cilkrts_worker *w = get_this_fiber_header()->worker;
     struct local_hyper_table *table = get_local_hyper_table(w);
     struct bucket *b = find_hyperobject(table, (uintptr_t)key);
-    if (__builtin_expect(!!b, 1)) {
+    if (__builtin_expect(!!b, true)) {
         // Return the existing view.
         return b->value.view;
     }

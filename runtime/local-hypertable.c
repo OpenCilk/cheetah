@@ -3,9 +3,9 @@
 #include <stdint.h>
 #include <stdlib.h>
 
-#include "internal-malloc.h" /* only needed for new view allocation */
-
+#include "cilk-internal.h"
 #include "debug.h"
+#include "internal-malloc.h" /* only needed for new view allocation */
 #include "local-hypertable.h"
 
 static void reducer_base_init(reducer_base *rb) {
@@ -562,8 +562,7 @@ bool insert_hyperobject(hyper_table *table, struct bucket b) {
 }
 
 void *insert_new_view(hyper_table *table, uintptr_t key, size_t size,
-                      __cilk_identity_fn identity,
-                      __cilk_reduce_fn reduce) {
+                      __cilk_identity_fn identity, __cilk_reduce_fn reduce) {
     // Create a new view and initialize it with the identity function.
     void *new_view = cilk_aligned_alloc(64, round_size_to_alignment(64, size));
     identity(new_view);
@@ -576,7 +575,6 @@ void *insert_new_view(hyper_table *table, uintptr_t key, size_t size,
     (void)success;
     // Return the new view.
     return new_view;
-
 }
 
 // Merge two hypertables, left and right.  Returns the merged hypertable and
