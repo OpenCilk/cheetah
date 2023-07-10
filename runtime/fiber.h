@@ -167,12 +167,12 @@ CHEETAH_INTERNAL int in_fiber(struct cilk_fiber *, void *);
 #if CILK_ENABLE_ASAN_HOOKS
 void sanitizer_start_switch_fiber(struct cilk_fiber *fiber);
 void sanitizer_finish_switch_fiber();
+CHEETAH_INTERNAL void sanitizer_poison_fiber(struct cilk_fiber *fiber);
 CHEETAH_INTERNAL void sanitizer_unpoison_fiber(struct cilk_fiber *fiber);
-CHEETAH_INTERNAL void sanitizer_fiber_deallocate(struct cilk_fiber *fiber);
 #else
 static inline void sanitizer_start_switch_fiber(struct cilk_fiber *fiber) {}
 static inline void sanitizer_finish_switch_fiber() {}
+static inline void sanitizer_poison_fiber(struct cilk_fiber *fiber) {}
 static inline void sanitizer_unpoison_fiber(struct cilk_fiber *fiber) {}
-static inline void sanitizer_fiber_deallocate(struct cilk_fiber *fiber) {}
 #endif // CILK_ENABLE_ASAN_HOOKS
 #endif
