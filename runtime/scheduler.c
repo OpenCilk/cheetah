@@ -249,7 +249,6 @@ void Cilk_set_return(__cilkrts_worker *const w) {
     CILK_ASSERT(w, t->call_parent);
     CILK_ASSERT(w, t->spawn_parent == NULL);
     CILK_ASSERT(w, (t->frame->flags & CILK_FRAME_DETACHED) == 0);
-    CILK_ASSERT(w, t->simulated_stolen == false);
 
     Closure *call_parent = t->call_parent;
     Closure *t1 = deque_xtract_bottom(deques, w, self, self);
@@ -278,37 +277,6 @@ void Cilk_set_return(__cilkrts_worker *const w) {
     deque_unlock_self(deques, self);
 
     Closure_destroy(w, t);
-}
-
-/***
- * ANGE: this function doesn't do much ... just some assertion
- * checks, marks the parent as ready and returns that.
- ***/
-static Closure *unconditional_steal(__cilkrts_worker *const w,
-                                    worker_id self,
-                                    Closure *parent) {
-
-    cilkrts_alert(STEAL, w, "(unconditional_steal) promoted closure %p",
-                  (void *)parent);
-
-    Closure_assert_ownership(w, self, parent);
-    CILK_ASSERT(w, parent->simulated_stolen);
-    CILK_ASSERT(w, !w->l->provably_good_steal);
-    CILK_ASSERT(w, !Closure_has_children(parent));
-    CILK_ASSERT(w, parent->status == CLOSURE_SUSPENDED);
-
-    CILK_ASSERT(w, parent->frame != NULL);
-    CILK_ASSERT(w, parent->owner_ready_deque == NO_WORKER);
-    CILK_ASSERT(w, (parent->fiber == NULL) && parent->fiber_child);
-    parent->fiber = parent->fiber_child;
-    parent->fiber_child = NULL;
-    if (USE_EXTENSION) {
-        parent->ext_fiber = parent->ext_fiber_child;
-        parent->ext_fiber_child = NULL;
-    }
-    Closure_make_ready(parent);
-
-    return parent;
 }
 
 static Closure *provably_good_steal_maybe(__cilkrts_worker *const w,
@@ -1158,7 +1126,6 @@ void promote_own_deque(__cilkrts_worker *w) {
             finish_promote(w, self, w, res, has_frames_to_promote);
 
             Closure_set_status(w, res, CLOSURE_SUSPENDED);
-            res->simulated_stolen = true;
             Closure_unlock(w, self, res);
 
         } else {
@@ -1180,7 +1147,7 @@ void longjmp_to_user_code(__cilkrts_worker *w, Closure *t) {
     __cilkrts_stack_frame *sf = t->frame;
     struct cilk_fiber *fiber = t->fiber;
 
-    CILK_ASSERT(w, sf && fiber || (t->simulated_stolen && fiber == NULL));
+    CILK_ASSERT(w, sf && fiber);
 
     local_state *l = w->l;
     if (l->provably_good_steal) {
@@ -1206,7 +1173,7 @@ void longjmp_to_user_code(__cilkrts_worker *w, Closure *t) {
         bool *initialized = &g->root_closure_initialized;
         if (t == g->root_closure && *initialized == false) {
             *initialized = true;
-        } else if (!t->simulated_stolen) {
+        } else {
             void *new_rsp = sysdep_reset_stack_for_resume(fiber, sf);
             USE_UNUSED(new_rsp);
             CILK_ASSERT(w, SP(sf) == new_rsp);
@@ -1252,7 +1219,6 @@ int Cilk_sync(__cilkrts_worker *const w, __cilkrts_stack_frame *frame) {
     Closure_lock(w, self, t);
     /* assert we are really at the top of the stack */
     CILK_ASSERT(w, Closure_at_top_of_stack(w, frame));
-    CILK_ASSERT(w, !(t->simulated_stolen) || !Closure_has_children(t));
 
     // reset_closure_frame(w, t);
     CILK_ASSERT(w, w == __cilkrts_get_tls_worker());

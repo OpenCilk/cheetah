@@ -144,7 +144,6 @@ static inline void Closure_init(Closure *t, __cilkrts_stack_frame *frame) {
     t->owner_ready_deque = NO_WORKER;
     t->status = CLOSURE_PRE_INVALID;
     t->has_cilk_callee = false;
-    t->simulated_stolen = false;
     t->exception_pending = false;
     t->join_counter = 0;
 

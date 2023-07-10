@@ -37,7 +37,6 @@ struct Closure {
 
     enum ClosureStatus status : 8; /* doubles as magic number */
     bool has_cilk_callee;
-    bool simulated_stolen;
     bool exception_pending;
     unsigned int join_counter; /* number of outstanding spawned children */
     char *orig_rsp; /* the rsp one should use when sync successfully */
