@@ -35,6 +35,8 @@
 typedef cpuset_t cpu_set_t;
 #endif
 
+extern local_state default_worker_local_state;
+
 static local_state *worker_local_init(local_state *l, global_state *g) {
     l->shadow_stack = (__cilkrts_stack_frame **)calloc(
         g->options.deqdepth, sizeof(struct __cilkrts_stack_frame *));
@@ -89,16 +91,24 @@ static void workers_init(global_state *g) {
 
 __cilkrts_worker *__cilkrts_init_tls_worker(worker_id i, global_state *g) {
     cilkrts_alert(BOOT, NULL, "(workers_init) Initializing worker %u", i);
-    size_t alignment = 2 * __alignof__(__cilkrts_worker);
-    void *mem = cilk_aligned_alloc(
-        alignment, round_size_to_alignment(alignment, sizeof(__cilkrts_worker) +
-                                                          sizeof(local_state)));
-    __cilkrts_worker *w = (__cilkrts_worker *)mem;
+    __cilkrts_worker *w;
+    if (i == 0) {
+        // Use default_worker structure for worker 0.
+        w = &default_worker;
+        w->l = worker_local_init(&default_worker_local_state, g);
+    } else {
+        size_t alignment = 2 * __alignof__(__cilkrts_worker);
+        void *mem = cilk_aligned_alloc(
+            alignment,
+            round_size_to_alignment(alignment, sizeof(__cilkrts_worker) +
+                                                   sizeof(local_state)));
+        w = (__cilkrts_worker *)mem;
+        w->l = worker_local_init(mem + sizeof(__cilkrts_worker), g);
+    }
     w->self = i;
     w->extension = NULL;
     w->ext_stack = NULL;
     w->g = g;
-    w->l = worker_local_init(mem + sizeof(__cilkrts_worker), g);
 
     w->ltq_limit = w->l->shadow_stack + g->options.deqdepth;
     g->workers[i] = w;
@@ -106,7 +116,9 @@ __cilkrts_worker *__cilkrts_init_tls_worker(worker_id i, global_state *g) {
     atomic_store_explicit(&w->tail, init, memory_order_relaxed);
     atomic_store_explicit(&w->head, init, memory_order_relaxed);
     atomic_store_explicit(&w->exc, init, memory_order_relaxed);
-    w->hyper_table = NULL;
+    if (i != 0) {
+        w->hyper_table = NULL;
+    }
     // initialize internal malloc first
     cilk_internal_malloc_per_worker_init(w);
     // zero-initialize the worker's fiber pool.
@@ -658,7 +670,8 @@ static void workers_deinit(global_state *g) {
         free(w->l->shadow_stack);
         w->l->shadow_stack = NULL;
         w->l = NULL;
-        free(w);
+        if (i != 0)
+            free(w);
     }
 
     /* TODO: Export initial reducer map */

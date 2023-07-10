@@ -165,7 +165,7 @@ void __cilkrts_sync(__cilkrts_stack_frame *sf) {
 static inline __cilkrts_worker *get_worker_or_default(void) {
     __cilkrts_worker *w = __cilkrts_get_tls_worker();
     if (NULL == w)
-        w = default_cilkrts->workers[0];
+        w = &default_worker;
     return w;
 }
 
