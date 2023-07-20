@@ -7,29 +7,33 @@ if (CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR OR CHEETAH_STANDALONE_BUI
   project(Cheetah CXX C)
   set(CHEETAH_STANDALONE_BUILD TRUE)
   set_property(GLOBAL PROPERTY USE_FOLDERS ON)
-
-  set(PACKAGE_NAME Cheetah)
-  set(PACKAGE_VERSION 14.0.6)
-  set(PACKAGE_STRING "${PACKAGE_NAME} ${PACKAGE_VERSION}")
-  set(PACKAGE_BUGREPORT "https://github.com/OpenCilk/cheetah/issues/")
 endif()
 
-set(LLVM_COMMON_CMAKE_UTILS "${CMAKE_CURRENT_SOURCE_DIR}/../cmake")
+set(LLVM_COMMON_CMAKE_UTILS_DEFAULT "${CMAKE_CURRENT_SOURCE_DIR}/../cmake")
+set(LLVM_COMMON_CMAKE_UTILS "${LLVM_COMMON_CMAKE_UTILS_DEFAULT}" CACHE PATH "Path to LLVM common cmake utilities")
 
-# Add path for custom cheetah modules.
-list(INSERT CMAKE_MODULE_PATH 0
-  "${CMAKE_CURRENT_SOURCE_DIR}/cmake"
-  "${CMAKE_CURRENT_SOURCE_DIR}/cmake/Modules"
-  "${LLVM_COMMON_CMAKE_UTILS}"
-  "${LLVM_COMMON_CMAKE_UTILS}/Modules"
+if (EXISTS "${LLVM_COMMON_CMAKE_UTILS}")
+  # Add path for custom cheetah modules.
+  list(INSERT CMAKE_MODULE_PATH 0
+    "${CMAKE_CURRENT_SOURCE_DIR}/cmake"
+    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/Modules"
+    "${LLVM_COMMON_CMAKE_UTILS}"
+    "${LLVM_COMMON_CMAKE_UTILS}/Modules"
   )
+else()
+  message(WARNING "Using local copy of LLVM common cmake utilities. "
+    "You can override this behavior path by adding "
+    "`-DLLVM_COMMON_CMAKE_UTILS=<path_to_llvm_cmake>` to your CMake invocation "
+    "where `<path_to_llvm_cmake>` is the path to the `cmake` directory in "
+    "the `opencilk-project` repo.")
+  # Add path for custom cheetah modules and local copy of LLVM common modules.
+  list(INSERT CMAKE_MODULE_PATH 0
+    "${CMAKE_CURRENT_SOURCE_DIR}/cmake"
+    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/Modules"
+    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/LLVMCommonModules"
+  )
+endif()
 
-# # Require out of source build.
-# include(MacroEnsureOutOfSourceBuild)
-# MACRO_ENSURE_OUT_OF_SOURCE_BUILD(
-#   "${PROJECT_NAME} requires an out of source build. Please create a separate
-#  build directory and run 'cmake /path/to/${PROJECT_NAME} [options]' there."
-#   )
 if(CMAKE_CONFIGURATION_TYPES)
   set(CMAKE_CFG_RESOLVED_INTDIR "${CMAKE_CFG_INTDIR}/")
 else()
