@@ -28,6 +28,9 @@ union cilk_mutex {
 };
 #endif
 
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wthread-safety-analysis"
+
 static inline void cilk_mutex_init(cilk_mutex *lock) {
 #if USE_SPINLOCK
     int ret = pthread_spin_init(&(lock->posix), PTHREAD_PROCESS_PRIVATE);
@@ -72,6 +75,8 @@ static inline int cilk_mutex_try(cilk_mutex *lock) {
     }
 #endif
 }
+
+#pragma clang diagnostic pop
 
 static inline void cilk_mutex_destroy(cilk_mutex *lock) {
 #if USE_SPINLOCK
