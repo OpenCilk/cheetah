@@ -33,6 +33,8 @@ bool __cilkrts_need_to_cilkify = true;
 
 __thread __cilkrts_worker *__cilkrts_tls_worker = NULL;
 
+__thread __cilkrts_stack_frame *__cilkrts_current_stack_frame = NULL;
+
 // ==============================================
 // Misc. helper functions
 // ==============================================
@@ -136,7 +138,7 @@ static void setup_for_execution(__cilkrts_worker *w, Closure *t) {
     atomic_store_explicit(&w->tail, init, memory_order_release);
 
     /* push the first frame on the current_stack_frame */
-    fh->current_stack_frame = t->frame;
+    __cilkrts_current_stack_frame = t->frame;
 }
 
 // ANGE: When this is called, either a) a worker is about to pass a sync (though
@@ -178,7 +180,7 @@ static void setup_for_sync(__cilkrts_worker *w, worker_id self, Closure *t) {
     struct fiber_header *fh = get_header_from_fiber(t->fiber);
     fh->worker = w;
 
-    CILK_ASSERT_POINTER_EQUAL(w, fh->current_stack_frame, t->frame);
+    CILK_ASSERT_POINTER_EQUAL(w, __cilkrts_current_stack_frame, t->frame);
 
     SP(t->frame) = (void *)t->orig_rsp;
     if (USE_EXTENSION) {
@@ -429,9 +431,8 @@ static Closure *Closure_return(__cilkrts_worker *const w, worker_id self,
     } else {
         // We are leftmost, pass stack/fiber up to parent.
         // Thus, no stack/fiber to free.
-        CILK_ASSERT_POINTER_EQUAL(
-            w, parent->frame,
-            get_header_from_fiber(child->fiber)->current_stack_frame);
+        CILK_ASSERT_POINTER_EQUAL(w, parent->frame,
+                                  __cilkrts_current_stack_frame);
         parent->fiber_child = child->fiber;
         if (USE_EXTENSION) {
             parent->ext_fiber_child = child->ext_fiber;

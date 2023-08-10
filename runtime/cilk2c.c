@@ -143,12 +143,10 @@ void __cilkrts_cleanup_fiber(__cilkrts_stack_frame *sf, int32_t sel) {
 
 void __cilkrts_sync(__cilkrts_stack_frame *sf) {
 
-    struct fiber_header *fh = get_this_fiber_header();
-    __cilkrts_worker *w = fh->worker;
-    CILK_ASSERT(w, w == __cilkrts_get_tls_worker());
+    __cilkrts_worker *w = __cilkrts_get_tls_worker();
 
     CILK_ASSERT(w, CHECK_CILK_FRAME_MAGIC(w->g, sf));
-    CILK_ASSERT(w, sf == fh->current_stack_frame);
+    CILK_ASSERT(w, sf == __cilkrts_get_current_stack_frame());
 
     if (Cilk_sync(w, sf) == SYNC_READY) {
         // The Cilk_sync restores the original rsp stored in sf->ctx

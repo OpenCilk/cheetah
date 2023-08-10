@@ -191,7 +191,7 @@ _Unwind_Reason_Code __cilk_personality_internal(
 
     struct fiber_header *fh = get_this_fiber_header();
     __cilkrts_worker *w = __cilkrts_get_tls_worker();
-    __cilkrts_stack_frame *sf = fh->current_stack_frame;
+    __cilkrts_stack_frame *sf = __cilkrts_get_current_stack_frame();
     fh->worker = w;
 
     if (actions & _UA_SEARCH_PHASE) {
