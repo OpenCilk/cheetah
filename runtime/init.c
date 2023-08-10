@@ -609,8 +609,6 @@ static void global_state_deinit(global_state *g) {
     g->index_to_worker = NULL;
     free(g->worker_to_index);
     g->worker_to_index = NULL;
-    free(g->id_manager); /* XXX Should export this back to global */
-    g->id_manager = NULL;
     free(g);
 }
 

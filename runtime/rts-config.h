@@ -55,7 +55,6 @@
 #define DEFAULT_DEQ_DEPTH 1024
 #define LG_STACK_SIZE 20 // 1 MBytes
 #define DEFAULT_FIBER_POOL_CAP 8  // initial per-worker fiber pool capacity
-#define DEFAULT_REDUCER_LIMIT 1024
 
 #define MAX_CALLBACKS 32 // Maximum number of init or exit callbacks
 

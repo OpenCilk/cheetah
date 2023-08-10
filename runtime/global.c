@@ -177,8 +177,6 @@ global_state *global_state_init(int argc, char *argv[]) {
     cilk_fiber_pool_global_init(g);
     cilk_global_sched_stats_init(&(g->stats));
 
-    g->id_manager = NULL;
-
     return g;
 }
 

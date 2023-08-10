@@ -20,14 +20,12 @@
 extern unsigned cilkg_nproc;
 
 struct __cilkrts_worker;
-struct reducer_id_manager;
 struct Closure;
 
 // clang-format off
 #define DEFAULT_OPTIONS                                            \
     {                                                              \
         DEFAULT_NPROC,          /* num of workers to create */     \
-        DEFAULT_REDUCER_LIMIT,  /* num of simultaneous reducers */ \
         DEFAULT_DEQ_DEPTH,      /* num of entries in deque */      \
         DEFAULT_FIBER_POOL_CAP  /* alloc_batch_size */             \
     }
@@ -35,7 +33,6 @@ struct Closure;
 
 struct rts_options {
     unsigned int nproc;          /* can be set via env variable CILK_NWORKERS */
-    unsigned int reducer_cap;
     unsigned int deqdepth;       /* can be set via env variable CILK_DEQDEPTH */
     unsigned int fiber_pool_cap; /* can be set via env variable CILK_FIBER_POOL */
 };
@@ -109,8 +106,6 @@ struct global_state {
     pthread_cond_t disengaged_cond_var;
 
     cilk_mutex print_lock; // global lock for printing messages
-
-    struct reducer_id_manager *id_manager; /* null while Cilk is running */
 
     // This dummy worker structure is used to support lazy initialization of
     // worker structures.  In particular, the global workers array is initially
