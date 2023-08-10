@@ -68,68 +68,6 @@ static inline void fbroadcast(_Atomic uint32_t *futexp) {
     if (s == -1)
         errExit("futex-FUTEX_WAKE");
 }
-
-//=========================================================
-// Operations to control worker behavior using futexes and corresponding flags.
-//=========================================================
-
-// Called by a worker thread.  Causes the worker thread to wait on the given
-// flag-futex pair.
-static inline void worker_wait(volatile atomic_bool *flag,
-                               _Atomic uint32_t *flag_futex) {
-    while (!atomic_load_explicit(flag, memory_order_acquire)) {
-        fwait(flag_futex);
-    }
-}
-
-// Start all workers waiting on the given flag-futex pair.
-static inline void worker_start_broadcast(volatile atomic_bool *flag,
-                                          _Atomic uint32_t *flag_futex) {
-    atomic_store_explicit(flag, 1, memory_order_release);
-    fbroadcast(flag_futex);
-}
-
-// Reset the given flag-futex pair, so that workers will eventually resume
-// waiting on that flag-futex pair.
-static inline void worker_clear_start(volatile atomic_bool *flag,
-                                      _Atomic uint32_t *flag_futex) {
-    atomic_store_explicit(flag, 0, memory_order_relaxed);
-    atomic_store_explicit(flag_futex, 0, memory_order_relaxed);
-}
-#else
-//=========================================================
-// Operations to control worker behavior using pthread condition variables and
-// corresponding flags.
-//=========================================================
-
-// Called by a worker thread.  Causes the worker thread to wait on the given
-// flag and associated mutex and condition variable.
-static inline void worker_wait(volatile atomic_bool *flag,
-                               pthread_mutex_t *flag_lock,
-                               pthread_cond_t *flag_cond_var) {
-    pthread_mutex_lock(flag_lock);
-    while (!atomic_load_explicit(flag, memory_order_acquire)) {
-        pthread_cond_wait(flag_cond_var, flag_lock);
-    }
-    pthread_mutex_unlock(flag_lock);
-}
-
-// Start all workers waiting on the given flag and associated mutex and
-// condition variable.
-static inline void worker_start_broadcast(volatile atomic_bool *flag,
-                                          pthread_mutex_t *flag_lock,
-                                          pthread_cond_t *flag_cond_var) {
-    pthread_mutex_lock(flag_lock);
-    atomic_store_explicit(flag, 1, memory_order_release);
-    pthread_cond_broadcast(flag_cond_var);
-    pthread_mutex_unlock(flag_lock);
-}
-
-// Reset given flag, so that workers will eventually resume waiting on that
-// flag.
-static inline void worker_clear_start(volatile atomic_bool *start) {
-    atomic_store_explicit(start, 0, memory_order_relaxed);
-}
 #endif
 
 //=========================================================

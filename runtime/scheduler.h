@@ -11,7 +11,6 @@
 
 CHEETAH_INTERNAL void do_what_it_says_boss(__cilkrts_worker *w, Closure *t);
 
-CHEETAH_INTERNAL void __cilkrts_init_tls_variables();
 CHEETAH_INTERNAL void __cilkrts_set_tls_worker(__cilkrts_worker *w);
 
 CHEETAH_INTERNAL int Cilk_sync(__cilkrts_worker *const ws,

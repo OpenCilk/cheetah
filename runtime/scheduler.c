@@ -195,13 +195,6 @@ static void setup_for_sync(__cilkrts_worker *w, worker_id self, Closure *t) {
 // ==============================================
 // TLS related functions
 // ==============================================
-/* static pthread_key_t worker_key; */
-
-CHEETAH_INTERNAL void __cilkrts_init_tls_variables() {
-    /* int status = pthread_key_create(&worker_key, NULL); */
-    /* USE_UNUSED(status); */
-    /* CILK_ASSERT_G(status == 0); */
-}
 
 CHEETAH_INTERNAL void __cilkrts_set_tls_worker(__cilkrts_worker *w) {
     __cilkrts_tls_worker = w;
