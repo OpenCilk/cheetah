@@ -47,7 +47,6 @@ extern bool __cilkrts_use_extension;
 #define USE_EXTENSION false
 #endif
 extern __thread __cilkrts_worker *__cilkrts_tls_worker;
-CHEETAH_INTERNAL extern __thread bool is_boss_thread;
 extern bool __cilkrts_need_to_cilkify;
 
 static inline __attribute__((always_inline)) __cilkrts_worker *

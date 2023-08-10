@@ -402,6 +402,7 @@ handle_failed_steal_attempts(global_state *const rts, worker_id self,
                              unsigned int *const sentinel_count_history,
                              unsigned int *const sentinel_count_history_tail,
                              unsigned int *const recent_sentinel_count) {
+    const bool is_boss = (0 == self);
     // Threshold for number of failed steal attempts to put this thief to sleep
     // for an extended amount of time.  Must be at least SENTINEL_THRESHOLD and
     // a power of 2.
@@ -463,7 +464,7 @@ handle_failed_steal_attempts(global_state *const rts, worker_id self,
 
 #endif
 #if BOSS_THIEF
-            if (is_boss_thread) {
+            if (is_boss) {
                 if (fails % NAP_THRESHOLD == 0) {
                     // The boss thread should never disengage.  Sleep instead.
                     const struct timespec sleeptime = {

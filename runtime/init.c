@@ -394,18 +394,19 @@ void __cilkrts_internal_invoke_cilkified_root(__cilkrts_stack_frame *sf) {
 
     CILK_ASSERT_G(!__cilkrts_get_tls_worker());
 
-    if (!is_boss_thread) {
+    // Initialize the boss thread's runtime structures, if necessary.
+    static bool boss_initialized = false;
+    if (!boss_initialized) {
         __cilkrts_worker *w0 = g->workers[0];
 #if BOSS_THIEF
         cilk_fiber_pool_per_worker_init(w0);
-        // rts_srand(g->workers[0], (0 + 1) * 162347);
         w0->l->rand_next = 162347;
 #endif
         if (USE_EXTENSION) {
             g->root_closure->ext_fiber =
                 cilk_fiber_allocate(w0, get_stack_size());
         }
-        is_boss_thread = true;
+        boss_initialized = true;
     }
 
     __cilkrts_need_to_cilkify = false;
@@ -419,12 +420,13 @@ void __cilkrts_internal_invoke_cilkified_root(__cilkrts_stack_frame *sf) {
     w = g->workers[g->exiting_worker];
 #endif
     __cilkrts_tls_worker = w;
+    Closure *root_closure = g->root_closure;
     if (USE_EXTENSION) {
         // Initialize sf->extension, to appease the later call to
         // setup_for_execution.
         sf->extension = w->extension;
         // Initialize worker->ext_stack.
-        w->ext_stack = sysdep_get_stack_start(g->root_closure->ext_fiber);
+        w->ext_stack = sysdep_get_stack_start(root_closure->ext_fiber);
     }
     CILK_START_TIMING(w, INTERVAL_CILKIFY_ENTER);
 
@@ -437,7 +439,7 @@ void __cilkrts_internal_invoke_cilkified_root(__cilkrts_stack_frame *sf) {
     // Setup the stack pointer to point at the root closure's fiber.
     g->orig_rsp = SP(sf);
     void *new_rsp =
-        (void *)sysdep_reset_stack_for_resume(g->root_closure->fiber, sf);
+        (void *)sysdep_reset_stack_for_resume(root_closure->fiber, sf);
     USE_UNUSED(new_rsp);
     CILK_ASSERT_G(SP(sf) == new_rsp);
 
@@ -447,15 +449,19 @@ void __cilkrts_internal_invoke_cilkified_root(__cilkrts_stack_frame *sf) {
     __cilkrts_set_stolen(sf);
 
     // Associate sf with this root closure
-    Closure_clear_frame(g->root_closure);
-    Closure_set_frame(g->workers[0], g->root_closure, sf);
+    Closure_clear_frame(root_closure);
+    Closure_set_frame(w, root_closure, sf);
 
     // Now kick off execution of the Cilkified region by setting appropriate
     // flags.
 
     /* reset_disengaged_var(g); */
-    CILK_ASSERT_G(!atomic_load_explicit(&g->cilkified, memory_order_relaxed) &&
-                  "OpenCilk runtime already executing a Cilk computation.");
+    if (__builtin_expect(
+            atomic_load_explicit(&g->cilkified, memory_order_relaxed), false)) {
+        cilkrts_bug(
+            NULL,
+            "ERROR: OpenCilk runtime already executing a Cilk computation.\n");
+    }
     set_cilkified(g);
 
     // Set g->done = 0, so Cilk workers will continue trying to steal.
@@ -476,9 +482,8 @@ void __cilkrts_internal_invoke_cilkified_root(__cilkrts_stack_frame *sf) {
     }
 
     if (__builtin_setjmp(g->boss_ctx) == 0) {
-        CILK_SWITCH_TIMING(__cilkrts_tls_worker, INTERVAL_CILKIFY_ENTER,
-                           INTERVAL_SCHED);
-        do_what_it_says_boss(__cilkrts_tls_worker, g->root_closure);
+        CILK_SWITCH_TIMING(w, INTERVAL_CILKIFY_ENTER, INTERVAL_SCHED);
+        do_what_it_says_boss(w, root_closure);
     } else {
         // The stack on which
         // __cilkrts_internal_invoke_cilkified_root() was called may
@@ -501,6 +506,7 @@ void __cilkrts_internal_exit_cilkified_root(global_state *g,
     // setting done, so that other workers will properly observe the new
     // exiting_worker.
     worker_id self = w->self;
+    const bool is_boss = (0 == self);
     ReadyDeque *deques = g->deques;
 
     // Mark the computation as done.  Also "sleep" the workers: update global
@@ -512,7 +518,7 @@ void __cilkrts_internal_exit_cilkified_root(global_state *g,
     /* wake_all_disengaged(g); */
 
 #if BOSS_THIEF
-    if (self != 0) {
+    if (!is_boss) {
         w->l->exiting = true;
         __cilkrts_worker **workers = g->workers;
         __cilkrts_worker *w0 = workers[0];
@@ -524,8 +530,8 @@ void __cilkrts_internal_exit_cilkified_root(global_state *g,
 #endif
 
 #if !BOSS_THIEF
-    if (!is_boss_thread && self != atomic_load_explicit(&g->start_root_worker,
-                                                        memory_order_acquire)) {
+    if (!is_boss && self != atomic_load_explicit(&g->start_root_worker,
+                                                 memory_order_acquire)) {
         // If a thread other than the boss thread finishes the cilkified region,
         // make sure that the previous root worker is awake, so that it can
         // become a thief and this worker can become the new root worker.
@@ -552,7 +558,7 @@ void __cilkrts_internal_exit_cilkified_root(global_state *g,
     sf->flags = 0;
 
     CILK_STOP_TIMING(w, INTERVAL_CILKIFY_EXIT);
-    if (is_boss_thread) {
+    if (is_boss) {
         // We finished the computation on the boss thread.  No need to jump to
         // the runtime in this case; just return normally.
         local_state *l = w->l;

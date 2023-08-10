@@ -32,7 +32,6 @@ bool __cilkrts_use_extension = false;
 bool __cilkrts_need_to_cilkify = true;
 
 __thread __cilkrts_worker *__cilkrts_tls_worker = NULL;
-CHEETAH_INTERNAL __thread bool is_boss_thread = false;
 
 // ==============================================
 // Misc. helper functions
@@ -1393,7 +1392,7 @@ void worker_scheduler(__cilkrts_worker *w) {
     worker_change_state(w, WORKER_SCHED);
     global_state *rts = w->g;
     worker_id self = w->self;
-    const bool is_boss = is_boss_thread;
+    const bool is_boss = (0 == self);
 
     // Get this worker's local_state pointer, to avoid rereading it
     // unnecessarily during the work-stealing loop.  This optimization helps
@@ -1425,7 +1424,9 @@ void worker_scheduler(__cilkrts_worker *w) {
     while (!atomic_load_explicit(&rts->done, memory_order_acquire)) {
         /* A worker entering the steal loop must have saved its reducer map into
            the frame to which it belongs. */
-        CILK_ASSERT(w, !w->hyper_table);
+        CILK_ASSERT(w, !w->hyper_table ||
+                           (is_boss && atomic_load_explicit(
+                                           &rts->done, memory_order_acquire)));
 
         CILK_STOP_TIMING(w, INTERVAL_SCHED);
 
