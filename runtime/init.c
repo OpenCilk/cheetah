@@ -96,6 +96,7 @@ __cilkrts_worker *__cilkrts_init_tls_worker(worker_id i, global_state *g) {
         // Use default_worker structure for worker 0.
         w = &default_worker;
         w->l = worker_local_init(&default_worker_local_state, g);
+        __cilkrts_tls_worker = w;
     } else {
         size_t alignment = 2 * __alignof__(__cilkrts_worker);
         void *mem = cilk_aligned_alloc(
@@ -358,7 +359,6 @@ static inline __attribute__((noinline)) void boss_wait_helper(void) {
 #if !BOSS_THIEF
     worker_id self = __cilkrts_tls_worker->self;
 #endif
-    __cilkrts_tls_worker = NULL;
 
 #if !BOSS_THIEF
     // Wake up the worker the boss was impersonating, to let it take
@@ -392,8 +392,6 @@ static inline __attribute__((noinline)) void boss_wait_helper(void) {
 void __cilkrts_internal_invoke_cilkified_root(__cilkrts_stack_frame *sf) {
     global_state *g = default_cilkrts;
 
-    CILK_ASSERT_G(!__cilkrts_get_tls_worker());
-
     // Initialize the boss thread's runtime structures, if necessary.
     static bool boss_initialized = false;
     if (!boss_initialized) {
@@ -419,7 +417,6 @@ void __cilkrts_internal_invoke_cilkified_root(__cilkrts_stack_frame *sf) {
 #else
     w = g->workers[g->exiting_worker];
 #endif
-    __cilkrts_tls_worker = w;
     Closure *root_closure = g->root_closure;
     if (USE_EXTENSION) {
         // Initialize sf->extension, to appease the later call to
@@ -564,7 +561,6 @@ void __cilkrts_internal_exit_cilkified_root(global_state *g,
         local_state *l = w->l;
         atomic_store_explicit(&g->cilkified, 0, memory_order_relaxed);
         l->state = WORKER_IDLE;
-        __cilkrts_tls_worker = NULL;
         __cilkrts_need_to_cilkify = true;
 
         // Restore the boss's original rsp, so the boss completes the Cilk
