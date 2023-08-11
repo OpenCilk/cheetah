@@ -381,7 +381,7 @@ static inline __attribute__((noinline)) void boss_wait_helper(void) {
 
     // Restore the boss's original rsp, so the boss completes the Cilk
     // function on its original stack.
-    __cilkrts_current_stack_frame = sf;
+    /* __cilkrts_current_stack_frame = sf; */
     SP(sf) = g->orig_rsp;
     sysdep_restore_fp_state(sf);
     sanitizer_start_switch_fiber(NULL);

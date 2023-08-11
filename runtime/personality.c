@@ -189,9 +189,11 @@ _Unwind_Reason_Code __cilk_personality_internal(
         return std_lib_personality(version, actions, exception_class, ue_header,
                                    context);
 
-    struct fiber_header *fh = get_this_fiber_header();
+    /* struct fiber_header *fh = get_this_fiber_header(); */
+    struct fiber_header *fh = __cilkrts_current_fls;
     __cilkrts_worker *w = __cilkrts_get_tls_worker();
-    __cilkrts_stack_frame *sf = __cilkrts_get_current_stack_frame();
+    /* __cilkrts_stack_frame *sf = __cilkrts_get_current_stack_frame(); */
+    __cilkrts_stack_frame *sf = fh->current_stack_frame;
     fh->worker = w;
 
     if (actions & _UA_SEARCH_PHASE) {

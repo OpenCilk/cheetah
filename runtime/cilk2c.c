@@ -146,7 +146,8 @@ void __cilkrts_sync(__cilkrts_stack_frame *sf) {
     __cilkrts_worker *w = __cilkrts_get_tls_worker();
 
     CILK_ASSERT(w, CHECK_CILK_FRAME_MAGIC(w->g, sf));
-    CILK_ASSERT(w, sf == __cilkrts_get_current_stack_frame());
+    /* CILK_ASSERT(w, sf == __cilkrts_get_current_stack_frame()); */
+    /* CILK_ASSERT_POINTER_EQUAL(w, sf, sf->fls->current_stack_frame); */
 
     if (Cilk_sync(w, sf) == SYNC_READY) {
         // The Cilk_sync restores the original rsp stored in sf->ctx

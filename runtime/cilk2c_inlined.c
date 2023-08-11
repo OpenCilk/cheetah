@@ -125,8 +125,12 @@ __cilkrts_enter_frame(__cilkrts_stack_frame *sf) {
     cilkrts_alert(CFRAME, w, "__cilkrts_enter_frame %p", (void *)sf);
 
     sf->magic = frame_magic;
-    sf->call_parent = __cilkrts_get_current_stack_frame();
-    __cilkrts_current_stack_frame = sf;
+    struct fiber_header *fh = __cilkrts_current_fls;
+    sf->fls = fh;
+    sf->call_parent = fh->current_stack_frame;
+    fh->current_stack_frame = sf;
+    /* sf->call_parent = __cilkrts_get_current_stack_frame(); */
+    /* __cilkrts_current_stack_frame = sf; */
     // WHEN_CILK_DEBUG(sf->magic = CILK_STACKFRAME_MAGIC);
 }
 
@@ -141,8 +145,12 @@ __cilkrts_enter_frame_helper(__cilkrts_stack_frame *sf) {
 
     sf->flags = 0;
     sf->magic = frame_magic;
-    sf->call_parent = __cilkrts_get_current_stack_frame();
-    __cilkrts_current_stack_frame = sf;
+    struct fiber_header *fh = __cilkrts_current_fls;
+    sf->fls = fh;
+    sf->call_parent = fh->current_stack_frame;
+    fh->current_stack_frame = sf;
+    /* sf->call_parent = __cilkrts_get_current_stack_frame(); */
+    /* __cilkrts_current_stack_frame = sf; */
 }
 
 __attribute__((always_inline)) int
@@ -232,7 +240,8 @@ __cilkrts_leave_frame(__cilkrts_stack_frame *sf) {
     // Pop this frame off the cactus stack.  This logic used to be in
     // __cilkrts_pop_frame, but has been manually inlined to avoid reloading the
     // worker unnecessarily.
-    __cilkrts_current_stack_frame = parent;
+    /* __cilkrts_current_stack_frame = parent; */
+    sf->fls->current_stack_frame = parent;
     sf->call_parent = NULL;
 
     // Check if sf is the final stack frame, and if so, terminate the Cilkified
@@ -275,7 +284,8 @@ __cilkrts_leave_frame_helper(__cilkrts_stack_frame *sf) {
     // __cilkrts_pop_frame, but has been manually inlined to avoid reloading the
     // worker unnecessarily.
     __cilkrts_stack_frame *parent = sf->call_parent;
-    __cilkrts_current_stack_frame = parent;
+    sf->fls->current_stack_frame = parent;
+    /* __cilkrts_current_stack_frame = parent; */
     if (USE_EXTENSION) {
         __cilkrts_extend_return_from_spawn(w, &w->extension);
         w->extension = parent->extension;
@@ -319,7 +329,8 @@ void __cilkrts_enter_landingpad(__cilkrts_stack_frame *sf, int32_t sel) {
     if (__cilkrts_need_to_cilkify)
         return;
 
-    __cilkrts_current_stack_frame = sf;
+    /* __cilkrts_current_stack_frame = sf; */
+    sf->fls->current_stack_frame = sf;
 
     // Don't do anything special during cleanups.
     if (sel == 0)
@@ -344,7 +355,8 @@ void __cilkrts_pause_frame(__cilkrts_stack_frame *sf, char *exn) {
     // Pop this frame off the cactus stack.  This logic used to be in
     // __cilkrts_pop_frame, but has been manually inlined to avoid reloading the
     // worker unnecessarily.
-    __cilkrts_current_stack_frame = parent;
+    /* __cilkrts_current_stack_frame = parent; */
+    sf->fls->current_stack_frame = parent;
     sf->call_parent = NULL;
 
     // A __cilkrts_pause_frame may be reached before the spawn-helper frame has

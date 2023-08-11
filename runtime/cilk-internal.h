@@ -12,6 +12,7 @@ extern "C" {
 
 #include "debug.h"
 #include "fiber.h"
+#include "fiber-header.h"
 #include "frame.h"
 #include "internal-malloc.h"
 #include "jmpbuf.h"
@@ -47,7 +48,8 @@ extern bool __cilkrts_use_extension;
 #define USE_EXTENSION false
 #endif
 extern __thread __cilkrts_worker *__cilkrts_tls_worker;
-extern __thread __cilkrts_stack_frame *__cilkrts_current_stack_frame;
+/* extern __thread __cilkrts_stack_frame *__cilkrts_current_stack_frame; */
+extern __thread struct fiber_header *__cilkrts_current_fls;
 extern bool __cilkrts_need_to_cilkify;
 
 static inline __attribute__((always_inline)) __cilkrts_worker *
@@ -55,10 +57,10 @@ __cilkrts_get_tls_worker(void) {
     return __cilkrts_tls_worker;
 }
 
-static inline __attribute__((always_inline)) __cilkrts_stack_frame *
-__cilkrts_get_current_stack_frame(void) {
-    return __cilkrts_current_stack_frame;
-}
+/* static inline __attribute__((always_inline)) __cilkrts_stack_frame * */
+/* __cilkrts_get_current_stack_frame(void) { */
+/*     return __cilkrts_current_stack_frame; */
+/* } */
 
 static inline __attribute__((always_inline)) struct fiber_header *
 get_this_fiber_header(void) {
