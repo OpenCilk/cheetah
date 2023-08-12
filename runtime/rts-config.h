@@ -54,7 +54,8 @@
 #define DEFAULT_NPROC 0 // 0 for # of cores available
 #define DEFAULT_DEQ_DEPTH 1024
 #define LG_STACK_SIZE 20 // 1 MBytes
-#define DEFAULT_FIBER_POOL_CAP 8  // initial per-worker fiber pool capacity
+#define DEFAULT_STACK_SIZE (1U << LG_STACK_SIZE) // 1 MBytes
+#define DEFAULT_FIBER_POOL_CAP 8 // initial per-worker fiber pool capacity
 
 #define MAX_CALLBACKS 32 // Maximum number of init or exit callbacks
 

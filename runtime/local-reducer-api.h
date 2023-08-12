@@ -1,3 +1,6 @@
+#ifndef _LOCAL_REDUCER_API_H
+#define _LOCAL_REDUCER_API_H
+
 #include "local-hypertable.h"
 
 static inline __cilkrts_worker *get_worker_or_default(void) {
@@ -14,3 +17,10 @@ get_local_hyper_table(__cilkrts_worker *w) {
     }
     return w->hyper_table;
 }
+
+__attribute__((always_inline))
+static inline struct local_hyper_table *get_hyper_table() {
+    return get_local_hyper_table(__cilkrts_get_tls_worker());
+}
+
+#endif // _LOCAL_REDUCER_API_H

@@ -289,7 +289,6 @@ void cilk_fiber_deallocate(__cilkrts_worker *w, struct cilk_fiber *fiber) {
     cilkrts_alert(FIBER, w, "Deallocate fiber %p [%p--%p]", (void *)fiber,
                   (void *)fiber->stack_low, (void *)fiber->stack_high);
     if (DEBUG_ENABLED_STATIC(FIBER))
-        /* CILK_ASSERT(w, !in_fiber(fiber, __cilkrts_current_stack_frame)); */
         CILK_ASSERT(
             w, !in_fiber(fiber,
                          get_header_from_fiber(fiber)->current_stack_frame));

@@ -1,3 +1,4 @@
+#include "debug.h"
 #include <assert.h>
 #include <pthread.h>
 #include <stdatomic.h>
@@ -28,13 +29,27 @@
 #include "worker_coord.h"
 #include "worker_sleep.h"
 
+// ==============================================
+// Global and thread-local variables.
+// ==============================================
+
+// Boolean tracking whether the Cilk program is using an extension, e.g.,
+// pedigrees.
 bool __cilkrts_use_extension = false;
+
+// Boolean tracking whether the execution is currently in a cilkified region.
 bool __cilkrts_need_to_cilkify = true;
 
+// TLS pointer to the current worker structure.
 __thread __cilkrts_worker *__cilkrts_tls_worker = NULL;
 
-/* __thread __cilkrts_stack_frame *__cilkrts_current_stack_frame = NULL; */
-__thread struct fiber_header *__cilkrts_current_fls = NULL;
+// TLS pointer to the current fiber header.
+//
+// Although we could store the current fiber header in the worker, the code on
+// the work needs to access the current fiber header more frequently than the
+// worker itself.  Thus, it's notably faster to store a pointer to the current
+// fiber header itself in TLS.
+__thread struct fiber_header *__cilkrts_current_fh = NULL;
 
 // ==============================================
 // Misc. helper functions
@@ -106,8 +121,9 @@ static void decrement_exception_pointer(__cilkrts_worker *const w,
 
 static void reset_exception_pointer(__cilkrts_worker *const w, worker_id self, Closure *cl) {
     Closure_assert_ownership(w, self, cl);
-    CILK_ASSERT(w, (cl->frame == NULL) ||
-                       (get_header_from_fiber(cl->fiber)->worker == w));
+    /* CILK_ASSERT(w, (cl->frame == NULL) || */
+    /*                    (get_header_from_fiber(cl->fiber)->worker == w)); */
+    /* CILK_ASSERT(w, (cl->frame == NULL) || (cl->frame->worker == w)); */
     atomic_store_explicit(&w->exc,
                           atomic_load_explicit(&w->head, memory_order_relaxed),
                           memory_order_release);
@@ -131,6 +147,7 @@ static void setup_for_execution(__cilkrts_worker *w, Closure *t) {
     cilkrts_alert(SCHED, w, "(setup_for_execution) closure %p", (void *)t);
     struct fiber_header *fh = get_header_from_fiber(t->fiber);
     fh->worker = w;
+    /* w->fh = fh; */
     Closure_set_status(w, t, CLOSURE_RUNNING);
 
     __cilkrts_stack_frame **init = w->l->shadow_stack;
@@ -139,9 +156,14 @@ static void setup_for_execution(__cilkrts_worker *w, Closure *t) {
     atomic_store_explicit(&w->tail, init, memory_order_release);
 
     /* push the first frame on the current_stack_frame */
-    /* __cilkrts_current_stack_frame = t->frame; */
-    fh->current_stack_frame = t->frame;
-    __cilkrts_current_fls = fh;
+    __cilkrts_stack_frame *sf = t->frame;
+
+    fh->current_stack_frame = sf;
+    sf->fh = fh;
+    __cilkrts_current_fh = fh;
+
+    /* w->current_stack_frame = sf; */
+    /* sf->worker = w; */
 }
 
 // ANGE: When this is called, either a) a worker is about to pass a sync (though
@@ -180,12 +202,17 @@ static void setup_for_sync(__cilkrts_worker *w, worker_id self, Closure *t) {
     //         "(setup_for_sync) set t %p and t->fiber %p", (void *)t,
     //         (void *)t->fiber);
     __cilkrts_set_synced(t->frame);
-    struct fiber_header *fh = get_header_from_fiber(t->fiber);
-    __cilkrts_current_fls = fh;
-    fh->worker = w;
 
-    /* CILK_ASSERT_POINTER_EQUAL(w, __cilkrts_current_stack_frame, t->frame); */
+    struct fiber_header *fh = get_header_from_fiber(t->fiber);
+    __cilkrts_current_fh = fh;
+    t->frame->fh = fh;
+    fh->worker = w;
+    /* w->fh = fh; */
     CILK_ASSERT_POINTER_EQUAL(w, fh->current_stack_frame, t->frame);
+
+    /* __cilkrts_stack_frame *sf = t->frame; */
+    /* sf->worker = w; */
+    /* w->current_stack_frame = sf; */
 
     SP(t->frame) = (void *)t->orig_rsp;
     if (USE_EXTENSION) {
@@ -436,11 +463,10 @@ static Closure *Closure_return(__cilkrts_worker *const w, worker_id self,
     } else {
         // We are leftmost, pass stack/fiber up to parent.
         // Thus, no stack/fiber to free.
-        /* CILK_ASSERT_POINTER_EQUAL(w, parent->frame, */
-        /*                           __cilkrts_current_stack_frame); */
         CILK_ASSERT_POINTER_EQUAL(
             w, parent->frame,
             get_header_from_fiber(child->fiber)->current_stack_frame);
+        /* CILK_ASSERT_POINTER_EQUAL(w, parent->frame, w->current_stack_frame); */
         parent->fiber_child = child->fiber;
         if (USE_EXTENSION) {
             parent->ext_fiber_child = child->ext_fiber;
@@ -537,10 +563,13 @@ static Closure *return_value(__cilkrts_worker *const w, worker_id self,
  *       Cilk_cilk2c_before_return, which destroys the shadow frame and
  *       return back to caller.
  */
-void Cilk_exception_handler(char *exn) {
+void Cilk_exception_handler(__cilkrts_worker *w, char *exn) {
 
     Closure *t;
-    __cilkrts_worker *w = get_this_fiber_header()->worker;
+    /* __cilkrts_worker *w = get_this_fiber_header()->worker; */
+    /* __cilkrts_worker *w = __cilkrts_tls_worker; */
+    /* __cilkrts_worker *w = sf->fh->worker; */
+    /* CILK_ASSERT_POINTER_EQUAL(w, w, __cilkrts_tls_worker); */
     worker_id self = w->self;
     ReadyDeque *deques = w->g->deques;
 
@@ -1222,7 +1251,7 @@ int Cilk_sync(__cilkrts_worker *const w, __cilkrts_stack_frame *frame) {
     CILK_ASSERT(w, Closure_at_top_of_stack(w, frame));
 
     // reset_closure_frame(w, t);
-    CILK_ASSERT(w, w == __cilkrts_get_tls_worker());
+    /* CILK_ASSERT(w, w == __cilkrts_get_tls_worker()); */
     CILK_ASSERT(w, t->status == CLOSURE_RUNNING);
     CILK_ASSERT(w, frame && (t->frame == frame));
     CILK_ASSERT(w, __cilkrts_stolen(frame));

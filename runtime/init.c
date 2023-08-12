@@ -95,7 +95,7 @@ __cilkrts_worker *__cilkrts_init_tls_worker(worker_id i, global_state *g) {
     if (i == 0) {
         // Use default_worker structure for worker 0.
         w = &default_worker;
-        w->l = worker_local_init(&default_worker_local_state, g);
+        *(struct local_state **)(&w->l) = worker_local_init(&default_worker_local_state, g);
         __cilkrts_tls_worker = w;
     } else {
         size_t alignment = 2 * __alignof__(__cilkrts_worker);
@@ -104,14 +104,16 @@ __cilkrts_worker *__cilkrts_init_tls_worker(worker_id i, global_state *g) {
             round_size_to_alignment(alignment, sizeof(__cilkrts_worker) +
                                                    sizeof(local_state)));
         w = (__cilkrts_worker *)mem;
-        w->l = worker_local_init(mem + sizeof(__cilkrts_worker), g);
+        *(struct local_state **)(&w->l) =
+            worker_local_init(mem + sizeof(__cilkrts_worker), g);
     }
-    w->self = i;
+    *(worker_id *)(&w->self) = i;
     w->extension = NULL;
     w->ext_stack = NULL;
-    w->g = g;
+    *(struct global_state **)(&w->g) = g;
 
-    w->ltq_limit = w->l->shadow_stack + g->options.deqdepth;
+    *(struct __cilkrts_stack_frame ***)(&w->ltq_limit) =
+        w->l->shadow_stack + g->options.deqdepth;
     g->workers[i] = w;
     __cilkrts_stack_frame **init = w->l->shadow_stack + 1;
     atomic_store_explicit(&w->tail, init, memory_order_relaxed);
@@ -276,7 +278,7 @@ global_state *__cilkrts_startup(int argc, char *argv[]) {
     // allocate the closure and fiber.
     __cilkrts_worker *w0 = g->workers[0];
     Closure *t = Closure_create(w0, NULL);
-    struct cilk_fiber *fiber = cilk_fiber_allocate(w0, get_stack_size());
+    struct cilk_fiber *fiber = cilk_fiber_allocate(w0, g->options.stacksize);
     t->fiber = fiber;
     g->root_closure = t;
 
@@ -403,7 +405,7 @@ void __cilkrts_internal_invoke_cilkified_root(__cilkrts_stack_frame *sf) {
 #endif
         if (USE_EXTENSION) {
             g->root_closure->ext_fiber =
-                cilk_fiber_allocate(w0, get_stack_size());
+                cilk_fiber_allocate(w0, g->options.stacksize);
         }
         boss_initialized = true;
     }
@@ -670,7 +672,7 @@ static void workers_deinit(global_state *g) {
         cilk_internal_malloc_per_worker_destroy(w); // internal malloc last
         free(w->l->shadow_stack);
         w->l->shadow_stack = NULL;
-        w->l = NULL;
+        *(struct local_state **)(&w->l) = NULL;
         if (i != 0)
             free(w);
     }

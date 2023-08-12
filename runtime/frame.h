@@ -22,11 +22,20 @@ struct __cilkrts_stack_frame {
     // layout of this structure.
     uint32_t magic;
 
-    struct fiber_header *fls;
+    // Pointer to the fiber header of the worker currently executing with this
+    // stack frame.
+    //
+    // This pointer is redundant with the __cilkrts_current_fh TLS variable, but
+    // accessing TLS is expensive on some systems, such as macOS.  It is
+    // therefore faster to use this variable when possible.
+    struct fiber_header *fh;
 
-    // call_parent points to the __cilkrts_stack_frame of the closest
-    // ancestor spawning function, including spawn helpers, of this frame.
-    // It forms a linked list ending at the first stolen frame.
+    /* struct __cilkrts_worker *worker; */
+
+    // call_parent points to the __cilkrts_stack_frame of the closest ancestor
+    // spawning function, including spawn helpers, of this frame.  For each
+    // worker, these pointers form a singly-linked list ending at the first
+    // __cilkrts_stack_frame.
     struct __cilkrts_stack_frame *call_parent;
 
     // Before every spawn and nontrivial sync the client function

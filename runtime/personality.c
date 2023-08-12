@@ -11,6 +11,7 @@
 #include "cilk2c.h"
 #include "closure-type.h"
 #include "closure.h"
+#include "debug.h"
 #include "fiber-header.h"
 #include "fiber.h"
 #include "frame.h"
@@ -190,11 +191,16 @@ _Unwind_Reason_Code __cilk_personality_internal(
                                    context);
 
     /* struct fiber_header *fh = get_this_fiber_header(); */
-    struct fiber_header *fh = __cilkrts_current_fls;
-    __cilkrts_worker *w = __cilkrts_get_tls_worker();
-    /* __cilkrts_stack_frame *sf = __cilkrts_get_current_stack_frame(); */
+    struct fiber_header *fh = __cilkrts_current_fh;
+    /* /\* __cilkrts_worker *w = __cilkrts_get_tls_worker(); *\/ */
+    /* /\* struct fiber_header *fh = w->fh; *\/ */
+    __cilkrts_worker *w = fh->worker;
+    CILK_ASSERT_POINTER_EQUAL(w, w, __cilkrts_get_tls_worker());
     __cilkrts_stack_frame *sf = fh->current_stack_frame;
-    fh->worker = w;
+    /* fh->worker = w; */
+
+    /* __cilkrts_worker *w = __cilkrts_get_tls_worker(); */
+    /* __cilkrts_stack_frame *sf = w->current_stack_frame; */
 
     if (actions & _UA_SEARCH_PHASE) {
         // don't do anything out of the ordinary during search phase.
@@ -211,10 +217,10 @@ _Unwind_Reason_Code __cilk_personality_internal(
 
         // after longjmping back, the worker may have changed.
         w = __cilkrts_get_tls_worker();
-        // Update the fiber header, because the execution might be using a saved
-        // throwing fiber.
-        fh = get_this_fiber_header();
-        fh->worker = w;
+        /* // Update the fiber header, because the execution might be using a saved */
+        /* // throwing fiber. */
+        /* fh = get_this_fiber_header(); */
+        /* fh->worker = w; */
         // Unset the CILK_FRAME_THROWING flag.
         sf->flags &= ~CILK_FRAME_THROWING;
 
