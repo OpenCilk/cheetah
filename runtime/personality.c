@@ -49,6 +49,7 @@ static char *get_cfa(struct _Unwind_Context *context) {
 #endif
 }
 
+// Identity method for the exception reducer.
 void init_exception_reducer(void *v) {
     struct closure_exception *ex = (struct closure_exception *)(v);
     ex->exn = NULL;
@@ -57,6 +58,7 @@ void init_exception_reducer(void *v) {
     ex->throwing_fiber = NULL;
 }
 
+// Reduce method for the exception reducer.
 void reduce_exception_reducer(void *l, void *r) {
     struct closure_exception *lex = (struct closure_exception *)(l);
     struct closure_exception *rex = (struct closure_exception *)(r);
@@ -77,25 +79,34 @@ void reduce_exception_reducer(void *l, void *r) {
     lex->throwing_fiber = rex->throwing_fiber;
 }
 
+// Get the current view of the exception-reducer state, creating a new view if
+// none exists.
 struct closure_exception *get_exception_reducer(__cilkrts_worker *w) {
     return (struct closure_exception *)internal_reducer_lookup(
         w, &exception_reducer, sizeof(exception_reducer),
         init_exception_reducer, reduce_exception_reducer);
 }
 
-struct closure_exception *get_exception_reducer_or_null(__cilkrts_worker *w) {
+// Try to get the current view of the exception-reducer state, but return NULL
+// if no view exists.
+struct closure_exception *
+get_exception_reducer_or_null(__cilkrts_worker *w) {
     void *key = (void *)(&exception_reducer);
-    struct local_hyper_table *table = get_local_hyper_table(w);
+    struct local_hyper_table *table = get_local_hyper_table_or_null(w);
+    if (NULL == table)
+        return NULL;
+
     struct bucket *b = find_hyperobject(table, (uintptr_t)key);
     if (b) {
         CILK_ASSERT(w, key == (void *)b->key);
         // Return the existing view.
         return (struct closure_exception *)(b->value.view);
     }
-    // No view was found; just return NULL.
+    // No view was found.  Don't create a new reducer view; just return NULL.
     return NULL;
 }
 
+// Destroy the current view of the exception-reducer state.
 void clear_exception_reducer(__cilkrts_worker *w,
                              struct closure_exception *exn_r) {
     CILK_ASSERT(w, exn_r->throwing_fiber == NULL);
@@ -103,6 +114,12 @@ void clear_exception_reducer(__cilkrts_worker *w,
     internal_reducer_remove(w, &exception_reducer);
 }
 
+// Perform a cilk_sync from within the personality function.  This method saves
+// exception-handling state into a new view of the exception reducer and then
+// calls __cilkrts_sync.
+//
+// This function is marked __attribute__((noinline)) to prevent the values in
+// local variables in the caller from being disrupted by the setjmp.
 __attribute__((noinline)) static void
 sync_in_personality(__cilkrts_worker *w, __cilkrts_stack_frame *sf,
                     struct _Unwind_Exception *ue_header) {
@@ -139,6 +156,8 @@ sync_in_personality(__cilkrts_worker *w, __cilkrts_stack_frame *sf,
         // particular case.
         sf->flags |= CILK_FRAME_THROWING;
         __cilkrts_sync(sf);
+    } else {
+        sanitizer_finish_switch_fiber();
     }
 }
 
@@ -160,11 +179,12 @@ uncilkify(global_state *g, __cilkrts_stack_frame *sf) {
     }
 }
 
+// Custom routine to resume handling an exception after leaving a cilkified
+// region.
 __attribute__((always_inline)) static void
 resume_from_last_frame(__cilkrts_worker *w, __cilkrts_stack_frame *sf,
                  struct _Unwind_Exception *ue_header) {
-    cilkrts_alert(CFRAME, w, "__cilkrts_leave_last_frame %p", (void *)sf);
-
+    cilkrts_alert(CFRAME, w, "resume_from_last_frame %p", (void *)sf);
     CILK_ASSERT(w, CHECK_CILK_FRAME_MAGIC(w->g, sf));
     // WHEN_CILK_DEBUG(sf->magic = ~CILK_STACKFRAME_MAGIC);
 
@@ -190,17 +210,10 @@ _Unwind_Reason_Code __cilk_personality_internal(
         return std_lib_personality(version, actions, exception_class, ue_header,
                                    context);
 
-    /* struct fiber_header *fh = get_this_fiber_header(); */
     struct fiber_header *fh = __cilkrts_current_fh;
-    /* /\* __cilkrts_worker *w = __cilkrts_get_tls_worker(); *\/ */
-    /* /\* struct fiber_header *fh = w->fh; *\/ */
     __cilkrts_worker *w = fh->worker;
     CILK_ASSERT_POINTER_EQUAL(w, w, __cilkrts_get_tls_worker());
     __cilkrts_stack_frame *sf = fh->current_stack_frame;
-    /* fh->worker = w; */
-
-    /* __cilkrts_worker *w = __cilkrts_get_tls_worker(); */
-    /* __cilkrts_stack_frame *sf = w->current_stack_frame; */
 
     if (actions & _UA_SEARCH_PHASE) {
         // don't do anything out of the ordinary during search phase.
@@ -215,16 +228,14 @@ _Unwind_Reason_Code __cilk_personality_internal(
             sync_in_personality(w, sf, ue_header);
         }
 
-        // after longjmping back, the worker may have changed.
-        w = __cilkrts_get_tls_worker();
-        /* // Update the fiber header, because the execution might be using a saved */
-        /* // throwing fiber. */
-        /* fh = get_this_fiber_header(); */
-        /* fh->worker = w; */
+        // After the cilk_sync, the worker may have changed.
+        w = get_worker_from_stack(sf);
+        CILK_ASSERT_POINTER_EQUAL(w, w, __cilkrts_get_tls_worker());
+
         // Unset the CILK_FRAME_THROWING flag.
         sf->flags &= ~CILK_FRAME_THROWING;
 
-        // get closure_exception
+        // Get the saved exception state, if it exists.
         struct closure_exception *exn_r = get_exception_reducer_or_null(w);
 
         // Check for a reraised exception, and determine whether to skip
@@ -239,6 +250,8 @@ _Unwind_Reason_Code __cilk_personality_internal(
             exn_r->reraise_cfa = NULL;
         }
 
+        // If the saved exception state contains a different exception than what
+        // this personality function is handling, raise that one instead.
         if ((exn_r != NULL) && (exn_r->exn != NULL) &&
             (exn_r->exn != (char *)ue_header)) {
 
@@ -258,13 +271,12 @@ _Unwind_Reason_Code __cilk_personality_internal(
             _Unwind_RaiseException(exn); // noreturn
         }
 
-        // Record whether this frame is detached, which indicates that
-        // it's a spawn helper.  The Cilk personality may run on this
-        // frame if it itself spawns.  If we end up rerunning the Cilk
-        // personality function on the frame after running cleanups, we
-        // want to skip doing a pop_frame and leave_frame at the end,
-        // because the cleanup will have already performed a pop_frame and
-        // pause_frame.
+        // Record whether this frame is detached, which indicates that it's a
+        // spawn helper.  The Cilk personality may run on this frame if it
+        // itself spawns.  If we end up rerunning the Cilk personality function
+        // on the frame after running cleanups, we want to skip doing a
+        // __cilkrts_leave_frame at the end, because the cleanup will have
+        // already performed a __cilkrts_pause_frame.
         bool isSpawnHelper = (sf->flags & CILK_FRAME_DETACHED);
         bool isLastFrame = (sf->flags & CILK_FRAME_LAST);
 
@@ -273,7 +285,8 @@ _Unwind_Reason_Code __cilk_personality_internal(
         _Unwind_Reason_Code cleanup_res = std_lib_personality(
             version, actions, exception_class, ue_header, context);
 
-        // if we need to continue unwinding the stack, leave_frame here
+        // If we need to continue unwinding the stack, call
+        // __cilkrts_leave_frame here.
         if ((cleanup_res == _URC_CONTINUE_UNWIND) && !isSpawnHelper &&
             !skip_leaveframe) {
 

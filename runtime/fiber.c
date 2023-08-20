@@ -206,12 +206,10 @@ void sanitizer_poison_fiber(struct cilk_fiber *fiber) {
 static void make_stack(struct cilk_fiber *f, size_t stack_size) {
     const int page_shift = cheetah_page_shift;
     const size_t page_size = 1U << page_shift;
-    CILK_ASSERT_G((stack_size & -stack_size) == stack_size &&
-                  "stack_size is not a power of 2");
 
     size_t stack_pages = (stack_size + page_size - 1) >> cheetah_page_shift;
     // Overallocate pages so we can get a stack aligned to stack_size.
-    stack_pages += stack_pages - 1 + LOW_GUARD_PAGES + HIGH_GUARD_PAGES;
+    stack_pages += LOW_GUARD_PAGES + HIGH_GUARD_PAGES;
 
     /* Stacks must be at least MIN_NUM_PAGES_PER_STACK pages,
        a count which includes two guard pages. */
@@ -235,8 +233,7 @@ static void make_stack(struct cilk_fiber *f, size_t stack_size) {
     }
     char *alloc_high = alloc_low + stack_pages * page_size;
     // Round down to the previous stack size.
-    char *stack_high =
-        (char *)((uintptr_t)(alloc_high - page_size) & -stack_size);
+    char *stack_high = alloc_high - page_size;
     char *stack_low = alloc_low + page_size;
     // mprotect guard pages.
     mprotect(alloc_low, page_size, PROT_NONE);

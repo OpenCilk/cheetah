@@ -9,8 +9,10 @@
 #include "fiber.h"
 #include "global.h"
 #include "readydeque.h"
+#include "rts-config.h"
 #include "scheduler.h"
 
+CHEETAH_INTERNAL
 struct closure_exception exception_reducer = {.exn = NULL};
 
 extern void _Unwind_Resume(struct _Unwind_Exception *);
@@ -24,7 +26,7 @@ CHEETAH_INTERNAL struct cilkrts_callbacks cilkrts_callbacks = {
 int __cilkrts_is_initialized(void) { return NULL != default_cilkrts; }
 
 int __cilkrts_running_on_workers(void) {
-    return NULL != __cilkrts_get_tls_worker();
+    return !__cilkrts_need_to_cilkify;
 }
 
 // These callback-registration methods can run before the runtime system has
@@ -59,8 +61,8 @@ int __cilkrts_atexit(void (*callback)(void)) {
 // propagated. This is called from the frame that will handle whatever exception
 // was thrown.
 void __cilkrts_check_exception_raise(__cilkrts_stack_frame *sf) {
-
-    __cilkrts_worker *w = __cilkrts_get_tls_worker();
+    __cilkrts_worker *w = get_worker_from_stack(sf);
+    CILK_ASSERT_POINTER_EQUAL(w, w, __cilkrts_get_tls_worker());
 
     struct closure_exception *exn_r = get_exception_reducer(w);
     char *exn = exn_r->exn;
@@ -80,8 +82,8 @@ void __cilkrts_check_exception_raise(__cilkrts_stack_frame *sf) {
 // Checks if there is an exception that needs to be propagated, and if so,
 // resumes unwinding with that exception.
 void __cilkrts_check_exception_resume(__cilkrts_stack_frame *sf) {
-
-    __cilkrts_worker *w = __cilkrts_get_tls_worker();
+    __cilkrts_worker *w = get_worker_from_stack(sf);
+    CILK_ASSERT_POINTER_EQUAL(w, w, __cilkrts_get_tls_worker());
 
     struct closure_exception *exn_r = get_exception_reducer(w);
     char *exn = exn_r->exn;
@@ -103,8 +105,9 @@ void __cilkrts_check_exception_resume(__cilkrts_stack_frame *sf) {
 // points at the fiber and call-stack frame containing sf before any catch
 // handlers in that frame execute.
 void __cilkrts_cleanup_fiber(__cilkrts_stack_frame *sf, int32_t sel) {
+    __cilkrts_worker *w = get_worker_from_stack(sf);
+    CILK_ASSERT_POINTER_EQUAL(w, w, __cilkrts_get_tls_worker());
 
-    __cilkrts_worker *w = __cilkrts_get_tls_worker();
     CILK_ASSERT(w, __cilkrts_synced(sf));
 
     struct closure_exception *exn_r = get_exception_reducer_or_null(w);
@@ -142,12 +145,8 @@ void __cilkrts_cleanup_fiber(__cilkrts_stack_frame *sf, int32_t sel) {
 }
 
 void __cilkrts_sync(__cilkrts_stack_frame *sf) {
-
-    /* struct fiber_header *fh = get_this_fiber_header(); */
-    /* __cilkrts_worker *w = fh->worker; */
     __cilkrts_worker *w = get_worker_from_stack(sf);
-
-    /* CILK_ASSERT_POINTER_EQUAL(w, w, __cilkrts_get_tls_worker()); */
+    CILK_ASSERT_POINTER_EQUAL(w, w, __cilkrts_get_tls_worker());
 
     CILK_ASSERT(w, CHECK_CILK_FRAME_MAGIC(w->g, sf));
 

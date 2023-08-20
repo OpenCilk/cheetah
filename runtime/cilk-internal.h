@@ -11,7 +11,6 @@ extern "C" {
 #include <cilk/cilk_api.h>
 
 #include "debug.h"
-#include "fiber.h"
 #include "fiber-header.h"
 #include "frame.h"
 #include "internal-malloc.h"
@@ -56,33 +55,14 @@ __cilkrts_get_tls_worker(void) {
     return __cilkrts_tls_worker;
 }
 
-/* static inline __attribute__((always_inline)) __cilkrts_stack_frame * */
-/* __cilkrts_get_current_stack_frame(void) { */
-/*     return __cilkrts_current_stack_frame; */
-/* } */
-
-/* static inline __attribute__((always_inline)) struct fiber_header * */
-/* get_this_fiber_header(void) { */
-/*     char *sp; */
-/*     ASM_GET_SP(sp); */
-/*     return get_fiber_header(sp); */
-/* } */
-
 static inline __attribute__((always_inline)) __cilkrts_worker *
-get_worker_from_stack(__cilkrts_stack_frame *sf) {
-    // In principle, we should be able to get the worker efficiently by calling
-    // __cilkrts_get_tls_worker().  But code-generation on many systems assumes
-    // that the thread on which a function runs never changes.  As a result, it
-    // may cache the address returned by __cilkrts_get_tls_worker() during
-    // enter_frame and load the cached value in later, even though the actual
-    // result of __cilkrts_get_tls_worker() may change between those two points.
-    // To avoid this buggy behavior, we therefore get the worker from
-    // fiber-local storage.
-    //
-    // TODO: Fix code-generation of TLS lookups on these systems.
-    /* return get_this_fiber_header()->worker; */
+get_worker_from_stack(const __cilkrts_stack_frame *sf) {
+    // Although we can get the current worker by calling
+    // __cilkrts_get_tls_worker(), that method accesses the worker via TLS,
+    // which can be slow on some systems.  This method gets the current worker
+    // from the given __cilkrts_stack_frame, which is more efficient than a TLS
+    // access on those systems.
     return sf->fh->worker;
-    /* return sf->worker; */
 }
 
 CHEETAH_INTERNAL

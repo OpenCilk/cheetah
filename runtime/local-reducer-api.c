@@ -3,16 +3,17 @@
 #include "hyperobject_base.h"
 #include "local-hypertable.h"
 #include "local-reducer-api.h"
+#include "rts-config.h"
 
 void __cilkrts_reducer_register(void *key, size_t size,
 				__cilk_identity_fn id,
 				__cilk_reduce_fn reduce) {
-    __cilkrts_worker *w = get_worker_or_default();
-    struct local_hyper_table *table = get_local_hyper_table(w);
+    struct local_hyper_table *table = get_hyper_table();
     struct bucket b = {.key = (uintptr_t)key,
                        .value = {.view = key, .reduce_fn = reduce}};
     bool success = insert_hyperobject(table, b);
-    CILK_ASSERT(w, success && "Failed to register reducer.");
+    CILK_ASSERT(get_worker_or_default(),
+                success && "Failed to register reducer.");
     (void)success;
 }
 
@@ -29,10 +30,10 @@ void __cilkrts_reducer_register_64(void *key, uint64_t size,
 }
 
 void __cilkrts_reducer_unregister(void *key) {
-    __cilkrts_worker *w = get_worker_or_default();
-    struct local_hyper_table *table = get_local_hyper_table(w);
+    struct local_hyper_table *table = get_hyper_table();
     bool success = remove_hyperobject(table, (uintptr_t)key);
-    /* CILK_ASSERT(w, success && "Failed to unregister reducer."); */
+    /* CILK_ASSERT(get_worker_or_default(), success && "Failed to unregister
+     * reducer."); */
     (void)success;
 }
 

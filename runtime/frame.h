@@ -30,8 +30,6 @@ struct __cilkrts_stack_frame {
     // therefore faster to use this variable when possible.
     struct fiber_header *fh;
 
-    /* struct __cilkrts_worker *worker; */
-
     // call_parent points to the __cilkrts_stack_frame of the closest ancestor
     // spawning function, including spawn helpers, of this frame.  For each
     // worker, these pointers form a singly-linked list ending at the first

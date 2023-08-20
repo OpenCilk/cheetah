@@ -23,18 +23,18 @@ typedef cpuset_t cpu_set_t;
 
 global_state *default_cilkrts;
 
-__cilkrts_worker default_worker = {
-    .self = 0,
-    .hyper_table = NULL,
-    .g = NULL,
-    .l = NULL,
-    .extension = NULL,
-    .ext_stack = NULL,
-    .tail = NULL,
-    .exc = NULL,
-    .head = NULL,
-    .ltq_limit = NULL
-};
+CHEETAH_INTERNAL
+__cilkrts_worker default_worker = {.self = 0,
+                                   .hyper_table = NULL,
+                                   .g = NULL,
+                                   .l = NULL,
+                                   .extension = NULL,
+                                   .ext_stack = NULL,
+                                   .tail = NULL,
+                                   .exc = NULL,
+                                   .head = NULL,
+                                   .ltq_limit = NULL};
+CHEETAH_INTERNAL
 local_state default_worker_local_state;
 
 unsigned cilkg_nproc = 0;

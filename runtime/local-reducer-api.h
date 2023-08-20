@@ -23,4 +23,9 @@ static inline struct local_hyper_table *get_hyper_table() {
     return get_local_hyper_table(__cilkrts_get_tls_worker());
 }
 
+static inline struct local_hyper_table *
+get_local_hyper_table_or_null(const __cilkrts_worker *w) {
+    return w->hyper_table;
+}
+
 #endif // _LOCAL_REDUCER_API_H

@@ -309,7 +309,7 @@ void cilk_fiber_pool_per_worker_init(__cilkrts_worker *w) {
     global_state *g = w->g;
     unsigned int bufsize = g->options.fiber_pool_cap;
     struct cilk_fiber_pool *pool = &(w->l->fiber_pool);
-    fiber_pool_init(pool, get_stack_size(), bufsize, &(g->fiber_pool),
+    fiber_pool_init(pool, g->options.stacksize, bufsize, &(g->fiber_pool),
                     0 /* private */);
     CILK_ASSERT(w, NULL != pool->fibers);
     CILK_ASSERT(w, g->fiber_pool.stack_size == pool->stack_size);

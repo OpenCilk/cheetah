@@ -22,10 +22,8 @@ struct __cilkrts_worker {
 
     // 4 byte hole on 64 bit systems
 
+    // Current hyperobject table
     struct local_hyper_table *hyper_table;
-
-    /* struct __cilkrts_stack_frame *current_stack_frame; */
-    /* struct fiber_header *fh; */
 
     // Global state of the runtime system, opaque to the client.
     struct global_state *const g;

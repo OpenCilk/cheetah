@@ -96,7 +96,7 @@ __cilkrts_worker *__cilkrts_init_tls_worker(worker_id i, global_state *g) {
         // Use default_worker structure for worker 0.
         w = &default_worker;
         *(struct local_state **)(&w->l) = worker_local_init(&default_worker_local_state, g);
-        __cilkrts_tls_worker = w;
+        __cilkrts_set_tls_worker(w);
     } else {
         size_t alignment = 2 * __alignof__(__cilkrts_worker);
         void *mem = cilk_aligned_alloc(
@@ -269,7 +269,6 @@ static void threads_init(global_state *g) {
 global_state *__cilkrts_startup(int argc, char *argv[]) {
     cilkrts_alert(BOOT, NULL, "(__cilkrts_startup) argc %d", argc);
     global_state *g = global_state_init(argc, argv);
-    /* __cilkrts_init_tls_variables(); */
     workers_init(g);
     deques_init(g);
     CILK_ASSERT_G(0 == g->exiting_worker);
@@ -343,7 +342,7 @@ static void __cilkrts_stop_workers(global_state *g) {
 
 // Block until signaled the Cilkified region is done.  Executed by the Cilkfying
 // thread.
-void wait_until_cilk_done(global_state *g) {
+static inline void wait_until_cilk_done(global_state *g) {
     wait_while_cilkified(g);
 }
 
@@ -383,7 +382,6 @@ static inline __attribute__((noinline)) void boss_wait_helper(void) {
 
     // Restore the boss's original rsp, so the boss completes the Cilk
     // function on its original stack.
-    /* __cilkrts_current_stack_frame = sf; */
     SP(sf) = g->orig_rsp;
     sysdep_restore_fp_state(sf);
     sanitizer_start_switch_fiber(NULL);
