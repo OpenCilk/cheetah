@@ -130,6 +130,13 @@ void __cilkrts_cleanup_fiber(__cilkrts_stack_frame *sf, int32_t sel) {
     // non-null.
 
     if (NULL == parent_rsp) {
+        // If parent_rsp is null, we might have unwound past the point where the
+        // Cilk personality function performed a sync.  Because we're executing
+        // a non-cleanup landing pad, execution is continuing within this frame,
+        // and we can safely free any saved throwing fiber.
+        if (throwing_fiber) {
+            cilk_fiber_deallocate_to_pool(w, throwing_fiber);
+        }
         return;
     }
 
