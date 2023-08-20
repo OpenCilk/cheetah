@@ -12,6 +12,7 @@
 #endif
 
 #include "cilk-internal.h"
+#include "debug.h"
 #include "fiber.h"
 #include "fiber-header.h"
 #include "init.h"
@@ -75,6 +76,8 @@ static AsanUnpoisonMemoryRegionFuncPtr asan_unpoison_memory_region_fn = NULL;
 __thread void *fake_stack_save = NULL;
 const __thread void *old_thread_stack = NULL;
 __thread size_t old_thread_stacksize = 0;
+__thread struct cilk_fiber *current_fiber = NULL;
+__thread bool on_fiber = false;
 
 static SanitizerStartSwitchFiberFuncPtr getStartSwitchFiberFunc() {
     SanitizerStartSwitchFiberFuncPtr fn = NULL;
@@ -155,12 +158,40 @@ void sanitizer_start_switch_fiber(struct cilk_fiber *fiber) {
     }
     if (NULL != sanitizer_start_switch_fiber_fn) {
         if (fiber) {
-            sanitizer_start_switch_fiber_fn(
-                &fake_stack_save, fiber->stack_low,
-                (size_t)(fiber->stack_high - fiber->stack_low));
+            // The worker is switching to Cilk user code.
+            if (!on_fiber) {
+                // The worker is switching from the runtime.  Save the
+                // fake_stack for this worker's default stack into
+                // fake_stack_save.
+                sanitizer_start_switch_fiber_fn(
+                    &fake_stack_save, fiber->stack_low,
+                    (size_t)(fiber->stack_high - fiber->stack_low));
+            } else {
+                // The worker is already in user code.  Save the fake_stack for
+                // the current fiber in that fiber's header.
+                sanitizer_start_switch_fiber_fn(
+                    get_header_from_fiber(current_fiber)->fake_stack_save,
+                    fiber->stack_low,
+                    (size_t)(fiber->stack_high - fiber->stack_low));
+            }
+            current_fiber = fiber;
         } else {
-            sanitizer_start_switch_fiber_fn(&fake_stack_save, old_thread_stack,
-                                            old_thread_stacksize);
+            // The worker is switching out of Cilk user code.
+            if (current_fiber) {
+                // The worker is currently in Cilk user code.  Save the
+                // fake_stack for the current fiber in that fiber's header.
+                sanitizer_start_switch_fiber_fn(
+                    &get_header_from_fiber(current_fiber)->fake_stack_save,
+                    old_thread_stack, old_thread_stacksize);
+                // Clear the current fiber.
+                current_fiber = NULL;
+            } else {
+                // The worker is already outside of Cilk user code.  Save the
+                // fake_stack for this worker's default stack into
+                // fake_stack_save.
+                sanitizer_start_switch_fiber_fn(
+                    &fake_stack_save, old_thread_stack, old_thread_stacksize);
+            }
         }
     }
 }
@@ -171,8 +202,32 @@ void sanitizer_finish_switch_fiber() {
         have_sanitizer_finish_switch_fiber_fn = true;
     }
     if (NULL != sanitizer_finish_switch_fiber_fn) {
-        sanitizer_finish_switch_fiber_fn(fake_stack_save, &old_thread_stack,
-                                         &old_thread_stacksize);
+        if (current_fiber) {
+            // The worker switched into Cilk user code.  Restore the fake_stack
+            // from the current fiber's header.
+            if (!on_fiber) {
+                // The worker switched into Cilk user code from outside.  Save
+                // the old stack's parameters in old_thread_stack and
+                // old_thread_stacksave.
+                sanitizer_finish_switch_fiber_fn(
+                    get_header_from_fiber(current_fiber)->fake_stack_save,
+                    &old_thread_stack, &old_thread_stacksize);
+                // Record that the worker is not in Cilk user code.
+                on_fiber = true;
+            } else {
+                // The worker is remaining in Cilk user code.  Don't save the
+                // old stack's parameters.
+                sanitizer_finish_switch_fiber_fn(
+                    get_header_from_fiber(current_fiber)->fake_stack_save, NULL,
+                    NULL);
+            }
+        } else {
+            // The worker switched out of Cilk user cude.  Restore the
+            // fake_stack from fake_stack_save.
+            sanitizer_finish_switch_fiber_fn(fake_stack_save, NULL, NULL);
+            // Record that the worker is no longer in Cilk user code.
+            on_fiber = false;
+        }
     }
 }
 

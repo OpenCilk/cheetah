@@ -19,6 +19,9 @@ struct fiber_header {
     // don't currently observe any performance advantage or disadvantage to
     // storing the hyper_table here.
 
+    // Pointer to AddressSanitizer's fake stack associated with this fiber, when
+    // AddressSanitizer is being used.
+    void *fake_stack_save;
 } __attribute__((aligned(CILK_CACHE_LINE)));
 
 #endif // _FIBER_HEADER_H

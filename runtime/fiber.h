@@ -131,12 +131,14 @@ static inline void init_fiber_header(const struct cilk_fiber *fiber) {
     struct fiber_header *fh = get_header_from_fiber(fiber);
     fh->worker = INVALID_WORKER;
     fh->current_stack_frame = NULL;
+    fh->fake_stack_save = NULL;
 }
 
 static inline void deinit_fiber_header(const struct cilk_fiber *fiber) {
     struct fiber_header *fh = get_header_from_fiber(fiber);
     fh->worker = INVALID_WORKER;
     fh->current_stack_frame = NULL;
+    fh->fake_stack_save = NULL;
 }
 
 CHEETAH_INTERNAL void cilk_fiber_pool_global_init(global_state *g);

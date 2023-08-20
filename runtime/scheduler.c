@@ -593,7 +593,6 @@ void Cilk_exception_handler(__cilkrts_worker *w, char *exn) {
 
         Closure_unlock(w, self, t);
 
-        sanitizer_unpoison_fiber(t->fiber);
         longjmp_to_runtime(w); // NOT returning back to user code
 
     } else { // not steal, not abort; false alarm
@@ -1198,7 +1197,16 @@ void longjmp_to_user_code(__cilkrts_worker *w, Closure *t) {
         }
     }
     CILK_SWITCH_TIMING(w, INTERVAL_SCHED, INTERVAL_WORK);
-    sanitizer_start_switch_fiber(fiber);
+#if CILK_ENABLE_ASAN_HOOKS
+    if (!__cilkrts_throwing(sf)) {
+        sanitizer_start_switch_fiber(fiber);
+    } else {
+        struct closure_exception *exn_r = get_exception_reducer_or_null(w);
+        if (exn_r) {
+            sanitizer_start_switch_fiber(exn_r->throwing_fiber);
+        }
+    }
+#endif // CILK_ENABLE_ASAN_HOOKS
     sysdep_longjmp_to_sf(sf);
 }
 
@@ -1281,7 +1289,18 @@ int Cilk_sync(__cilkrts_worker *const w, __cilkrts_stack_frame *frame) {
             t->child_ht = NULL;
             w->hyper_table = merge_two_hts(w, child_ht, w->hyper_table);
         }
-        sanitizer_start_switch_fiber(t->fiber);
+
+#if CILK_ENABLE_ASAN_HOOKS
+        sanitizer_unpoison_fiber(t->fiber);
+        if (!__cilkrts_throwing(frame)) {
+            sanitizer_start_switch_fiber(t->fiber);
+        } else {
+            struct closure_exception *exn_r = get_exception_reducer_or_null(w);
+            if (exn_r) {
+                sanitizer_start_switch_fiber(exn_r->throwing_fiber);
+            }
+        }
+#endif // CILK_ENABLE_ASAN_HOOKS
     }
 
     return res;
