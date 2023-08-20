@@ -20,16 +20,12 @@ static void bucket_init(struct bucket *b) {
     reducer_base_init(&b->value);
 }
 
-/* // Data type for indexing the hash table.  This type is used for */
-/* // hashes as well as the table's capacity. */
-/* const int32_t MIN_CAPACITY = 4; */
-/* const int32_t MIN_HT_CAPACITY = 8; */
-
 // Constant used to determine the target maximum load factor.  The
 // table will aim for a maximum load factor of
 // 1 - (1 / LOAD_FACTOR_CONSTANT).
 static const int32_t LOAD_FACTOR_CONSTANT = 16;
 // Prevent integer overflow computing load factor
+__attribute__((unused))
 static const int32_t MAX_CAPACITY = 0x7fffffff / (LOAD_FACTOR_CONSTANT - 1);
 
 static bool is_overloaded(int32_t occupancy, int32_t capacity) {
@@ -47,7 +43,7 @@ static bool is_underloaded(int32_t occupancy, int32_t capacity) {
 
 // After enough insertions and deletions have occurred, rebuild the
 // table to fix up tombstones.
-const int32_t MIN_REBUILD_OP_COUNT = 8;
+static const int32_t MIN_REBUILD_OP_COUNT = 8;
 static bool time_to_rebuild(int32_t ins_rm_count, int32_t capacity) {
     return (ins_rm_count > MIN_REBUILD_OP_COUNT) &&
            (ins_rm_count > capacity / (4 * LOAD_FACTOR_CONSTANT));
@@ -77,27 +73,8 @@ static struct bucket *bucket_array_create(int32_t array_size) {
     return buckets;
 }
 
-/* // Some random numbers for the hash. */
-/* uint64_t seed = 0xe803e76341ed6d51UL; */
-/* const uint64_t salt = 0x96b9af4f6a40de92UL; */
-
-/* static index_t hash(uintptr_t key_in) { */
-/*     /\* uint64_t x = (uint32_t)(key_in ^ salt) | (((key_in ^ seed) >> 32) << 32); */
-/*      *\/ */
-/*     uint64_t x = key_in ^ salt; */
-/*     // mix64 from SplitMix. */
-/*     x = (x ^ (x >> 33)) * 0xff51afd7ed558ccdUL; */
-/*     x = (x ^ (x >> 33)) * 0xc4ceb9fe1a85ec53UL; */
-/*     return x; */
-/* } */
-
-/* static index_t get_table_entry(int32_t capacity, uintptr_t key) { */
-/*     // Assumes capacity is a power of 2. */
-/*     return hash(key) & (capacity - 1); */
-/* } */
-
-hyper_table * local_hyper_table_alloc() {
-    hyper_table *table = malloc(sizeof (hyper_table));
+hyper_table *__cilkrts_local_hyper_table_alloc() {
+    hyper_table *table = malloc(sizeof(hyper_table));
     int32_t capacity = MIN_CAPACITY;
     table->capacity = capacity;
     table->occupancy = 0;
@@ -145,8 +122,8 @@ static struct bucket *rebuild_table(hyper_table *table, int32_t new_capacity) {
 ///////////////////////////////////////////////////////////////////////////
 // Query, insert, and delete methods for the hash table.
 
-
-struct bucket *find_hyperobject_hash(hyper_table *table, uintptr_t key) {
+struct bucket *__cilkrts_find_hyperobject_hash(hyper_table *table,
+                                               uintptr_t key) {
     int32_t capacity = table->capacity;
 
     // Target hash
@@ -218,62 +195,6 @@ struct bucket *find_hyperobject_hash(hyper_table *table, uintptr_t key) {
     return NULL;
 }
 
-/* struct bucket *find_hyperobject(hyper_table *table, uintptr_t key) { */
-/*     int32_t capacity = table->capacity; */
-/*     if (capacity < MIN_HT_CAPACITY) { */
-/*         // If the table is small enough, just scan the array. */
-/*         struct bucket *buckets = table->buckets; */
-/*         int32_t occupancy = table->occupancy; */
-
-/*         // Scan the array backwards, since inserts add new entries to */
-/*         // the end of the array, and we anticipate that the program */
-/*         // will exhibit locality of reference. */
-/*         for (int32_t i = occupancy - 1; i >= 0; --i) */
-/*             if (buckets[i].key == key) */
-/*                 return &buckets[i]; */
-
-/*         return NULL; */
-/*     } */
-
-/*     // Target hash */
-/*     index_t tgt = get_table_entry(capacity, key); */
-/*     struct bucket *buckets = table->buckets; */
-/*     // Start the search at the target hash */
-/*     index_t i = tgt; */
-/*     do { */
-/*         uintptr_t curr_key = buckets[i].key; */
-/*         // If we find the key, return that bucket. */
-/*         // TODO: Consider moving this bucket to the front of the run. */
-/*         if (key == curr_key) */
-/*             return &buckets[i]; */
-
-/*         // If we find an empty entry, the search failed. */
-/*         if (is_empty(curr_key)) */
-/*             return NULL; */
-
-/*         // If we find a tombstone, continue the search. */
-/*         if (is_tombstone(curr_key)) { */
-/*             i = inc_index(i, capacity); */
-/*             continue; */
-/*         } */
-
-/*         // Otherwise we have another valid key that does not match. */
-/*         // Compare the hashes to decide whether or not to continue the */
-/*         // search. */
-/*         index_t curr_hash = get_table_entry(capacity, curr_key); */
-/*         if (continue_search(tgt, curr_hash, i, key, curr_key)) { */
-/*             i = inc_index(i, capacity); */
-/*             continue; */
-/*         } */
-
-/*         // If none of the above cases match, then the search failed to */
-/*         // find the key. */
-/*         return NULL; */
-/*     } while (i != tgt); */
-
-/*     // The search failed to find the key. */
-/*     return NULL; */
-/* } */
 bool remove_hyperobject(hyper_table *table, uintptr_t key) {
     if (table->capacity < MIN_HT_CAPACITY) {
         // If the table is small enough, just scan the array.
@@ -561,8 +482,9 @@ bool insert_hyperobject(hyper_table *table, struct bucket b) {
     return false;
 }
 
-void *insert_new_view(hyper_table *table, uintptr_t key, size_t size,
-                      __cilk_identity_fn identity, __cilk_reduce_fn reduce) {
+void *__cilkrts_insert_new_view(hyper_table *table, uintptr_t key, size_t size,
+                                __cilk_identity_fn identity,
+                                __cilk_reduce_fn reduce) {
     // Create a new view and initialize it with the identity function.
     void *new_view = cilk_aligned_alloc(64, round_size_to_alignment(64, size));
     identity(new_view);

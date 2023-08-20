@@ -97,13 +97,11 @@ void do_table_command(hyper_table *table, table_command cmd) {
 // Simple test routine to insert and remove elements from a hyper_table,
 // according to the given list of table_commands.
 void test_insert_remove(const table_command *commands, int num_commands) {
-    hyper_table *table = (hyper_table *)malloc(sizeof(hyper_table));
-    local_hyper_table_init(table);
+    hyper_table *table = __cilkrts_local_hyper_table_alloc();
     for (int i = 0; i < num_commands; ++i) {
         do_table_command(table, commands[i]);
     }
-    local_hyper_table_destroy(table);
-    free(table);
+    local_hyper_table_free(table);
 }
 
 int main(int argc, char *argv[]) {

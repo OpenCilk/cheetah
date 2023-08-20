@@ -5,6 +5,7 @@
 #include <stdint.h>
 
 #include "hyperobject_base.h"
+#include "rts-config.h"
 #include "types.h"
 
 // An entry in the hash table.
@@ -34,13 +35,16 @@ typedef struct local_hyper_table {
     struct bucket *buckets;
 } hyper_table;
 
-hyper_table *local_hyper_table_alloc();
+hyper_table *__cilkrts_local_hyper_table_alloc();
+CHEETAH_INTERNAL
 void local_hyper_table_free(hyper_table *table);
 
-/* struct bucket *find_hyperobject(hyper_table *table, uintptr_t key); */
+CHEETAH_INTERNAL
 bool remove_hyperobject(hyper_table *table, uintptr_t key);
+CHEETAH_INTERNAL
 bool insert_hyperobject(hyper_table *table, struct bucket b);
 
+CHEETAH_INTERNAL
 hyper_table *merge_two_hts(__cilkrts_worker *restrict w,
                            hyper_table *restrict left,
                            hyper_table *restrict right);
@@ -55,8 +59,6 @@ static const int32_t MIN_HT_CAPACITY = 8;
 static const uint64_t salt = 0x96b9af4f6a40de92UL;
 
 static inline index_t hash(uintptr_t key_in) {
-    /* uint64_t x = (uint32_t)(key_in ^ salt) | (((key_in ^ seed) >> 32) << 32);
-     */
     uint64_t x = key_in ^ salt;
     // mix64 from SplitMix.
     x = (x ^ (x >> 33)) * 0xff51afd7ed558ccdUL;
@@ -108,19 +110,20 @@ static inline struct bucket *find_hyperobject_linear(hyper_table *table,
     return NULL;
 }
 
-struct bucket *find_hyperobject_hash(hyper_table *table, uintptr_t key);
+struct bucket *__cilkrts_find_hyperobject_hash(hyper_table *table,
+                                               uintptr_t key);
 
 static inline struct bucket *find_hyperobject(hyper_table *table,
                                               uintptr_t key) {
     if (table->capacity < MIN_HT_CAPACITY) {
         return find_hyperobject_linear(table, key);
     } else {
-        return find_hyperobject_hash(table, key);
+        return __cilkrts_find_hyperobject_hash(table, key);
     }
 }
 
-void *insert_new_view(hyper_table *table, uintptr_t key, size_t size,
-                      __cilk_identity_fn identity,
-                      __cilk_reduce_fn reduce);
+void *__cilkrts_insert_new_view(hyper_table *table, uintptr_t key, size_t size,
+                                __cilk_identity_fn identity,
+                                __cilk_reduce_fn reduce);
 
 #endif // _LOCAL_HYPERTABLE_H

@@ -59,9 +59,9 @@ void *__cilkrts_reducer_lookup(void *key, size_t size,
         return b->value.view;
     }
 
-    return insert_new_view(table, (uintptr_t)key, size,
-                           (__cilk_identity_fn)identity_ptr,
-                           (__cilk_reduce_fn)reduce_ptr);
+    return __cilkrts_insert_new_view(table, (uintptr_t)key, size,
+                                     (__cilk_identity_fn)identity_ptr,
+                                     (__cilk_reduce_fn)reduce_ptr);
 }
 
 // Begin a Cilkified region.  The routine runs on a Cilkifying thread to
