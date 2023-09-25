@@ -169,20 +169,13 @@ void __cilkrts_sync(__cilkrts_stack_frame *sf) {
 ///////////////////////////////////////////////////////////////////////////
 /// Methods for handling extensions
 
-static inline __cilkrts_worker *get_worker_or_default(void) {
-    __cilkrts_worker *w = __cilkrts_get_tls_worker();
-    if (NULL == w)
-        w = &default_worker;
-    return w;
-}
-
 void __cilkrts_register_extension(void *extension) {
     __cilkrts_use_extension = true;
-    __cilkrts_worker *w = get_worker_or_default();
+    __cilkrts_worker *w = __cilkrts_get_tls_worker();
     w->extension = extension;
 }
 
 void *__cilkrts_get_extension(void) {
-    __cilkrts_worker *w = get_worker_or_default();
+    __cilkrts_worker *w = __cilkrts_get_tls_worker();
     return w->extension;
 }

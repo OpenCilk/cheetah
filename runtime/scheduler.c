@@ -41,7 +41,7 @@ bool __cilkrts_use_extension = false;
 bool __cilkrts_need_to_cilkify = true;
 
 // TLS pointer to the current worker structure.
-__thread __cilkrts_worker *__cilkrts_tls_worker = NULL;
+__thread __cilkrts_worker *__cilkrts_tls_worker = &default_worker;
 
 // TLS pointer to the current fiber header.
 //
