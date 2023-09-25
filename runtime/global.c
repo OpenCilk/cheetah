@@ -23,7 +23,6 @@ typedef cpuset_t cpu_set_t;
 
 global_state *default_cilkrts;
 
-CHEETAH_INTERNAL
 __cilkrts_worker default_worker = {.self = 0,
                                    .hyper_table = NULL,
                                    .g = NULL,
