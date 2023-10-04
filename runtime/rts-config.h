@@ -48,7 +48,7 @@
 
 #define ENABLE_WORKER_PINNING 0
 
-#define MIN_NUM_PAGES_PER_STACK 4
+#define MIN_NUM_PAGES_PER_STACK 4 // must be greater than 1
 #define MAX_NUM_PAGES_PER_STACK 2000
 
 #define DEFAULT_NPROC 0 // 0 for # of cores available

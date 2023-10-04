@@ -41,7 +41,6 @@ struct cilk_fiber {
     char *alloc_low;         // first byte of mmap-ed region
     char *stack_low;         // lowest usable byte of stack
     char *stack_high;        // one byte above highest usable byte of stack
-    char *alloc_high;        // last byte of mmap-ed region
 };
 
 static inline struct fiber_header *
