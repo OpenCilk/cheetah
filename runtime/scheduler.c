@@ -49,7 +49,7 @@ __thread __cilkrts_worker *__cilkrts_tls_worker = &default_worker;
 // the work needs to access the current fiber header more frequently than the
 // worker itself.  Thus, it's notably faster to store a pointer to the current
 // fiber header itself in TLS.
-__thread struct fiber_header *__cilkrts_current_fh = NULL;
+__thread struct cilk_fiber *__cilkrts_current_fh = NULL;
 
 // ==============================================
 // Misc. helper functions
@@ -122,8 +122,7 @@ static void decrement_exception_pointer(__cilkrts_worker *const w,
 static void reset_exception_pointer(__cilkrts_worker *const w, worker_id self,
                                     Closure *cl) {
     Closure_assert_ownership(w, self, cl);
-    CILK_ASSERT(w, (cl->frame == NULL) ||
-                       (get_header_from_fiber(cl->fiber)->worker == w));
+    CILK_ASSERT(w, (cl->frame == NULL) || (cl->fiber->worker == w));
     atomic_store_explicit(&w->exc,
                           atomic_load_explicit(&w->head, memory_order_relaxed),
                           memory_order_release);
@@ -145,7 +144,7 @@ static void signal_immediate_exception_to_all(__cilkrts_worker *const w) {
 
 static void setup_for_execution(__cilkrts_worker *w, Closure *t) {
     cilkrts_alert(SCHED, w, "(setup_for_execution) closure %p", (void *)t);
-    struct fiber_header *fh = get_header_from_fiber(t->fiber);
+    struct cilk_fiber *fh = t->fiber;
     fh->worker = w;
     Closure_set_status(w, t, CLOSURE_RUNNING);
 
@@ -199,7 +198,7 @@ static void setup_for_sync(__cilkrts_worker *w, worker_id self, Closure *t) {
     //         (void *)t->fiber);
     __cilkrts_set_synced(t->frame);
 
-    struct fiber_header *fh = get_header_from_fiber(t->fiber);
+    struct cilk_fiber *fh = t->fiber;
     __cilkrts_current_fh = fh;
     t->frame->fh = fh;
     fh->worker = w;
@@ -450,8 +449,7 @@ static Closure *Closure_return(__cilkrts_worker *const w, worker_id self,
         // We are leftmost, pass stack/fiber up to parent.
         // Thus, no stack/fiber to free.
         CILK_ASSERT_POINTER_EQUAL(
-            w, parent->frame,
-            get_header_from_fiber(child->fiber)->current_stack_frame);
+            w, parent->frame, child->fiber->current_stack_frame);
         parent->fiber_child = child->fiber;
         if (USE_EXTENSION) {
             parent->ext_fiber_child = child->ext_fiber;

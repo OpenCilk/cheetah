@@ -110,7 +110,7 @@ __cilkrts_enter_frame(__cilkrts_stack_frame *sf) {
 
     sf->magic = frame_magic;
 
-    struct fiber_header *fh = __cilkrts_current_fh;
+    struct cilk_fiber *fh = __cilkrts_current_fh;
     sf->fh = fh;
     sf->call_parent = fh->current_stack_frame;
     fh->current_stack_frame = sf;
@@ -130,7 +130,7 @@ __cilkrts_enter_frame_helper(__cilkrts_stack_frame *sf) {
     sf->flags = 0;
     sf->magic = frame_magic;
 
-    struct fiber_header *fh = __cilkrts_current_fh;
+    struct cilk_fiber *fh = __cilkrts_current_fh;
     sf->fh = fh;
     sf->call_parent = fh->current_stack_frame;
     fh->current_stack_frame = sf;
