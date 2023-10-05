@@ -47,7 +47,7 @@ extern bool __cilkrts_use_extension;
 #define USE_EXTENSION false
 #endif
 extern __thread __cilkrts_worker *__cilkrts_tls_worker;
-extern __thread struct fiber_header *__cilkrts_current_fh;
+extern __thread struct cilk_fiber *__cilkrts_current_fh;
 extern bool __cilkrts_need_to_cilkify;
 
 static inline __attribute__((always_inline)) __cilkrts_worker *

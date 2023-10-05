@@ -28,7 +28,7 @@ struct __cilkrts_stack_frame {
     // This pointer is redundant with the __cilkrts_current_fh TLS variable, but
     // accessing TLS is expensive on some systems, such as macOS.  It is
     // therefore faster to use this variable when possible.
-    struct fiber_header *fh;
+    struct cilk_fiber *fh;
 
     // call_parent points to the __cilkrts_stack_frame of the closest ancestor
     // spawning function, including spawn helpers, of this frame.  For each

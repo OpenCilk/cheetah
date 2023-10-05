@@ -7,7 +7,6 @@ struct __cilkrts_stack_frame;
 struct local_state;
 struct global_state;
 struct local_hyper_table;
-struct fiber_header;
 
 enum __cilkrts_worker_state {
     WORKER_IDLE = 10,

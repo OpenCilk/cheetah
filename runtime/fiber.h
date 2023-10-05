@@ -37,18 +37,6 @@ struct cilk_fiber_pool {
     cilk_mutex lock __attribute__((aligned(CILK_CACHE_LINE)));
 };
 
-struct cilk_fiber {
-    char *alloc_low;         // first byte of mmap-ed region
-    char *stack_low;         // lowest usable byte of stack
-    char *stack_high;        // one byte above highest usable byte of stack
-};
-
-static inline struct fiber_header *
-get_header_from_fiber(const struct cilk_fiber *fiber) {
-    return (struct fiber_header *)((uintptr_t)(fiber->stack_high) -
-                                   sizeof(struct fiber_header));
-}
-
 //===============================================================
 // Supported functions
 //===============================================================
@@ -90,24 +78,29 @@ sysdep_restore_fp_state(__cilkrts_stack_frame *sf) {
 #endif
 }
 
+static inline char *sysdep_get_fiber_start(struct cilk_fiber *fiber) {
+    return fiber->alloc_low;
+}
+
+static inline char *sysdep_get_fiber_end(struct cilk_fiber *fiber) {
+    return (char *)(fiber + 1);
+}
+
 static inline char *sysdep_get_stack_start(struct cilk_fiber *fiber) {
-    /* stack_high of the new fiber is aligned to the stack size, which must be a
-       power of 2.  */
     /* The OpenCilk compiler should ensure that sufficient space is
        allocated for outgoing arguments of any function, so we don't need any
        particular alignment here.  We use a positive alignment here for the
        subsequent debugging step that checks the stack is accessible. */
 
-    char *sp = fiber->stack_high - sizeof(struct fiber_header);
-    /* Debugging: make sure stack is accessible. */
-    ((volatile char *)sp)[-1];
-    return sp;
+    return (char *)fiber;
 }
 
 static inline char *sysdep_reset_stack_for_resume(struct cilk_fiber *fiber,
                                                   __cilkrts_stack_frame *sf) {
     CILK_ASSERT_G(fiber);
     char *sp = sysdep_get_stack_start(fiber);
+    /* Debugging: make sure stack is accessible. */
+    ((volatile char *)sp)[-1];
     SP(sf) = sp;
 
     return sp;
@@ -126,15 +119,13 @@ void sysdep_longjmp_to_sf(__cilkrts_stack_frame *sf) {
     __builtin_longjmp(sf->ctx, 1);
 }
 
-static inline void init_fiber_header(const struct cilk_fiber *fiber) {
-    struct fiber_header *fh = get_header_from_fiber(fiber);
+static inline void init_fiber_header(struct cilk_fiber *fh) {
     fh->worker = INVALID_WORKER;
     fh->current_stack_frame = NULL;
     fh->fake_stack_save = NULL;
 }
 
-static inline void deinit_fiber_header(const struct cilk_fiber *fiber) {
-    struct fiber_header *fh = get_header_from_fiber(fiber);
+static inline void deinit_fiber_header(struct cilk_fiber *fh) {
     fh->worker = INVALID_WORKER;
     fh->current_stack_frame = NULL;
     fh->fake_stack_save = NULL;
