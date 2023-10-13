@@ -64,6 +64,25 @@ void *__cilkrts_reducer_lookup(void *key, size_t size,
                                      (__cilk_reduce_fn)reduce_ptr);
 }
 
+void *__cilkrts_reducer_lookup_frame(struct __cilkrts_stack_frame *frame,
+                                     void *key, size_t size,
+                                     void *identity_ptr, void *reduce_ptr) {
+    // If we're outside a cilkified region, then the key is the view.
+    // The null test will normally be optimized out.
+    if (!frame)
+        return key;
+    struct local_hyper_table *table = get_local_hyper_table(frame->fh->worker);
+    struct bucket *b = find_hyperobject(table, (uintptr_t)key);
+    if (__builtin_expect(!!b, true)) {
+        // Return the existing view.
+        return b->value.view;
+    }
+
+    return __cilkrts_insert_new_view(table, (uintptr_t)key, size,
+                                     (__cilk_identity_fn)identity_ptr,
+                                     (__cilk_reduce_fn)reduce_ptr);
+}
+
 // Begin a Cilkified region.  The routine runs on a Cilkifying thread to
 // transfer the execution of this function to the workers in global_state g.
 // This routine must be inlined for correctness.
