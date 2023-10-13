@@ -35,7 +35,7 @@ typedef struct local_hyper_table {
     struct bucket *buckets;
 } hyper_table;
 
-hyper_table *__cilkrts_local_hyper_table_alloc();
+hyper_table *__cilkrts_local_hyper_table_alloc(void);
 CHEETAH_INTERNAL
 void local_hyper_table_free(hyper_table *table);
 

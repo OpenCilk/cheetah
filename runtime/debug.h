@@ -56,7 +56,7 @@ extern CHEETAH_INTERNAL unsigned int debug_level;
 
 CHEETAH_INTERNAL void set_alert_level(unsigned int);
 CHEETAH_INTERNAL void set_debug_level(unsigned int);
-CHEETAH_INTERNAL void flush_alert_log();
+CHEETAH_INTERNAL void flush_alert_log(void);
 
 __attribute__((__format__(__printf__, 2, 3))) CHEETAH_INTERNAL_NORETURN void
 cilkrts_bug(struct __cilkrts_worker *w, const char *fmt, ...);
