@@ -92,8 +92,12 @@ endif()
 
 # Add compile flags for Cheetah-runtime compilation that should be
 # excluded from bitcode compilation
-if (CHEETAH_HAS_MAVX_FLAG)
-  list(APPEND CHEETAH_COMPILE_FLAGS -mavx)
+if (DEFINED CHEETAH_ARCH_FLAGS)
+  list(APPEND CHEETAH_COMPILE_FLAGS ${CHEETAH_ARCH_FLAGS})
+else()
+  if (CHEETAH_HAS_MAVX_FLAG)
+    list(APPEND CHEETAH_COMPILE_FLAGS -mavx)
+  endif()
 endif()
 
 if (APPLE)
