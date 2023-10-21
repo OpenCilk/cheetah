@@ -192,5 +192,25 @@ int main(int argc, char *argv[]) {
     };
     test_insert_remove(test2, sizeof(test2)/sizeof(table_command));
     printf("test2 PASSED\n");
+
+    // Test case derived from trace that led to errors.
+    table_command test3[] = {
+        {TABLE_INSERT, 0xfffff4e82ed0},
+        {TABLE_INSERT, 0xfffff4e82d40},
+        {TABLE_INSERT, 0xfffff4e82bb0},
+        {TABLE_INSERT, 0xfffff4e82a90},
+        {TABLE_INSERT, 0xfffff4e82900},
+        {TABLE_INSERT, 0xfffff4e82770},
+        {TABLE_INSERT, 0xfffff4e82650},
+        {TABLE_INSERT, 0xfffff4e82530},
+
+        {TABLE_DELETE, 0xfffff4e82530},
+        {TABLE_DELETE, 0xfffff4e82650},
+        {TABLE_DELETE, 0xfffff4e82770},
+
+        {TABLE_INSERT, 0xfffff4e827e0},
+    };
+    test_insert_remove(test3, sizeof(test3)/sizeof(table_command));
+    printf("test3 PASSED\n");
     return 0;
 }
