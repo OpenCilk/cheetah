@@ -413,7 +413,7 @@ bool insert_hyperobject(hyper_table *table, struct bucket b) {
             // Scan all consecutive tombstones from i.
             index_t next_i = inc_index(i, capacity);
             uintptr_t tomb_end = buckets[next_i].key;
-            while (is_tombstone(tomb_end)) {
+            while (is_tombstone(tomb_end) && next_i != tgt) {
                 next_i = inc_index(next_i, capacity);
                 tomb_end = buckets[next_i].key;
             }
@@ -435,6 +435,8 @@ bool insert_hyperobject(hyper_table *table, struct bucket b) {
                 ++table->ins_rm_count;
                 return true;
             }
+            if (tgt == next_i)
+                break;
             // None of the locations among these consecutive tombstones are
             // appropriate for this bucket.  Continue the search.
             i = inc_index(next_i, capacity);
