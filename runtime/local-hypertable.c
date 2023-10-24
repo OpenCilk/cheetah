@@ -73,7 +73,7 @@ static struct bucket *bucket_array_create(int32_t array_size) {
     return buckets;
 }
 
-hyper_table *__cilkrts_local_hyper_table_alloc() {
+hyper_table *__cilkrts_local_hyper_table_alloc(void) {
     hyper_table *table = malloc(sizeof(hyper_table));
     int32_t capacity = MIN_CAPACITY;
     table->capacity = capacity;
