@@ -85,7 +85,9 @@ void do_table_command(hyper_table *table, table_command cmd) {
         break;
     }
     case TABLE_LOOKUP: {
-        // TODO: Implement this.
+        PRINT_TRACE("LOOKUP 0x%lx\n", cmd.key);
+        struct bucket *b = find_hyperobject(table, cmd.key);
+        check_hypertable(table, cmd.key, (b != NULL));
         break;
     }
     case TABLE_DELETE: {
@@ -110,18 +112,29 @@ void test_insert_remove(const table_command *commands, int num_commands) {
 
 void test_set_insert_remove(const uintptr_t *keys, int num_keys,
                             const table_command *commands, int num_commands) {
+    assert((num_keys & -num_keys) == num_keys &&
+           "Must use a power-of-2 number of keys.");
     hyper_table *table = __cilkrts_local_hyper_table_alloc();
+
+    // Add enough temporary keys to make the table the correct size.
     for (int i = 0; i < num_keys / 2 + 1; ++i) {
         table_command tmpInsert = {TABLE_INSERT, i + 1};
         do_table_command(table, tmpInsert);
     }
+
+    // Set the keys to their intended values.
     int num_valid = 0;
+    int num_tomb = 0;
     for (int i = 0; i < num_keys; ++i) {
         num_valid += is_valid(keys[i]);
+        num_tomb += is_tombstone(keys[i]);
         table->buckets[i].key = keys[i];
     }
     table->occupancy = num_valid;
+    table->ins_rm_count = num_tomb;
     check_hypertable(table, 1, 0);
+
+    // Run test.
     for (int i = 0; i < num_commands; ++i) {
         do_table_command(table, commands[i]);
     }
@@ -129,6 +142,8 @@ void test_set_insert_remove(const uintptr_t *keys, int num_keys,
 }
 
 int main(int argc, char *argv[]) {
+    const uintptr_t KEY_DELETED = ~0UL;
+
     // Simple test case
     table_command test1[] = {
         {TABLE_INSERT, 0x1},
@@ -241,15 +256,27 @@ int main(int argc, char *argv[]) {
     uintptr_t keys4[] = {
         0x7f84b33fef40,
         0x7f84b33fed90,
-        (uintptr_t)(-1),
-        (uintptr_t)(-1),
+        KEY_DELETED,
+        KEY_DELETED,
         0x7f84b33fee30,
         0x7f84b33fecf0,
-        (uintptr_t)(-1),
-        (uintptr_t)(-1),
+        KEY_DELETED,
+        KEY_DELETED,
     };
     table_command test4[] = {
         {TABLE_INSERT, 0x7f84b33fec50},
+        {TABLE_INSERT, 0x3},
+        {TABLE_INSERT, 0x4},
+        {TABLE_INSERT, 0x1},
+
+        {TABLE_LOOKUP, 0x7f84b33fee30},
+        {TABLE_LOOKUP, 0x7f84b33fecf0},
+        {TABLE_LOOKUP, 0x7f84b33fec50},
+        {TABLE_LOOKUP, 0x7f84b33fef40},
+        {TABLE_LOOKUP, 0x7f84b33fed90},
+        {TABLE_LOOKUP, 0x3},
+        {TABLE_LOOKUP, 0x4},
+        {TABLE_LOOKUP, 0x1},
     };
     test_set_insert_remove(keys4, sizeof(keys4) / sizeof(uintptr_t), test4,
                            sizeof(test4) / sizeof(table_command));
