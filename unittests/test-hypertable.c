@@ -2,13 +2,17 @@
 #include <stdint.h>
 #include <stdio.h>
 
+#define TRACE 1
+
+#if TRACE
+#include <stdarg.h>
+#endif
+
 // Dummy implementation of __cilkrts_get_worker_number.
 unsigned __cilkrts_get_worker_number(void) { return 0; }
 
 #define CHEETAH_INTERNAL
 #include "../runtime/local-hypertable.h"
-
-#define TRACE 0
 
 // Print additional trace information if TRACE == 1.
 void PRINT_TRACE(const char *fmt, ...) {
@@ -98,6 +102,26 @@ void do_table_command(hyper_table *table, table_command cmd) {
 // according to the given list of table_commands.
 void test_insert_remove(const table_command *commands, int num_commands) {
     hyper_table *table = __cilkrts_local_hyper_table_alloc();
+    for (int i = 0; i < num_commands; ++i) {
+        do_table_command(table, commands[i]);
+    }
+    local_hyper_table_free(table);
+}
+
+void test_set_insert_remove(const uintptr_t *keys, int num_keys,
+                            const table_command *commands, int num_commands) {
+    hyper_table *table = __cilkrts_local_hyper_table_alloc();
+    for (int i = 0; i < num_keys / 2 + 1; ++i) {
+        table_command tmpInsert = {TABLE_INSERT, i + 1};
+        do_table_command(table, tmpInsert);
+    }
+    int num_valid = 0;
+    for (int i = 0; i < num_keys; ++i) {
+        num_valid += is_valid(keys[i]);
+        table->buckets[i].key = keys[i];
+    }
+    table->occupancy = num_valid;
+    check_hypertable(table, 1, 0);
     for (int i = 0; i < num_commands; ++i) {
         do_table_command(table, commands[i]);
     }
@@ -212,5 +236,23 @@ int main(int argc, char *argv[]) {
     };
     test_insert_remove(test3, sizeof(test3)/sizeof(table_command));
     printf("test3 PASSED\n");
+
+    // Test case derived from trace that led to errors.
+    uintptr_t keys4[] = {
+        0x7f84b33fef40,
+        0x7f84b33fed90,
+        (uintptr_t)(-1),
+        (uintptr_t)(-1),
+        0x7f84b33fee30,
+        0x7f84b33fecf0,
+        (uintptr_t)(-1),
+        (uintptr_t)(-1),
+    };
+    table_command test4[] = {
+        {TABLE_INSERT, 0x7f84b33fec50},
+    };
+    test_set_insert_remove(keys4, sizeof(keys4) / sizeof(uintptr_t), test4,
+                           sizeof(test4) / sizeof(table_command));
+    printf("test4 PASSED\n");
     return 0;
 }
