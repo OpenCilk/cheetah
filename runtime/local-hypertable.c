@@ -458,13 +458,39 @@ bool insert_hyperobject(hyper_table *table, struct bucket b) {
     } while (i != tgt);
 
     index_t insert_tgt = i;
-    // The search found a place to insert the bucket, but it's
-    // occupied.  Insert the bucket here and shift the subsequent
-    // entries.
+    // The search found a place to insert the bucket, but it's occupied.  Insert
+    // the bucket here and shift the subsequent entries.
     do {
-        // If this entry is empty or a tombstone, insert the current
-        // bucket at this location and terminate.
-        if (!is_valid(buckets[i].key)) {
+        // If this entry is empty, insert the current bucket at this location
+        // and terminate.
+        if (is_empty(buckets[i].key)) {
+            buckets[i] = b;
+            ++table->occupancy;
+            ++table->ins_rm_count;
+            return true;
+        } else if (is_tombstone(buckets[i].key)) {
+            // Check whether its safe to insert the bucket at this tombstone.
+            index_t next_i = inc_index(i, capacity);
+            uintptr_t next_key = buckets[next_i].key;
+            if (is_valid(next_key)) {
+                // Inserting at this tombstone could disrupt the search for
+                // next_key.  If this is the case, swap this tombstone with
+                // next_key.
+                index_t next_hash = get_table_entry(capacity, next_key);
+                // Check whether next_key is already displaced from its intended
+                // location in the table.  If so, then it's safe to move it to
+                // the previous table entry.
+                if (next_hash != next_i &&
+                    continue_search(next_hash, next_i, i)) {
+                    struct bucket tmp = buckets[i];
+                    buckets[i] = buckets[next_i];
+                    buckets[next_i] = tmp;
+                    i = next_i;
+                    continue;
+                }
+            }
+            // Either next_key is not valid or it should not be moved.  In
+            // either case, insert the bucket at this tombstone.
             buckets[i] = b;
             ++table->occupancy;
             ++table->ins_rm_count;
