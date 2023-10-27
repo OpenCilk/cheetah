@@ -7,7 +7,7 @@ OBJS = $(patsubst %.c,%.o,$(SRCS))
 DEFINES = $(ABI_DEF)
 
 TESTS   = cilksort fib mm_dac nqueens
-OPTIONS = $(OPT) $(ARCH) $(DBG) -Wall $(DEFINES) -fno-omit-frame-pointer
+OPTIONS = $(OPT) $(ARCH) $(DBG) -Wall $(DEFINES) -fno-omit-frame-pointer -Iinclude -I.. -I../include
 # dynamic linking
 # RTS_DLIBS = -L../runtime -Wl,-rpath -Wl,../runtime -lopencilk
 # RTS_LIBS = ../runtime/$(RTS_LIB).so
@@ -20,7 +20,7 @@ TIMING_COUNT := 1
 
 all: $(TESTS)
 
-$(TESTS): %: %.o ktiming.o getoptions.o ZERO.o
+$(TESTS): %: %.o ktiming.o getoptions.o ZERO.o c2cilk.o
 	$(CC) $^ -o $@ $(RTS_LIBS) -lrt -lpthread -lm
 
 %.o: %.c

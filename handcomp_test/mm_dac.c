@@ -1,10 +1,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "../runtime/cilk2c.h"
-#include "../runtime/cilk2c_inlined.c"
 #include "ktiming.h"
 #include "getoptions.h"
+
+#define ENABLE_UNSAFE_C2CILK_LIBRARY 0xda179e12
+#include <c2cilk/c2cilk.h>
 
 #ifndef TIMING_COUNT
 #define TIMING_COUNT 1
@@ -14,9 +15,6 @@
 #define THRESHOLD 16
 #define TRUE 1
 #define FALSE 0
-
-extern size_t ZERO;
-void __attribute__((weak)) dummy(void *p) { return; }
 
 unsigned int randomSeed = 1;
 
@@ -60,9 +58,6 @@ static void mm_dac_serial(int *C, const int *A, const int *B, int n, int length)
     mm_dac_serial(C11, A11, B11, n, mid);
 }
 
-__attribute__((noinline)) static void 
-mm_dac_spawn_helper(int *C, const int *A, const int *B, int n, int length);
-
 /**
  * Recursive implementation of matrix multiply.
  * This code will not work on non-square matrices.
@@ -70,7 +65,7 @@ mm_dac_spawn_helper(int *C, const int *A, const int *B, int n, int length);
  * where C, A, and B are the starting addresses of submatrices with dimension
  * length x length.  Argument n is the original input matrix length.
  **/
-static void mm_dac(int *C, const int *A, const int *B, int n, int length) {
+C2CILK_VOID_FUNC(mm_dac, (int*, C, const int*, A, const int*, B, int, n, int, length), {
 
     if(length < THRESHOLD) {
         // Use a loop for small matrices
@@ -81,78 +76,49 @@ static void mm_dac(int *C, const int *A, const int *B, int n, int length) {
         return;
     }
 
-    dummy(alloca(ZERO));
-    __cilkrts_stack_frame sf;
-    __cilkrts_enter_frame(&sf);
+    c2cilk_context(
+        // Partition the matrices
+        int mid = length >> 1;
 
-    // Partition the matrices
-    int mid = length >> 1;
+        int *C00 = C;
+        int *C01 = C + mid;
+        int *C10 = C + n*mid;
+        int *C11 = C + n*mid + mid;
 
-    int *C00 = C;
-    int *C01 = C + mid;
-    int *C10 = C + n*mid;
-    int *C11 = C + n*mid + mid;
+        int const *A00 = A;
+        int const *A01 = A + mid;
+        int const *A10 = A + n*mid;
+        int const *A11 = A + n*mid + mid;
 
-    int const *A00 = A;
-    int const *A01 = A + mid;
-    int const *A10 = A + n*mid;
-    int const *A11 = A + n*mid + mid;
+        int const *B00 = B;
+        int const *B01 = B + mid;
+        int const *B10 = B + n*mid;
+        int const *B11 = B + n*mid + mid;
 
-    int const *B00 = B;
-    int const *B01 = B + mid;
-    int const *B10 = B + n*mid;
-    int const *B11 = B + n*mid + mid;
+        /* cilk_spawn mm_dac(C00, A00, B00, n, mid); */
+        c2cilk_void_spawn(mm_dac, C00, A00, B00, n, mid);
 
-    /* cilk_spawn mm_dac(C00, A00, B00, n, mid); */
-    if (!__cilk_prepare_spawn(&sf)) {
-        mm_dac_spawn_helper(C00, A00, B00, n, mid);
-    }
+        /* cilk_spawn mm_dac(C01, A00, B01, n, mid); */
+        c2cilk_void_spawn(mm_dac, C01, A00, B01, n, mid);
 
-    /* cilk_spawn mm_dac(C01, A00, B01, n, mid); */
-    if (!__cilk_prepare_spawn(&sf)) {
-        mm_dac_spawn_helper(C01, A00, B01, n, mid);
-    }
+        /* cilk_spawn mm_dac(C10, A10, B00, n, mid); */
+        c2cilk_void_spawn(mm_dac, C10, A10, B00, n, mid);
+        mm_dac(C11, A10, B01, n, mid);
 
-    /* cilk_spawn mm_dac(C10, A10, B00, n, mid); */
-    if (!__cilk_prepare_spawn(&sf)) {
-        mm_dac_spawn_helper(C10, A10, B00, n, mid);
-    }
-    mm_dac(C11, A10, B01, n, mid);
+        /* cilk_sync */
+        c2cilk_sync;
 
-    /* cilk_sync */
-    __cilk_sync_nothrow(&sf);
+        /* cilk_spawn mm_dac(C00, A01, B10, n, mid); */
+        c2cilk_void_spawn(mm_dac, C00, A01, B10, n, mid);
 
-    /* cilk_spawn mm_dac(C00, A01, B10, n, mid); */
-    if (!__cilk_prepare_spawn(&sf)) {
-        mm_dac_spawn_helper(C00, A01, B10, n, mid);
-    }
+        /* cilk_spawn mm_dac(C01, A01, B11, n, mid); */
+        c2cilk_void_spawn(mm_dac, C01, A01, B11, n, mid);
 
-    /* cilk_spawn mm_dac(C01, A01, B11, n, mid); */
-    if (!__cilk_prepare_spawn(&sf)) {
-        mm_dac_spawn_helper(C01, A01, B11, n, mid);
-    }
-
-    /* cilk_spawn mm_dac(C10, A11, B10, n, mid); */
-    if (!__cilk_prepare_spawn(&sf)) {
-        mm_dac_spawn_helper(C10, A11, B10, n, mid);
-    }
-    mm_dac(C11, A11, B11, n, mid);
-
-    /* cilk_sync */
-    __cilk_sync_nothrow(&sf);
-
-    __cilk_parent_epilogue(&sf);
-}
-
-__attribute__((noinline))
-static void mm_dac_spawn_helper(int *C, const int *A, const int *B, int n, int length) {
-
-    __cilkrts_stack_frame sf;
-    __cilkrts_enter_frame_helper(&sf);
-    __cilkrts_detach(&sf);
-    mm_dac(C, A, B, n, length);
-    __cilk_helper_epilogue(&sf);
-}
+        /* cilk_spawn mm_dac(C10, A11, B10, n, mid); */
+        c2cilk_void_spawn(mm_dac, C10, A11, B10, n, mid);
+        mm_dac(C11, A11, B11, n, mid);
+    ) // c2cilk_context
+})
 
 static void rand_matrix(int *dest, int n) {
     for(int i = 0; i < n*n; ++i)
