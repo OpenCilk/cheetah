@@ -52,9 +52,12 @@ void *__cilkrts_reducer_lookup_in_frame(struct __cilkrts_stack_frame *frame,
                                         void *identity_ptr, void *reduce_ptr) {
     // If we're outside a cilkified region, then the key is the view.
     // The null test will normally be optimized out.
-    if (!frame)
-        return key;
-    struct local_hyper_table *table = get_local_hyper_table(frame->fh->worker);
+    __cilkrts_worker *w;
+    if (frame)
+      w = frame->fh->worker; // Never null
+    else if (!(w = __cilkrts_get_tls_worker()))
+      return key;
+    struct local_hyper_table *table = get_local_hyper_table(w);
     struct bucket *b = find_hyperobject(table, (uintptr_t)key);
     if (__builtin_expect(!!b, true)) {
         // Return the existing view.
