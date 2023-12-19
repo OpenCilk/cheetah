@@ -13,6 +13,7 @@ typedef uint32_t index_t;
 // An entry in the hash table.
 struct bucket {
     uintptr_t key; /* EMPTY, DELETED, or a user-provided pointer. */
+    index_t hash;  /* hash of the key when inserted into the table. */
     reducer_base value;
 };
 
@@ -82,20 +83,62 @@ static inline index_t inc_index(index_t i, index_t capacity) {
     return i;
 }
 
+// Searching for an element (or its insertion point) requires handling four
+// conditions based on:
+//
+// - tgt: the target index of the item being inserted
+// - i: the current index in the hash table being examined in the search
+// - hash: the target index of the item at index i.
+//
+// Generally speaking, items that hash to the same index appear next to each
+// other in the table, and items that hash to adjacent indices (modulo the
+// table's capacity) appear next to each other in sorted order based on the
+// indices they hash to.  These invariants hold with the exception that
+// tombstones can exist between items in the table that would otherwise be
+// adjacent.  Let a _run_ be a sequence of hash values for consecutive valid
+// entries in the table (modulo the table's capacity).
+//
+// The search starts with i == tgt and gradually increases i (mod capacity).
+// The search must handle the following 4 conditions:
+//
+// - Non-wrapped search (NS): tgt <= i
+// - Wrapped search (WS):     tgt > i
+// - Non-wrapped run (NR):    hash <= i
+// - Wrapped run (WR):        hash > i
+//
+// These conditions lead to 4 cases:
+//
+// - NS+NR: hash <= tgt <= i:
+//   Common case.  Search terminates when hash > tgt.
+// - WS+WR: i < hash <= tgt:
+//   Like NS+NR, search terminates when hash > tgt.
+// - NS+WR: tgt <= i < hash:
+//   The search needs to continue, meaning it needs to treat tgt as larger than
+//   hash.
+// - WS+NR: hash <= i < tgt:
+//   The search needs to stop, meaning it needs to treat hash as larger than
+//   tgt.
+//
+// Consider i-tgt and i-hash using unsigned arithmetic.
+// - In NS+NR and WS+WR cases, search terminates when i-tgt > i-hash.
+// - In NS+WR case, i-hash wraps, so i-tgt < i-hash ~> search continues.
+// - In WS+NR case, i-tgt wraps, so i-tgt > i-hash ~> search terminates.
+
+// NOTE: I prefer to think about i-tgt and i-hash, because these will be
+// small positive values in the common case.
+
 static inline bool continue_search(index_t tgt, index_t hash,
-                                   index_t init_hash) {
+                                   index_t idx) {
     // NOTE: index_t must be unsigned for this check to work.
-    index_t norm_tgt = tgt - init_hash;
-    index_t norm_hash = hash - init_hash;
-    return norm_tgt >= norm_hash;
+    return (idx - tgt) <= (idx - hash);
 }
 
+// Insert scans stop under slightly different conditions from !continue_search,
+// specifically, when tgt == hash.
 static inline bool stop_insert_scan(index_t tgt, index_t hash,
-                                    index_t init_hash) {
+                                    index_t idx) {
     // NOTE: index_t must be unsigned for this check to work.
-    index_t norm_tgt = tgt - init_hash;
-    index_t norm_hash = hash - init_hash;
-    return norm_tgt <= norm_hash;
+    return (idx - tgt) >= (idx - hash);
 }
 
 static inline struct bucket *find_hyperobject_linear(hyper_table *table,
