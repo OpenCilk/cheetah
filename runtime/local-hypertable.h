@@ -62,10 +62,12 @@ static const uint64_t salt = 0x96b9af4f6a40de92UL;
 
 static inline index_t hash(uintptr_t key_in) {
     uint64_t x = key_in ^ salt;
-    // mix64 from SplitMix.
-    x = (x ^ (x >> 33)) * 0xff51afd7ed558ccdUL;
-    x = (x ^ (x >> 33)) * 0xc4ceb9fe1a85ec53UL;
-    return x;
+    // mix based on abseil's low-level hash, to convert 64-bit integers into
+    // 32-bit integers.
+    const size_t half_bits = sizeof(uintptr_t) * 4;
+    const uintptr_t low_mask = ((uintptr_t)(1) << half_bits) - 1;
+    uintptr_t v = (x & low_mask) * (x >> half_bits);
+    return (v & low_mask) ^ (v >> half_bits);
 }
 #else
 #include "mock-local-hypertable-hash.h"
