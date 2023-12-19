@@ -1,6 +1,7 @@
 #include <assert.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 #define TRACE 1
 
@@ -87,7 +88,7 @@ void do_table_command(hyper_table *table, table_command cmd) {
     case TABLE_LOOKUP: {
         PRINT_TRACE("LOOKUP 0x%lx\n", cmd.key);
         struct bucket *b = find_hyperobject(table, cmd.key);
-        check_hypertable(table, cmd.key, (b != NULL));
+        check_hypertable(table, cmd.key, NULL != b);
         break;
     }
     case TABLE_DELETE: {
@@ -141,11 +142,9 @@ void test_set_insert_remove(const uintptr_t *keys, int num_keys,
     local_hyper_table_free(table);
 }
 
-int main(int argc, char *argv[]) {
-    const uintptr_t KEY_DELETED = ~0UL;
-
-    // Simple test case
-    table_command test1[] = {
+void test0(void) {
+    // Basic test case
+    table_command test[] = {
         {TABLE_INSERT, 0x1},
         {TABLE_INSERT, 0x2},
         {TABLE_INSERT, 0x3},
@@ -181,11 +180,12 @@ int main(int argc, char *argv[]) {
         {TABLE_DELETE, 0xe},
         {TABLE_DELETE, 0xf},
     };
-    test_insert_remove(test1, sizeof(test1)/sizeof(table_command));
-    printf("test1 PASSED\n");
+    test_insert_remove(test, sizeof(test)/sizeof(table_command));
+}
 
+void test1(void) {
     // Test case derived from trace that led to errors.
-    table_command test2[] = {
+    table_command test[] = {
         {TABLE_INSERT, 0x7f2a10bfe050},
         {TABLE_INSERT, 0x7f2a10bff968},
         {TABLE_INSERT, 0x7f2a10bfe8a8},
@@ -229,11 +229,12 @@ int main(int argc, char *argv[]) {
 
         {TABLE_INSERT, 0x7f2a10bfe480},
     };
-    test_insert_remove(test2, sizeof(test2)/sizeof(table_command));
-    printf("test2 PASSED\n");
+    test_insert_remove(test, sizeof(test)/sizeof(table_command));
+}
 
+void test2(void) {
     // Test case derived from trace that led to errors.
-    table_command test3[] = {
+    table_command test[] = {
         {TABLE_INSERT, 0xfffff4e82ed0},
         {TABLE_INSERT, 0xfffff4e82d40},
         {TABLE_INSERT, 0xfffff4e82bb0},
@@ -247,13 +248,16 @@ int main(int argc, char *argv[]) {
         {TABLE_DELETE, 0xfffff4e82650},
         {TABLE_DELETE, 0xfffff4e82770},
 
+        // Check that insert succeeds when an element has a larger hash than
+        // any elements currently in the table.
         {TABLE_INSERT, 0xfffff4e827e0},
     };
-    test_insert_remove(test3, sizeof(test3)/sizeof(table_command));
-    printf("test3 PASSED\n");
+    test_insert_remove(test, sizeof(test)/sizeof(table_command));
+}
 
+void test3(void) {
     // Test case derived from trace that led to errors.
-    uintptr_t keys4[] = {
+    uintptr_t keys[] = {
         0x7f84b33fef40,
         0x7f84b33fed90,
         KEY_DELETED,
@@ -263,7 +267,7 @@ int main(int argc, char *argv[]) {
         KEY_DELETED,
         KEY_DELETED,
     };
-    table_command test4[] = {
+    table_command test[] = {
         {TABLE_INSERT, 0x7f84b33fec50},
         {TABLE_INSERT, 0x3},
         {TABLE_INSERT, 0x4},
@@ -278,8 +282,175 @@ int main(int argc, char *argv[]) {
         {TABLE_LOOKUP, 0x4},
         {TABLE_LOOKUP, 0x1},
     };
-    test_set_insert_remove(keys4, sizeof(keys4) / sizeof(uintptr_t), test4,
-                           sizeof(test4) / sizeof(table_command));
-    printf("test4 PASSED\n");
+    test_set_insert_remove(keys, sizeof(keys) / sizeof(uintptr_t), test,
+                           sizeof(test) / sizeof(table_command));
+}
+
+void test4(void) {
+    // Test WS+NR and WS+WR inserts
+    table_command test[] = {
+        {TABLE_INSERT, 0x4},
+        {TABLE_INSERT, 0x1},
+        {TABLE_INSERT, 0x2},
+        {TABLE_INSERT, 0x3},
+        {TABLE_INSERT, 0x5},
+
+        {TABLE_INSERT, 0x6},
+        {TABLE_DELETE, 0x2},
+        {TABLE_INSERT, 0x7},
+        {TABLE_DELETE, 0x3},
+        {TABLE_INSERT, 0x8},
+        {TABLE_DELETE, 0x1},
+        {TABLE_DELETE, 0x8},
+
+        {TABLE_INSERT, 0x15}, // NS+NR insert, move 0x7 to wrap
+        {TABLE_INSERT, 0x25}, // NS+NR insert, move 0x6 to wrap
+
+        {TABLE_INSERT, 0x2}, // Direct insert into empty slot
+        {TABLE_DELETE, 0x2}, // Tombstone left behind
+        {TABLE_INSERT, 0x3}, // Direct insert into empty slot
+        {TABLE_DELETE, 0x3}, // Tombstone left behind
+
+        {TABLE_DELETE, 0x7}, // Tombstone left behind
+        {TABLE_INSERT, 0x7}, // Insert wraps, stops in WS+NR case
+
+        {TABLE_DELETE, 0x6}, // Create tombstone after wrap
+        {TABLE_INSERT, 0x8}, // WS+WR insert, must be inserted after 0x7
+
+        {TABLE_LOOKUP, 0x7},
+        {TABLE_LOOKUP, 0x8},
+    };
+    test_insert_remove(test, sizeof(test)/sizeof(table_command));
+}
+
+void test5(void) {
+    // Test NS+WR and WS+WR inserts
+    table_command test[] = {
+        {TABLE_INSERT, 0x4},
+        {TABLE_INSERT, 0x1},
+        {TABLE_INSERT, 0x2},
+        {TABLE_INSERT, 0x3},
+        {TABLE_INSERT, 0x5},
+
+        {TABLE_INSERT, 0x6},
+        {TABLE_DELETE, 0x2},
+        {TABLE_INSERT, 0x7},
+        {TABLE_DELETE, 0x3},
+        {TABLE_INSERT, 0x8},
+        {TABLE_DELETE, 0x1},
+        {TABLE_DELETE, 0x8},
+
+        {TABLE_INSERT, 0x15}, // NS+NR insert, move 0x7 to wrap
+        {TABLE_INSERT, 0x25}, // NS+NR insert, move 0x6 to wrap
+        {TABLE_DELETE, 0x15},
+        {TABLE_DELETE, 0x25},
+
+        {TABLE_INSERT, 0x1}, // NS+WR insert, must be inserted after 0x7
+
+        {TABLE_DELETE, 0x7},
+        {TABLE_INSERT, 0x3},
+        {TABLE_DELETE, 0x6},
+        {TABLE_INSERT, 0x7}, // NS+NR insert, searching wrapped tombstones
+    };
+    test_insert_remove(test, sizeof(test)/sizeof(table_command));
+}
+
+void test6(void) {
+    // WS+WR search, wrapping around whole table
+    table_command test[] = {
+        {TABLE_INSERT, 0x5},
+        {TABLE_INSERT, 0x15},
+        {TABLE_INSERT, 0x25},
+        {TABLE_INSERT, 0x35},
+        {TABLE_INSERT, 0x45},
+
+        {TABLE_INSERT, 0x6},
+        {TABLE_INSERT, 0x16},
+        {TABLE_INSERT, 0x26},
+
+        {TABLE_DELETE, 0x15},
+        {TABLE_LOOKUP, 0x26},
+
+        {TABLE_INSERT, 0x36}, // Scans whole table to insert after 0x26
+        {TABLE_LOOKUP, 0x26},
+        {TABLE_LOOKUP, 0x35},
+        {TABLE_LOOKUP, 0x36},
+    };
+    test_insert_remove(test, sizeof(test)/sizeof(table_command));
+}
+
+void test7(void) {
+    // WS+WR search, wrapping around whole table
+    table_command test[] = {
+        {TABLE_INSERT, 0x5},
+        {TABLE_INSERT, 0x15},
+        {TABLE_INSERT, 0x25},
+        {TABLE_INSERT, 0x35},
+        {TABLE_INSERT, 0x45},
+        {TABLE_INSERT, 0x55},
+        {TABLE_INSERT, 0x65},
+        {TABLE_INSERT, 0x75},
+
+        {TABLE_DELETE, 0x15},
+
+        {TABLE_INSERT, 0x7}, // Scans whole table to insert at index 5
+        {TABLE_LOOKUP, 0x35},
+        {TABLE_LOOKUP, 0x7},
+
+        {TABLE_DELETE, 0x7},
+        {TABLE_DELETE, 0x5},
+
+        {TABLE_INSERT, 0x7}, // Scans whole table to insert at index 5
+        {TABLE_INSERT, 0x17},
+
+        {TABLE_DELETE, 0x7},
+        {TABLE_DELETE, 0x17},
+        {TABLE_INSERT, 0x5},
+        {TABLE_DELETE, 0x45},
+        {TABLE_DELETE, 0x55},
+        {TABLE_DELETE, 0x65},
+
+        {TABLE_INSERT, 0x7},  // Scans whole table to insert at index 5
+    };
+    test_insert_remove(test, sizeof(test)/sizeof(table_command));
+}
+
+int main(int argc, char *argv[]) {
+    int to_run = -1;
+    if (argc > 1)
+        to_run = atoi(argv[1]);
+
+    if (to_run < 0 || to_run == 0) {
+        test0();
+        printf("test0 PASSED\n");
+    }
+    if (to_run < 0 || to_run == 1) {
+        test1();
+        printf("test1 PASSED\n");
+    }
+    if (to_run < 0 || to_run == 2) {
+        test2();
+        printf("test2 PASSED\n");
+    }
+    if (to_run < 0 || to_run == 3) {
+        test3();
+        printf("test3 PASSED\n");
+    }
+    if (to_run < 0 || to_run == 4) {
+        test4();
+        printf("test4 PASSED\n");
+    }
+    if (to_run < 0 || to_run == 5) {
+        test5();
+        printf("test5 PASSED\n");
+    }
+    if (to_run < 0 || to_run == 6) {
+        test6();
+        printf("test6 PASSED\n");
+    }
+    if (to_run < 0 || to_run == 7) {
+        test7();
+        printf("test7 PASSED\n");
+    }
     return 0;
 }

@@ -8,6 +8,8 @@
 #include "rts-config.h"
 #include "types.h"
 
+typedef uint32_t index_t;
+
 // An entry in the hash table.
 struct bucket {
     uintptr_t key; /* EMPTY, DELETED, or a user-provided pointer. */
@@ -23,8 +25,6 @@ static bool is_tombstone(uintptr_t key) { return key == KEY_DELETED; }
 static inline bool is_valid(uintptr_t key) {
     return !is_empty(key) && !is_tombstone(key);
 }
-
-typedef uint32_t index_t;
 
 // Hash table of reducers.  We don't need any locking or support for
 // concurrent updates, since the hypertable is local.
@@ -49,6 +49,7 @@ hyper_table *merge_two_hts(__cilkrts_worker *restrict w,
                            hyper_table *restrict left,
                            hyper_table *restrict right);
 
+#ifndef MOCK_HASH
 // Data type for indexing the hash table.  This type is used for
 // hashes as well as the table's capacity.
 static const int32_t MIN_CAPACITY = 4;
@@ -65,6 +66,9 @@ static inline index_t hash(uintptr_t key_in) {
     x = (x ^ (x >> 33)) * 0xc4ceb9fe1a85ec53UL;
     return x;
 }
+#else
+#include "mock-local-hypertable-hash.h"
+#endif
 
 static inline index_t get_table_entry(int32_t capacity, uintptr_t key) {
     // Assumes capacity is a power of 2.
