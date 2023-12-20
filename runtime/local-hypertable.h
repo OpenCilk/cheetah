@@ -70,7 +70,7 @@ static inline index_t hash(uintptr_t key_in) {
     return (v & low_mask) ^ (v >> half_bits);
 }
 #else
-#include "mock-local-hypertable-hash.h"
+#include MOCK_HASH
 #endif
 
 static inline index_t get_table_entry(int32_t capacity, uintptr_t key) {
