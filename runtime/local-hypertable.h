@@ -85,62 +85,103 @@ static inline index_t inc_index(index_t i, index_t capacity) {
     return i;
 }
 
-// Searching for an element (or its insertion point) requires handling four
-// conditions based on:
+// For theoretical and practical efficiency, the hash table implements ordered
+// linear probing --- consecutive hashes in the table are always stored in
+// sorted order --- in a circular buffer.  Typically, the ordering optimization
+// means any hash-table probe for a target T can stop when it encounters an
+// element in the table whose hash is greater than T.
 //
-// - tgt: the target index of the item being inserted
-// - i: the current index in the hash table being examined in the search
-// - hash: the target index of the item at index i.
+// However, the combination of ordering and a circular buffer leads to several
+// tricky cases when probing for an element or its insertion point.  These cases
+// depend on whether the probe wraps around the end of the buffer and whether
+// the run --- the ordered sequence of hashes in the table --- wraps around the
+// end of the buffer.
 //
-// Generally speaking, items that hash to the same index appear next to each
-// other in the table, and items that hash to adjacent indices (modulo the
-// table's capacity) appear next to each other in sorted order based on the
-// indices they hash to.  These invariants hold with the exception that
-// tombstones can exist between items in the table that would otherwise be
-// adjacent.  Let a _run_ be a sequence of hash values for consecutive valid
-// entries in the table (modulo the table's capacity).
+// Example case 1: no wrapping (common case)
+//     Index:  ... | 3 | 4 | 5 | 6 | ...
+//     Hashes: ... | 3 | 3 | 3 | 5 | ...
+//     Target: 4
+//   The probe starts at index 4 and scans increasing indices, stopping when it
+//   sees hash = 5 at index 6.
 //
-// The search starts with i == tgt and gradually increases i (mod capacity).
-// The search must handle the following 4 conditions:
+// Example case 2: probe and run both wrap
+//     Index:  | 0 | 1 | 2 | ... | 6 | 7 |
+//     Hashes: | 6 | 7 | 0 | ... | 6 | 6 |
+//     Target: 7
+//   The run of 6's wraps around, as does the probe for 7.
 //
-// - Non-wrapped search (NS): tgt <= i
-// - Wrapped search (WS):     tgt > i
-// - Non-wrapped run (NR):    hash <= i
-// - Wrapped run (WR):        hash > i
+// Example case 3: probe does not wrap, run does wrap
+//     Index:  | 0 | 1 | 2 | ... | 6 | 7 |
+//     Hashes: | 6 | 7 | 0 | ... | 6 | 6 |
+//     Target: 0
+//   The run of 6's and 7's wrap around.  The probe for 0 starts in the middle
+//   of this wrapped run and must continue past it, even though the hashes in
+//   the run are larger than the target.
 //
-// These conditions lead to 4 cases:
+// Example case 4: probe wraps, run does not wrap
+//     Index:  | 0 | 1 | 2 | ... | 6 | 7 |
+//     Hashes: | 6 | 0 | 1 | ... | 6 | 6 |
+//     Target: 7
+//   After the wrapped run of 6's is a run starting at 0, which does not wrap.
+//   The probe for 7 wraps around before encountering the 0.  The probe should
+//   stop at that point, even though 0 is smaller than 7.
 //
-// - NS+NR: hash <= tgt <= i:
-//   Common case.  Search terminates when hash > tgt.
-// - WS+WR: i < hash <= tgt:
-//   Like NS+NR, search terminates when hash > tgt.
-// - NS+WR: tgt <= i < hash:
-//   The search needs to continue, meaning it needs to treat tgt as larger than
-//   hash.
-// - WS+NR: hash <= i < tgt:
-//   The search needs to stop, meaning it needs to treat hash as larger than
-//   tgt.
+// We characterize these four cases based on the following:
 //
-// Consider i-tgt and i-hash using unsigned arithmetic.
-// - In NS+NR and WS+WR cases, search terminates when i-tgt > i-hash.
-// - In NS+WR case, i-hash wraps, so i-tgt < i-hash ~> search continues.
-// - In WS+NR case, i-tgt wraps, so i-tgt > i-hash ~> search terminates.
+// - T: The target hash value being probed for.
+// - i: The current index in the table being examined in the probe.
+// - H[i]: The hash value of the key at index i, assuming that table entry is
+//   occupied.
+//
+// We can identify cases where the probe or the run wraps around the end of the
+// circular buffer by comparing i to T (for the probe) and i to H[i] (for the
+// run).  A probe starts at i == T and proceeds to scan increasing values of i
+// (mod table size).  Therefore, we typically expect i >= T and i >= H[i].  But
+// when wrapping occurs, i will be smaller than the hash, that is, i < T when
+// the probe wraps and i < H[i] when the run wraps.
+//
+// We can describe these four cases in terms of these variables as follows:
+//   Normal Probe, Normal Run (NP+NR):   T <= i and H[i] <= i
+//     The probe _terminates_ at i where T < H[i].
+//   Wrapped Probe, Wrapped Run (WP+WR): T > i and H[i] > i
+//     The probe _terminates_ at i where T < H[i].
+//   Normal Probe, Wrapped Run (NP+WR):  T <= i and H[i] > i
+//     The probe _must continue_ even though T < H[i].
+//   Wrapped Probe, Normal Run (WP+NR):  T > i and H[i] <= i
+//     The probe _must termiante_ even though T > H[i].
+//
+// The table uses the following bit trick to handle all of these cases simply:
+//
+//   Continue the probe if and only if i-T <= i-H[i], using an _unsigned
+//   integer_ comparison.
+//
+// Intuitively, this trick makes the case of wrapping in the probe or run
+// coincide with unsigned integer overflow, allowing the same comparison to be
+// used for all cases.
+//
+// We can justify this bit trick in all caes:
+//
+//   NP+NR and WP+WR: The original termination condition, T < H[i], implies that
+//   -T > -H[i].  Adding i to both sides does not affect the comparison.
+//
+//   NP+WR: The wrapped run, H[i] > i, implies that i-H[i] is negative, which
+//   becomes are large positive unsigned integer.  Meanwhile, i-T is a small
+//   positive unsigned integer, because i > T.  Hence, i-T < i-H[i], which
+//   correctly implies that the probe must continue.
+//
+//   WP+NR: The wrapped probe, T > i, implies that i-T is negative, which
+//   becomes a large positive unsigned integer.  Meanwhile, i >= H[i], implying
+//   that i-H[i] is a small positive unsigned integer.  Hence, i-T > i-H[i],
+//   which correctly implies that the probe should stop.
+//
+// Note: One can formulate this bit trick as T-i >= H[i]-i instead, preserving
+// the direction of the inequality.  I formulate the trick this way simply
+// because I prefer that the common case involve comparisons of small positive
+// integers.
 
-// NOTE: I prefer to think about i-tgt and i-hash, because these will be
-// small positive values in the common case.
-
-static inline bool continue_search(index_t tgt, index_t hash,
-                                   index_t idx) {
+static inline bool continue_probe(index_t tgt, index_t hash, index_t idx) {
     // NOTE: index_t must be unsigned for this check to work.
     return (idx - tgt) <= (idx - hash);
-}
-
-// Insert scans stop under slightly different conditions from !continue_search,
-// specifically, when tgt == hash.
-static inline bool stop_insert_scan(index_t tgt, index_t hash,
-                                    index_t idx) {
-    // NOTE: index_t must be unsigned for this check to work.
-    return (idx - tgt) >= (idx - hash);
 }
 
 static inline struct bucket *find_hyperobject_linear(hyper_table *table,

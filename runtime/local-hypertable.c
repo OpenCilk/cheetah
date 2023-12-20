@@ -129,7 +129,7 @@ struct bucket *__cilkrts_find_hyperobject_hash(hyper_table *table,
     // Target hash
     const index_t tgt = get_table_entry(capacity, key);
     struct bucket *buckets = table->buckets;
-    // Start the search at the target hash
+    // Start the probe at the target hash
     index_t i = tgt;
     do {
         uintptr_t curr_key = buckets[i].key;
@@ -138,11 +138,11 @@ struct bucket *__cilkrts_find_hyperobject_hash(hyper_table *table,
         if (key == curr_key)
             return &buckets[i];
 
-        // Found an empty entry?  The search failed.
+        // Found an empty entry?  The probe failed.
         if (is_empty(curr_key))
             return NULL;
 
-        // Found a tombstone?  Continue the search.
+        // Found a tombstone?  Continue the probe.
         if (is_tombstone(curr_key)) {
             i = inc_index(i, capacity);
             continue;
@@ -151,17 +151,17 @@ struct bucket *__cilkrts_find_hyperobject_hash(hyper_table *table,
         // Otherwise, buckets[i] is another valid key that does not match.
         index_t curr_hash = buckets[i].hash;
 
-        if (continue_search(tgt, curr_hash, i)) {
+        if (continue_probe(tgt, curr_hash, i)) {
             i = inc_index(i, capacity);
             continue;
         }
 
-        // If none of the above cases match, then the search failed to
+        // If none of the above cases match, then the probe failed to
         // find the key.
         return NULL;
     } while (i != tgt);
 
-    // The search failed to find the key.
+    // The probe failed to find the key.
     return NULL;
 }
 
@@ -191,11 +191,11 @@ bool remove_hyperobject(hyper_table *table, uintptr_t key) {
     // Find the key in the table.
     struct bucket *entry = find_hyperobject(table, key);
 
-    // If entry is NULL, the search did not find the key.
+    // If entry is NULL, the probe did not find the key.
     if (NULL == entry)
         return false;
 
-    // The search found the key and returned a pointer to the entry.
+    // The probe found the key and returned a pointer to the entry.
     // Replace the entry with a tombstone and decrement the occupancy.
     make_tombstone(&entry->key);
     --table->occupancy;
@@ -260,10 +260,10 @@ bool insert_hyperobject(hyper_table *table, struct bucket b) {
         return true;
     }
 
-    // Search for the place to insert b.
+    // Probe for the place to insert b.
     index_t i = tgt;
 
-    const index_t search_end = tgt;
+    const index_t probe_end = tgt;
     do {
         uintptr_t curr_key = buckets[i].key;
         // Found the key?  Overwrite that bucket.
@@ -287,82 +287,60 @@ bool insert_hyperobject(hyper_table *table, struct bucket b) {
             // Scan consecutive tombstones from i.
             index_t next_i = inc_index(i, capacity);
             uintptr_t tomb_end = buckets[next_i].key;
-            while (is_tombstone(tomb_end)) {
+            while (next_i != probe_end && is_tombstone(tomb_end)) {
                 next_i = inc_index(next_i, capacity);
                 tomb_end = buckets[next_i].key;
             }
-            // If the next entry is empty, then the search would stop.  It's
-            // safe to insert the bucket at the tombstone.
+
+            // If the next entry is empty, then the probe would stop.  It's
+            // safe to insert the bucket at the tombstone at i.
             if (is_empty(tomb_end)) {
                 buckets[current_tomb] = b;
                 ++table->occupancy;
                 ++table->ins_rm_count;
                 return true;
             }
+
             // Check if the hash at the end of this run of tombstones would
-            // terminate the search.
+            // terminate the probe or if the probe has traversed the whole
+            // table.
             index_t tomb_end_hash = buckets[next_i].hash;
-            if (stop_insert_scan(tgt, tomb_end_hash, next_i)) {
+            if (next_i == probe_end ||
+                !continue_probe(tgt, tomb_end_hash, next_i)) {
                 // It's safe to insert b at the current tombstone.
                 buckets[current_tomb] = b;
                 ++table->occupancy;
                 ++table->ins_rm_count;
                 return true;
             }
+
             // None of the locations among these consecutive tombstones are
-            // appropriate for this bucket.  Continue the search.
-            i = inc_index(next_i, capacity);
+            // appropriate for this bucket.  Continue the probe.
+            i = next_i;
             continue;
         }
 
-        // Otherwise we have another valid key that does not match.
-        // Compare the hashes to decide whether or not to continue the
-        // search.
+        // Otherwise this entry contains have another valid key that does not
+        // match.  Compare the hashes to decide whether or not to continue the
+        // probe.
         index_t curr_hash = buckets[i].hash;
-        if (continue_search(tgt, curr_hash, i)) {
+        if (continue_probe(tgt, curr_hash, i)) {
             i = inc_index(i, capacity);
             continue;
         }
 
         // This is an appropriate location to insert the bucket.  Stop
-        // the search.
+        // the probe.
         break;
-    } while (i != search_end);
+    } while (i != probe_end);
 
     index_t insert_tgt = i;
-    // The search found a place to insert the bucket, but it's occupied.  Insert
+    // The probe found a place to insert the bucket, but it's occupied.  Insert
     // the bucket here and shift the subsequent entries.
     do {
-        // If this entry is empty, insert the current bucket at this location
-        // and terminate.
-        if (is_empty(buckets[i].key)) {
-            buckets[i] = b;
-            ++table->occupancy;
-            ++table->ins_rm_count;
-            return true;
-        } else if (is_tombstone(buckets[i].key)) {
-            // Check whether its safe to insert the bucket at this tombstone.
-            index_t next_i = inc_index(i, capacity);
-            uintptr_t next_key = buckets[next_i].key;
-            if (is_valid(next_key)) {
-                // Inserting at this tombstone could disrupt the search for
-                // next_key.  If this is the case, swap this tombstone with
-                // next_key.
-                index_t next_hash = get_table_entry(capacity, next_key);
-                // Check whether next_key is already displaced from its intended
-                // location in the table.  If so, then it's safe to move it to
-                // the previous table entry.
-                if (next_hash != next_i &&
-                    continue_search(next_hash, next_i, i)) {
-                    struct bucket tmp = buckets[i];
-                    buckets[i] = buckets[next_i];
-                    buckets[next_i] = tmp;
-                    i = next_i;
-                    continue;
-                }
-            }
-            // Either next_key is not valid or it should not be moved.  In
-            // either case, insert the bucket at this tombstone.
+        // If this entry is empty or a tombstone, insert the current bucket at
+        // this location and terminate.
+        if (!is_valid(buckets[i].key)) {
             buckets[i] = b;
             ++table->occupancy;
             ++table->ins_rm_count;
