@@ -62,7 +62,7 @@ static const uint64_t salt = 0x96b9af4f6a40de92UL;
 
 static inline index_t hash(uintptr_t key_in) {
     uint64_t x = key_in ^ salt;
-    // mix based on abseil's low-level hash, to convert 64-bit integers into
+    // mix, based on abseil's low-level hash, and convert 64-bit integers into
     // 32-bit integers.
     const size_t half_bits = sizeof(uintptr_t) * 4;
     const uintptr_t low_mask = ((uintptr_t)(1) << half_bits) - 1;
@@ -85,32 +85,34 @@ static inline index_t inc_index(index_t i, index_t capacity) {
     return i;
 }
 
-// For theoretical and practical efficiency, the hash table implements ordered
-// linear probing --- consecutive hashes in the table are always stored in
-// sorted order --- in a circular buffer.  Typically, the ordering optimization
-// means any hash-table probe for a target T can stop when it encounters an
-// element in the table whose hash is greater than T.
+// For theoretical and practical efficiency, the hash table implements
+// ordered linear probing --- consecutive hashes in the table are
+// always stored in sorted order --- in a circular buffer.
+// Intuitively, this ordering means any hash-table probe for a target
+// T can stop when it encounters an element in the table whose hash is
+// greater than T.
 //
-// However, the combination of ordering and a circular buffer leads to several
-// tricky cases when probing for an element or its insertion point.  These cases
-// depend on whether the probe wraps around the end of the buffer and whether
-// the run --- the ordered sequence of hashes in the table --- wraps around the
-// end of the buffer.
+// Implementing ordered linear probing on a circular buffer, however,
+// leads to several tricky cases when probing for an element or its
+// insertion point.  These cases depend on whether the probe or the
+// run --- the ordered sequence of hashes in the table --- wraps
+// around from the end to the beginning of the buffer's allocated
+// memory.  In general, there are four cases:
 //
-// Example case 1: no wrapping (common case)
+// Example case 1: No wrapping (common case)
 //     Index:  ... | 3 | 4 | 5 | 6 | ...
 //     Hashes: ... | 3 | 3 | 3 | 5 | ...
 //     Target: 4
 //   The probe starts at index 4 and scans increasing indices, stopping when it
 //   sees hash = 5 at index 6.
 //
-// Example case 2: probe and run both wrap
+// Example case 2: Probe and run both wrap
 //     Index:  | 0 | 1 | 2 | ... | 6 | 7 |
 //     Hashes: | 6 | 7 | 0 | ... | 6 | 6 |
 //     Target: 7
 //   The run of 6's wraps around, as does the probe for 7.
 //
-// Example case 3: probe does not wrap, run does wrap
+// Example case 3: Probe does not wrap, run does wrap
 //     Index:  | 0 | 1 | 2 | ... | 6 | 7 |
 //     Hashes: | 6 | 7 | 0 | ... | 6 | 6 |
 //     Target: 0
@@ -118,7 +120,7 @@ static inline index_t inc_index(index_t i, index_t capacity) {
 //   of this wrapped run and must continue past it, even though the hashes in
 //   the run are larger than the target.
 //
-// Example case 4: probe wraps, run does not wrap
+// Example case 4: Probe wraps, run does not wrap
 //     Index:  | 0 | 1 | 2 | ... | 6 | 7 |
 //     Hashes: | 6 | 0 | 1 | ... | 6 | 6 |
 //     Target: 7
@@ -126,7 +128,7 @@ static inline index_t inc_index(index_t i, index_t capacity) {
 //   The probe for 7 wraps around before encountering the 0.  The probe should
 //   stop at that point, even though 0 is smaller than 7.
 //
-// We characterize these four cases based on the following:
+// We characterize these four cases in terms of the following variables:
 //
 // - T: The target hash value being probed for.
 // - i: The current index in the table being examined in the probe.
@@ -155,9 +157,9 @@ static inline index_t inc_index(index_t i, index_t capacity) {
 //   Continue the probe if and only if i-T <= i-H[i], using an _unsigned
 //   integer_ comparison.
 //
-// Intuitively, this trick makes the case of wrapping in the probe or run
-// coincide with unsigned integer overflow, allowing the same comparison to be
-// used for all cases.
+// Intuitively, this trick makes the case of wrapping around the table
+// coincide with unsigned integer overflow, allowing the same
+// comparison to be used in all cases.
 //
 // We can justify this bit trick in all caes:
 //

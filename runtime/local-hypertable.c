@@ -320,9 +320,9 @@ bool insert_hyperobject(hyper_table *table, struct bucket b) {
             continue;
         }
 
-        // Otherwise this entry contains have another valid key that does not
-        // match.  Compare the hashes to decide whether or not to continue the
-        // probe.
+        // Otherwise this entry contains another valid key that does
+        // not match.  Compare the hashes to decide whether or not to
+        // continue the probe.
         index_t curr_hash = buckets[i].hash;
         if (continue_probe(tgt, curr_hash, i)) {
             i = inc_index(i, capacity);
