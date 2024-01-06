@@ -150,7 +150,7 @@ static inline index_t inc_index(index_t i, index_t capacity) {
 //   Normal Probe, Wrapped Run (NP+WR):  T <= i and H[i] > i
 //     The probe _must continue_ even though T < H[i].
 //   Wrapped Probe, Normal Run (WP+NR):  T > i and H[i] <= i
-//     The probe _must termiante_ even though T > H[i].
+//     The probe _must terminate_ even though T > H[i].
 //
 // The table uses the following bit trick to handle all of these cases simply:
 //
@@ -161,7 +161,7 @@ static inline index_t inc_index(index_t i, index_t capacity) {
 // coincide with unsigned integer overflow, allowing the same
 // comparison to be used in all cases.
 //
-// We can justify this bit trick in all caes:
+// We can justify this bit trick in all cases:
 //
 //   NP+NR and WP+WR: The original termination condition, T < H[i], implies that
 //   -T > -H[i].  Adding i to both sides does not affect the comparison.
