@@ -5,14 +5,14 @@
 # The motivation for this is to be able to generate the cilktools
 # lit tests suites and run them against an arbitrary LLVM toolchain
 # which doesn't ship the LLVM CMake build files.
-macro(cilktools_mock_llvm_cmake_config)
+macro(cheetah_mock_llvm_cmake_config)
   message(STATUS "Attempting to mock the changes made by LLVMConfig.cmake")
-  cilktools_mock_llvm_cmake_config_set_cmake_path()
-  cilktools_mock_llvm_cmake_config_set_target_triple()
-  cilktools_mock_llvm_cmake_config_include_cmake_files()
+  cheetah_mock_llvm_cmake_config_set_cmake_path()
+  cheetah_mock_llvm_cmake_config_set_target_triple()
+  cheetah_mock_llvm_cmake_config_include_cmake_files()
 endmacro()
 
-macro(cilktools_mock_llvm_cmake_config_set_cmake_path)
+macro(cheetah_mock_llvm_cmake_config_set_cmake_path)
   # Point `LLVM_CMAKE_DIR` at the source tree in the monorepo.
   set(LLVM_CMAKE_DIR "${LLVM_MAIN_SRC_DIR}/cmake/modules")
   if (NOT EXISTS "${LLVM_CMAKE_DIR}")
@@ -22,7 +22,7 @@ macro(cilktools_mock_llvm_cmake_config_set_cmake_path)
   message(STATUS "LLVM_CMAKE_DIR: \"${LLVM_CMAKE_DIR}\"")
 endmacro()
 
-function(cilktools_mock_llvm_cmake_config_set_target_triple)
+function(cheetah_mock_llvm_cmake_config_set_target_triple)
   # Various bits of cilktools depend on the `LLVM_TARGET_TRIPLE` variable
   # being defined. This function tries to set a sensible value for the
   # variable. This is a function rather than a macro to avoid polluting the
@@ -69,7 +69,7 @@ function(cilktools_mock_llvm_cmake_config_set_target_triple)
   set(LLVM_TARGET_TRIPLE "${LLVM_TARGET_TRIPLE}" PARENT_SCOPE)
 endfunction()
 
-macro(cilktools_mock_llvm_cmake_config_include_cmake_files)
+macro(cheetah_mock_llvm_cmake_config_include_cmake_files)
   # Some cilktools CMake code needs to call code in this file.
   include("${LLVM_CMAKE_DIR}/AddLLVM.cmake")
 endmacro()
