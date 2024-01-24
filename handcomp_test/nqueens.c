@@ -6,12 +6,10 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "../runtime/cilk2c.h"
-#include "../runtime/cilk2c_inlined.c"
-#include "ktiming.h"
+#define ENABLE_UNSAFE_C2CILK_LIBRARY 0xda179e12
+#include <c2cilk/c2cilk.h>
 
-extern size_t ZERO;
-void __attribute__((weak)) dummy(void *p) { return; }
+#include "ktiming.h"
 
 // int * count;
 
@@ -51,10 +49,7 @@ static int ok (int n, char *a) {
     return 1;
 }
 
-static void __attribute__ ((noinline))
-nqueens_spawn_helper(int *count, int n, int j, char *a); 
-
-static int nqueens(int n, int j, char *a) {
+C2CILK_FUNC(int, nqueens, (int, n, int, j, char*, a), {
 
     char *b;
     int i;
@@ -68,51 +63,37 @@ static int nqueens(int n, int j, char *a) {
     count = (int *) alloca(n * sizeof(int));
     (void) memset(count, 0, n * sizeof (int));
 
-    dummy(alloca(ZERO));
-    __cilkrts_stack_frame sf;
-    __cilkrts_enter_frame(&sf);
+    c2cilk_context(
 
-    for (i = 0; i < n; i++) {
+        for (i = 0; i < n; i++) {
 
-        /***
-         * Strictly speaking, this (alloca after spawn) is frowned 
-         * up on, but in this case, this is ok, because b returned by 
-         * alloca is only used in this iteration; later spawns don't 
-         * need to be able to access copies of b from previous iterations 
-         ***/
-        b = (char *) alloca((j + 1) * sizeof (char));
-        memcpy(b, a, j * sizeof (char));
-        b[j] = i;
+            /***
+             * Strictly speaking, this (alloca after spawn) is frowned 
+             * up on, but in this case, this is ok, because b returned by 
+             * alloca is only used in this iteration; later spawns don't 
+             * need to be able to access copies of b from previous iterations 
+             ***/
+            b = (char *) alloca((j + 1) * sizeof (char));
+            memcpy(b, a, j * sizeof (char));
+            b[j] = i;
 
-        if(ok (j + 1, b)) {
+            if(ok (j + 1, b)) {
 
-            /* count[i] = cilk_spawn nqueens(n, j + 1, b); */
-            if (!__cilk_prepare_spawn(&sf)) {
-                nqueens_spawn_helper(&(count[i]), n, j+1, b);
+                /* count[i] = cilk_spawn nqueens(n, j + 1, b); */
+                c2cilk_spawn(&(count[i]), nqueens, n, j + 1, b);
             }
         }
-    }
-    /* cilk_sync */
-    __cilk_sync_nothrow(&sf);
 
-    for(i = 0; i < n; i++) {
-        solNum += count[i];
-    }
+            /* cilk_sync */
+            // Implicit cilk_sync at the end of the context
+    )
 
-    __cilk_parent_epilogue(&sf);
+        for(i = 0; i < n; i++) {
+            solNum += count[i];
+        }
 
     return solNum;
-}
-
-static void __attribute__ ((noinline)) 
-nqueens_spawn_helper(int *count, int n, int j, char *a) {
-
-    __cilkrts_stack_frame sf;
-    __cilkrts_enter_frame_helper(&sf);
-    __cilkrts_detach(&sf);
-    *count = nqueens(n, j, a);
-    __cilk_helper_epilogue(&sf);
-}
+})
 
 int main(int argc, char *argv[]) {
 

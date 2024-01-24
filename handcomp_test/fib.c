@@ -1,9 +1,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "../runtime/cilk2c.h"
-#include "../runtime/cilk2c_inlined.c"
 #include "ktiming.h"
+
+#define ENABLE_UNSAFE_C2CILK_LIBRARY 0xda179e12
+#include <c2cilk/c2cilk.h>
 
 
 #ifndef TIMING_COUNT 
@@ -31,45 +32,22 @@ int fib(int n) {
 }
 */
 
-extern size_t ZERO;
-void __attribute__((weak)) dummy(void *p) { return; }
-
-static void __attribute__ ((noinline)) fib_spawn_helper(int *x, int n); 
-
-int fib(int n) {
-    int x = 0, y, _tmp;
+C2CILK_FUNC(int, fib, (int, n), {
+    int x = 0, y;
 
     if(n < 2)
         return n;
 
-    dummy(alloca(ZERO));
-    __cilkrts_stack_frame sf;
-    __cilkrts_enter_frame(&sf);
+    c2cilk_context(
+        /* x = spawn fib(n-1) */
+        c2cilk_spawn(&x, fib, n-1);
+        y = fib(n - 2);
 
-    /* x = spawn fib(n-1) */
-    if (!__cilk_prepare_spawn(&sf)) {
-      fib_spawn_helper(&x, n-1);
-    }
+        // Implicit cilk_sync
+    )
 
-    y = fib(n - 2);
-
-    /* cilk_sync */
-    __cilk_sync_nothrow(&sf);
-    _tmp = x + y;
-
-    __cilk_parent_epilogue(&sf);
-
-    return _tmp;
-}
-
-static void __attribute__ ((noinline)) fib_spawn_helper(int *x, int n) {
-
-    __cilkrts_stack_frame sf;
-    __cilkrts_enter_frame_helper(&sf);
-    __cilkrts_detach(&sf);
-    *x = fib(n);
-    __cilk_helper_epilogue(&sf);
-}
+    return x + y;
+})
 
 int main(int argc, char * args[]) {
     int i;

@@ -58,13 +58,11 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "../runtime/cilk2c.h"
-#include "../runtime/cilk2c_inlined.c"
 #include "ktiming.h"
 #include "getoptions.h"
 
-extern size_t ZERO;
-void __attribute__((weak)) dummy(void *p) { return; }
+#define ENABLE_UNSAFE_C2CILK_LIBRARY 0xda179e12
+#include <c2cilk/c2cilk.h>
 
 #ifndef TIMING_COUNT
 #define TIMING_COUNT 0
@@ -305,11 +303,8 @@ ELM *binsplit(ELM val, ELM *low, ELM *high) {
         return low;
 }
 
-static void __attribute__ ((noinline)) 
-cilkmerge_spawn_helper(ELM *low1, ELM *high1, ELM *low2, ELM *high2, ELM *lowdest);
- 
-void cilkmerge(ELM *low1, ELM *high1, 
-               ELM *low2, ELM *high2, ELM *lowdest) {
+C2CILK_VOID_FUNC(cilkmerge, (ELM*, low1, ELM*, high1, 
+               ELM*, low2, ELM*, high2, ELM*, lowdest), {
 
     /*
      * Cilkmerge: Merges range [low1, high1] with range [low2, high2] 
@@ -348,55 +343,32 @@ void cilkmerge(ELM *low1, ELM *high1,
         return;
     }
 
-    dummy(alloca(ZERO));
-    __cilkrts_stack_frame sf;
-    __cilkrts_enter_frame(&sf);
+    c2cilk_context(
+        /*
+         * Basic approach: Find the middle element of one range (indexed by
+         * split1). Find where this element would fit in the other range
+         * (indexed by split 2). Then merge the two lower halves and the two
+         * upper halves. 
+         */
 
-    /*
-     * Basic approach: Find the middle element of one range (indexed by
-     * split1). Find where this element would fit in the other range
-     * (indexed by split 2). Then merge the two lower halves and the two
-     * upper halves. 
-     */
+        split1 = ((high1 - low1 + 1) / 2) + low1;
+        split2 = binsplit(*split1, low2, high2);
+        lowsize = split1 - low1 + split2 - low2;
 
-    split1 = ((high1 - low1 + 1) / 2) + low1;
-    split2 = binsplit(*split1, low2, high2);
-    lowsize = split1 - low1 + split2 - low2;
+        /* 
+         * directly put the splitting element into
+         * the appropriate location
+         */
+        *(lowdest + lowsize + 1) = *split1;
 
-    /* 
-     * directly put the splitting element into
-     * the appropriate location
-     */
-    *(lowdest + lowsize + 1) = *split1;
-
-    /* cilk_spawn cilkmerge(low1, split1 - 1, low2, split2, lowdest); */
-    if (!__cilk_prepare_spawn(&sf)) {
-        cilkmerge_spawn_helper(low1, split1 - 1, low2, split2, lowdest);
-    }
-    cilkmerge(split1 + 1, high1, split2 + 1, high2, lowdest + lowsize + 2);
-
-    /* cilk_sync; */
-    __cilk_sync_nothrow(&sf);
-
-    __cilk_parent_epilogue(&sf);
-
+        /* cilk_spawn cilkmerge(low1, split1 - 1, low2, split2, lowdest); */
+        c2cilk_void_spawn(cilkmerge, low1, split1 - 1, low2, split2, lowdest);
+        cilkmerge(split1 + 1, high1, split2 + 1, high2, lowdest + lowsize + 2);
+    )
     return;
-}
+})
 
-static void __attribute__ ((noinline)) 
-cilkmerge_spawn_helper(ELM *low1, ELM *high1, 
-                       ELM *low2, ELM *high2, ELM *lowdest) {
-
-    __cilkrts_stack_frame sf;
-    __cilkrts_enter_frame_helper(&sf);
-    __cilkrts_detach(&sf);
-    cilkmerge(low1, high1, low2, high2, lowdest);
-    __cilk_helper_epilogue(&sf);
-}
-
-static void __attribute__ ((noinline)) cilksort_spawn_helper(ELM *low, ELM *tmp, long size); 
-
-void cilksort(ELM *low, ELM *tmp, long size) {
+C2CILK_VOID_FUNC(cilksort, (ELM*, low, ELM*, tmp, long, size), {
 
     /*
      * divide the input in four parts of the same size (A, B, C, D)
@@ -415,62 +387,42 @@ void cilksort(ELM *low, ELM *tmp, long size) {
         return;
     }
 
-    dummy(alloca(ZERO));
-    __cilkrts_stack_frame sf;
-    __cilkrts_enter_frame(&sf);
+    c2cilk_context(
+        A = low;
+        tmpA = tmp;
+        B = A + quarter;
+        tmpB = tmpA + quarter;
+        C = B + quarter;
+        tmpC = tmpB + quarter;
+        D = C + quarter;
+        tmpD = tmpC + quarter;
 
-    A = low;
-    tmpA = tmp;
-    B = A + quarter;
-    tmpB = tmpA + quarter;
-    C = B + quarter;
-    tmpC = tmpB + quarter;
-    D = C + quarter;
-    tmpD = tmpC + quarter;
+        /* cilk_spawn cilksort(A, tmpA, quarter); */
+        c2cilk_void_spawn(cilksort, A, tmpA, quarter);
 
-    /* cilk_spawn cilksort(A, tmpA, quarter); */
-    if (!__cilk_prepare_spawn(&sf)) {
-        cilksort_spawn_helper(A, tmpA, quarter);
-    }
+        /* cilk_spawn cilksort(B, tmpB, quarter); */
+        c2cilk_void_spawn(cilksort, B, tmpB, quarter);
 
-    /* cilk_spawn cilksort(B, tmpB, quarter); */
-    if (!__cilk_prepare_spawn(&sf)) {
-        cilksort_spawn_helper(B, tmpB, quarter);
-    }
+        /* cilk_spawn cilksort(C, tmpC, quarter); */
+        c2cilk_void_spawn(cilksort, C, tmpC, quarter);
 
-    /* cilk_spawn cilksort(C, tmpC, quarter); */
-    if (!__cilk_prepare_spawn(&sf)) {
-        cilksort_spawn_helper(C, tmpC, quarter);
-    }
-    cilksort(D, tmpD, size - 3 * quarter);
+        cilksort(D, tmpD, size - 3 * quarter);
 
-    /* cilk_sync */
-    __cilk_sync_nothrow(&sf);
+        /* cilk_sync */
+        c2cilk_sync;
 
-    /* cilk_spawn cilkmerge(A, A + quarter - 1, B, B + quarter - 1, tmpA); */
-    if (!__cilk_prepare_spawn(&sf)) {
-        cilkmerge_spawn_helper(A, A + quarter - 1, B, B + quarter - 1, tmpA);
-    }
-    cilkmerge(C, C + quarter - 1, D, low + size - 1, tmpC);
+        /* cilk_spawn cilkmerge(A, A + quarter - 1, B, B + quarter - 1, tmpA); */
+        c2cilk_void_spawn(cilkmerge, A, A + quarter - 1, B, B + quarter - 1, tmpA);
+        cilkmerge(C, C + quarter - 1, D, low + size - 1, tmpC);
 
-    /* cilk_sync */
-    __cilk_sync_nothrow(&sf);
+        /* cilk_sync */
+        c2cilk_sync;
 
-    cilkmerge(tmpA, tmpC - 1, tmpC, tmpA + size - 1, A);
-
-    __cilk_parent_epilogue(&sf);
+        cilkmerge(tmpA, tmpC - 1, tmpC, tmpA + size - 1, A);
+    )
 
     return;
-}
-
-static void __attribute__ ((noinline)) cilksort_spawn_helper(ELM *low, ELM *tmp, long size) {
-
-    __cilkrts_stack_frame sf;
-    __cilkrts_enter_frame_helper(&sf);
-    __cilkrts_detach(&sf);
-    cilksort(low, tmp, size);
-    __cilk_helper_epilogue(&sf);
-}
+})
 
 void scramble_array(ELM *arr, unsigned long size) {
     unsigned long i;
