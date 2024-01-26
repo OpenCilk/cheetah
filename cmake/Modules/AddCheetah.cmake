@@ -379,6 +379,13 @@ function(add_cheetah_runtime name type)
     if(type STREQUAL "SHARED")
       rt_externalize_debuginfo(${libname})
     endif()
+
+    # Handle the dependence on compiler-rt specially
+    if ("-fsanitize=address" IN_LIST LIB_LINK_FLAGS)
+      if (TARGET asan)
+        add_dependencies(${libname} compiler-rt)
+      endif()
+    endif()
   endforeach()
   if(LIB_PARENT_TARGET)
     add_dependencies(${LIB_PARENT_TARGET} ${libnames})
