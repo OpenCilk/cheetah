@@ -188,7 +188,7 @@ static void threads_init(global_state *g) {
 #endif
 #endif // ENABLE_WORKER_PINNING
     int n_threads = g->nworkers;
-    CILK_ASSERT_G(n_threads > 0);
+    CILK_ASSERT(n_threads > 0);
 
     /* TODO: Apple supports thread affinity using a different interface. */
 
@@ -259,7 +259,7 @@ static void threads_init(global_state *g) {
 
             int err = pthread_setaffinity_np(g->threads[w], sizeof(worker_mask),
                                              &worker_mask);
-            CILK_ASSERT_G(err == 0);
+            CILK_ASSERT(err == 0);
         }
 #endif
 #endif // ENABLE_WORKER_PINNING
@@ -271,7 +271,7 @@ global_state *__cilkrts_startup(int argc, char *argv[]) {
     global_state *g = global_state_init(argc, argv);
     workers_init(g);
     deques_init(g);
-    CILK_ASSERT_G(0 == g->exiting_worker);
+    CILK_ASSERT(0 == g->exiting_worker);
 
     // Create the root closure and a fiber to go with it.  Use worker 0 to
     // allocate the closure and fiber.
@@ -308,7 +308,7 @@ static void __cilkrts_start_workers(global_state *g) {
 
 // Stop the Cilk workers in g, for example, by joining their underlying Pthreads.
 static void __cilkrts_stop_workers(global_state *g) {
-    /* CILK_ASSERT_G( */
+    /* CILK_ASSERT( */
     /*     !atomic_load_explicit(&g->start_thieves, memory_order_acquire)); */
 
     // Set g->start and g->terminate, to allow the workers to exit their
@@ -439,7 +439,7 @@ void __cilkrts_internal_invoke_cilkified_root(__cilkrts_stack_frame *sf) {
     void *new_rsp =
         (void *)sysdep_reset_stack_for_resume(root_closure->fiber, sf);
     USE_UNUSED(new_rsp);
-    CILK_ASSERT_G(SP(sf) == new_rsp);
+    CILK_ASSERT(SP(sf) == new_rsp);
 
     // Mark that this root frame is last (meaning, at the top of the stack)
     sf->flags |= CILK_FRAME_LAST;
@@ -496,7 +496,7 @@ void __cilkrts_internal_invoke_cilkified_root(__cilkrts_stack_frame *sf) {
 void __cilkrts_internal_exit_cilkified_root(global_state *g,
                                             __cilkrts_stack_frame *sf) {
     __cilkrts_worker *w = __cilkrts_get_tls_worker();
-    CILK_ASSERT(w, w->l->state == WORKER_RUN);
+    CILK_ASSERT(w->l->state == WORKER_RUN);
     CILK_SWITCH_TIMING(w, INTERVAL_WORK, INTERVAL_CILKIFY_EXIT);
     // Record this worker as the exiting worker.  We keep track of this exiting
     // worker so that code outside of Cilkified regions can use this worker's
@@ -552,7 +552,7 @@ void __cilkrts_internal_exit_cilkified_root(global_state *g,
     // function, but leave_frame is executed conditionally in Cilk functions
     // based on whether sf->flags == 0.  Clearing sf->flags ensures that the
     // Cilkifying thread does not try to execute leave_frame.
-    CILK_ASSERT(w, __cilkrts_synced(sf));
+    CILK_ASSERT(__cilkrts_synced(sf));
     sf->flags = 0;
 
     CILK_STOP_TIMING(w, INTERVAL_CILKIFY_EXIT);
@@ -618,7 +618,7 @@ static void global_state_deinit(global_state *g) {
 static void deques_deinit(global_state *g) {
     cilkrts_alert(BOOT, NULL, "(deques_deinit) Clean up deques");
     for (unsigned int i = 0; i < g->options.nproc; i++) {
-        CILK_ASSERT_G(g->deques[i].mutex_owner == NO_WORKER);
+        CILK_ASSERT(g->deques[i].mutex_owner == NO_WORKER);
     }
 }
 
@@ -658,7 +658,7 @@ static void workers_deinit(global_state *g) {
 
     if (DEBUG_ENABLED(MEMORY)) {
         for (int i = 0; i < NUM_BUCKETS; ++i)
-            CILK_ASSERT_INDEX_ZERO(NULL, allocations, i, , "%ld");
+            CILK_ASSERT_INDEX_ZERO(allocations, i, , "%ld");
     }
 
     unsigned i = g->options.nproc;
@@ -679,7 +679,7 @@ static void workers_deinit(global_state *g) {
 }
 
 CHEETAH_INTERNAL void __cilkrts_shutdown(global_state *g) {
-    CILK_ASSERT_G(NULL == exception_reducer.exn);
+    CILK_ASSERT(NULL == exception_reducer.exn);
     // If the workers are still running, stop them now.
     if (g->workers_started)
         __cilkrts_stop_workers(g);

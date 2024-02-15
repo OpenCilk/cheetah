@@ -35,14 +35,14 @@ static inline void Closure_assert_ownership(__cilkrts_worker *const w,
                                             worker_id self,
                                             Closure *t) {
     CILK_ASSERT(
-        w, atomic_load_explicit(&t->mutex_owner, memory_order_relaxed) == self);
+        atomic_load_explicit(&t->mutex_owner, memory_order_relaxed) == self);
 }
 
 static inline void Closure_assert_alienation(__cilkrts_worker *const w,
                                              worker_id self,
                                              Closure *t) {
     CILK_ASSERT(
-        w, atomic_load_explicit(&t->mutex_owner, memory_order_relaxed) != self);
+        atomic_load_explicit(&t->mutex_owner, memory_order_relaxed) != self);
 }
 
 static inline void Closure_checkmagic(__cilkrts_worker *const w, Closure *t) {
@@ -53,9 +53,9 @@ static inline void Closure_checkmagic(__cilkrts_worker *const w, Closure *t) {
     case CLOSURE_READY:
         return;
     case CLOSURE_POST_INVALID:
-        CILK_ABORT(w, "destroyed closure");
+        CILK_ABORT("destroyed closure");
     default:
-        CILK_ABORT(w, "invalid closure");
+        CILK_ABORT("invalid closure");
     }
 }
 
@@ -76,7 +76,7 @@ static inline void Closure_checkmagic(__cilkrts_worker *const w, Closure *t) {
 static inline void Closure_change_status(__cilkrts_worker *const w, Closure *t,
                                          enum ClosureStatus old,
                                          enum ClosureStatus status) {
-    CILK_ASSERT(w, t->status == old);
+    CILK_ASSERT(t->status == old);
     t->status = status;
 }
 
@@ -177,7 +177,7 @@ static inline Closure *Closure_create(__cilkrts_worker *const w,
     /* cilk_internal_malloc returns sufficiently aligned memory */
     Closure *new_closure =
         cilk_internal_malloc(w, sizeof(*new_closure), IM_CLOSURE);
-    CILK_ASSERT(w, new_closure != NULL);
+    CILK_ASSERT(new_closure != NULL);
 
     Closure_init(new_closure, sf);
 
@@ -193,7 +193,7 @@ static inline void Closure_clear_frame(Closure *cl) {
 static inline void Closure_set_frame(__cilkrts_worker *w,
                                      Closure *cl,
                                       __cilkrts_stack_frame *sf) {
-    CILK_ASSERT(w, !cl->frame);
+    CILK_ASSERT(!cl->frame);
     cl->frame = sf;
 }
 
@@ -203,12 +203,12 @@ static inline void double_link_children(__cilkrts_worker *const w,
                                         Closure *left, Closure *right) {
 
     if (left) {
-        CILK_ASSERT(w, left->right_sib == (Closure *)NULL);
+        CILK_ASSERT(left->right_sib == (Closure *)NULL);
         left->right_sib = right;
     }
 
     if (right) {
-        CILK_ASSERT(w, right->left_sib == (Closure *)NULL);
+        CILK_ASSERT(right->left_sib == (Closure *)NULL);
         right->left_sib = left;
     }
 }
@@ -218,11 +218,11 @@ static inline void double_link_children(__cilkrts_worker *const w,
 static inline void unlink_child(__cilkrts_worker *const w, Closure *cl) {
 
     if (cl->left_sib) {
-        CILK_ASSERT(w, cl->left_sib->right_sib == cl);
+        CILK_ASSERT(cl->left_sib->right_sib == cl);
         cl->left_sib->right_sib = cl->right_sib;
     }
     if (cl->right_sib) {
-        CILK_ASSERT(w, cl->right_sib->left_sib == cl);
+        CILK_ASSERT(cl->right_sib->left_sib == cl);
         cl->right_sib->left_sib = cl->left_sib;
     }
     // used only for error checking
@@ -275,18 +275,18 @@ void Closure_add_child(__cilkrts_worker *const w, worker_id self, Closure *paren
 static inline
 void Closure_remove_child(__cilkrts_worker *const w, worker_id self, Closure *parent,
                           Closure *child) {
-    CILK_ASSERT(w, child);
-    CILK_ASSERT(w, parent == child->spawn_parent);
+    CILK_ASSERT(child);
+    CILK_ASSERT(parent == child->spawn_parent);
 
     Closure_assert_ownership(w, self, parent);
     Closure_assert_ownership(w, self, child);
 
     if (child == parent->right_most_child) {
-        CILK_ASSERT(w, child->right_sib == (Closure *)NULL);
+        CILK_ASSERT(child->right_sib == (Closure *)NULL);
         parent->right_most_child = child->left_sib;
     }
 
-    CILK_ASSERT(w, child->right_ht == (hyper_table *)NULL);
+    CILK_ASSERT(child->right_ht == (hyper_table *)NULL);
 
     unlink_child(w, child);
 }
@@ -304,8 +304,8 @@ void Closure_remove_child(__cilkrts_worker *const w, worker_id self, Closure *pa
 static inline
 void Closure_add_temp_callee(__cilkrts_worker *const w, Closure *caller,
                              Closure *callee) {
-    CILK_ASSERT(w, !(caller->has_cilk_callee));
-    CILK_ASSERT(w, callee->spawn_parent == NULL);
+    CILK_ASSERT(!(caller->has_cilk_callee));
+    CILK_ASSERT(callee->spawn_parent == NULL);
 
     callee->call_parent = caller;
     caller->has_cilk_callee = true;
@@ -317,9 +317,9 @@ void Closure_add_callee(__cilkrts_worker *const w, Closure *caller,
     // ANGE: instead of checking has_cilk_callee, we just check if callee is
     // NULL, because we might have set the has_cilk_callee in
     // Closure_add_tmp_callee to prevent the closure from being resumed.
-    CILK_ASSERT(w, caller->callee == NULL);
-    CILK_ASSERT(w, callee->spawn_parent == NULL);
-    CILK_ASSERT(w, (callee->frame->flags & CILK_FRAME_DETACHED) == 0);
+    CILK_ASSERT(caller->callee == NULL);
+    CILK_ASSERT(callee->spawn_parent == NULL);
+    CILK_ASSERT((callee->frame->flags & CILK_FRAME_DETACHED) == 0);
 
     callee->call_parent = caller;
     caller->callee = callee;
@@ -331,8 +331,8 @@ void Closure_remove_callee(__cilkrts_worker *const w, Closure *caller) {
 
     // A child is not double linked with siblings if it is called
     // so there is no need to unlink it.
-    CILK_ASSERT(w, caller->status == CLOSURE_SUSPENDED);
-    CILK_ASSERT(w, caller->has_cilk_callee);
+    CILK_ASSERT(caller->status == CLOSURE_SUSPENDED);
+    CILK_ASSERT(caller->has_cilk_callee);
     caller->has_cilk_callee = false;
     caller->callee = NULL;
 }
@@ -351,13 +351,13 @@ static inline void Closure_suspend_victim(struct ReadyDeque *deques,
     Closure_assert_ownership(thief, thief_id, cl);
     deque_assert_ownership(deques, thief, thief_id, victim_id);
 
-    CILK_ASSERT(thief, cl == thief->g->root_closure || cl->spawn_parent ||
-                           cl->call_parent);
+    CILK_ASSERT(cl == thief->g->root_closure || cl->spawn_parent ||
+                cl->call_parent);
 
     Closure_change_status(thief, cl, CLOSURE_RUNNING, CLOSURE_SUSPENDED);
 
     cl1 = deque_xtract_bottom(deques, thief, thief_id, victim_id);
-    CILK_ASSERT(thief, cl == cl1);
+    CILK_ASSERT(cl == cl1);
     USE_UNUSED(cl1);
 }
 
@@ -373,16 +373,16 @@ static inline void Closure_suspend(struct ReadyDeque *deques,
     Closure_assert_ownership(w, self, cl);
     deque_assert_ownership(deques, w, self, self);
 
-    CILK_ASSERT(w, cl == w->g->root_closure || cl->spawn_parent ||
+    CILK_ASSERT(cl == w->g->root_closure || cl->spawn_parent ||
                        cl->call_parent);
-    CILK_ASSERT(w, cl->frame != NULL);
-    CILK_ASSERT(w, __cilkrts_stolen(cl->frame));
+    CILK_ASSERT(cl->frame != NULL);
+    CILK_ASSERT(__cilkrts_stolen(cl->frame));
 
     Closure_change_status(w, cl, CLOSURE_RUNNING, CLOSURE_SUSPENDED);
 
     cl1 = deque_xtract_bottom(deques, w, self, self);
 
-    CILK_ASSERT(w, cl == cl1);
+    CILK_ASSERT(cl == cl1);
     USE_UNUSED(cl1);
 }
 
@@ -390,23 +390,13 @@ static inline void Closure_make_ready(Closure *cl) { cl->status = CLOSURE_READY;
 
 static inline void Closure_clean(__cilkrts_worker *const w, Closure *t) {
     // sanity checks
-    if (w) {
-        CILK_ASSERT(w, t->left_sib == (Closure *)NULL);
-        CILK_ASSERT(w, t->right_sib == (Closure *)NULL);
-        CILK_ASSERT(w, t->right_most_child == (Closure *)NULL);
+    CILK_ASSERT(t->left_sib == (Closure *)NULL);
+    CILK_ASSERT(t->right_sib == (Closure *)NULL);
+    CILK_ASSERT(t->right_most_child == (Closure *)NULL);
 
-        CILK_ASSERT(w, t->user_ht == (hyper_table *)NULL);
-        CILK_ASSERT(w, t->child_ht == (hyper_table *)NULL);
-        CILK_ASSERT(w, t->right_ht == (hyper_table *)NULL);
-    } else {
-        CILK_ASSERT_G(t->left_sib == (Closure *)NULL);
-        CILK_ASSERT_G(t->right_sib == (Closure *)NULL);
-        CILK_ASSERT_G(t->right_most_child == (Closure *)NULL);
-
-        CILK_ASSERT_G(t->user_ht == (hyper_table *)NULL);
-        CILK_ASSERT_G(t->child_ht == (hyper_table *)NULL);
-        CILK_ASSERT_G(t->right_ht == (hyper_table *)NULL);
-    }
+    CILK_ASSERT(t->user_ht == (hyper_table *)NULL);
+    CILK_ASSERT(t->child_ht == (hyper_table *)NULL);
+    CILK_ASSERT(t->right_ht == (hyper_table *)NULL);
 }
 
 /* ANGE: destroy the closure and internally free it (put back to global

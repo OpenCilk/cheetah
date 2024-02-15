@@ -98,7 +98,7 @@ get_exception_reducer_or_null(__cilkrts_worker *w) {
 
     struct bucket *b = find_hyperobject(table, (uintptr_t)key);
     if (b) {
-        CILK_ASSERT(w, key == (void *)b->key);
+        CILK_ASSERT(key == (void *)b->key);
         // Return the existing view.
         return (struct closure_exception *)(b->value.view);
     }
@@ -109,7 +109,7 @@ get_exception_reducer_or_null(__cilkrts_worker *w) {
 // Destroy the current view of the exception-reducer state.
 void clear_exception_reducer(__cilkrts_worker *w,
                              struct closure_exception *exn_r) {
-    CILK_ASSERT(w, exn_r->throwing_fiber == NULL);
+    CILK_ASSERT(exn_r->throwing_fiber == NULL);
     free(exn_r);
     internal_reducer_remove(w, &exception_reducer);
 }
@@ -185,7 +185,7 @@ __attribute__((always_inline)) static void
 resume_from_last_frame(__cilkrts_worker *w, __cilkrts_stack_frame *sf,
                  struct _Unwind_Exception *ue_header) {
     cilkrts_alert(CFRAME, w, "resume_from_last_frame %p", (void *)sf);
-    CILK_ASSERT(w, CHECK_CILK_FRAME_MAGIC(w->g, sf));
+    CILK_ASSERT(CHECK_CILK_FRAME_MAGIC(w->g, sf));
     // WHEN_CILK_DEBUG(sf->magic = ~CILK_STACKFRAME_MAGIC);
 
     // Pop this frame off the cactus stack.  This logic used to be in
@@ -212,7 +212,7 @@ _Unwind_Reason_Code __cilk_personality_internal(
 
     struct cilk_fiber *fh = __cilkrts_current_fh;
     __cilkrts_worker *w = fh->worker;
-    CILK_ASSERT_POINTER_EQUAL(w, w, __cilkrts_get_tls_worker());
+    CILK_ASSERT_POINTER_EQUAL(w, __cilkrts_get_tls_worker());
     __cilkrts_stack_frame *sf = fh->current_stack_frame;
 
     if (actions & _UA_SEARCH_PHASE) {
@@ -230,7 +230,7 @@ _Unwind_Reason_Code __cilk_personality_internal(
 
         // After the cilk_sync, the worker may have changed.
         w = get_worker_from_stack(sf);
-        CILK_ASSERT_POINTER_EQUAL(w, w, __cilkrts_get_tls_worker());
+        CILK_ASSERT_POINTER_EQUAL(w, __cilkrts_get_tls_worker());
 
         // Unset the CILK_FRAME_THROWING flag.
         sf->flags &= ~CILK_FRAME_THROWING;

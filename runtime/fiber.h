@@ -97,7 +97,7 @@ static inline char *sysdep_get_stack_start(struct cilk_fiber *fiber) {
 
 static inline char *sysdep_reset_stack_for_resume(struct cilk_fiber *fiber,
                                                   __cilkrts_stack_frame *sf) {
-    CILK_ASSERT_G(fiber);
+    CILK_ASSERT(fiber);
     char *sp = sysdep_get_stack_start(fiber);
     /* Debugging: make sure stack is accessible. */
     ((volatile char *)sp)[-1];

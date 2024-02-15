@@ -151,7 +151,7 @@ __cilkrts_detach(__cilkrts_stack_frame *sf) {
     __cilkrts_worker *w = get_worker_from_stack(sf);
     cilkrts_alert(CFRAME, w, "__cilkrts_detach %p", (void *)sf);
 
-    CILK_ASSERT(w, CHECK_CILK_FRAME_MAGIC(w->g, sf));
+    CILK_ASSERT(CHECK_CILK_FRAME_MAGIC(w->g, sf));
 
     struct __cilkrts_stack_frame *parent = sf->call_parent;
 
@@ -162,7 +162,7 @@ __cilkrts_detach(__cilkrts_stack_frame *sf) {
     sf->flags |= CILK_FRAME_DETACHED;
     struct __cilkrts_stack_frame **tail =
         atomic_load_explicit(&w->tail, memory_order_relaxed);
-    CILK_ASSERT(w, (tail + 1) < w->ltq_limit);
+    CILK_ASSERT((tail + 1) < w->ltq_limit);
 
     // store parent at *tail, and then increment tail
     *tail++ = parent;
@@ -213,7 +213,7 @@ __cilkrts_leave_frame(__cilkrts_stack_frame *sf) {
     __cilkrts_worker *w = get_worker_from_stack(sf);
     cilkrts_alert(CFRAME, w, "__cilkrts_leave_frame %p", (void *)sf);
 
-    CILK_ASSERT(w, CHECK_CILK_FRAME_MAGIC(w->g, sf));
+    CILK_ASSERT(CHECK_CILK_FRAME_MAGIC(w->g, sf));
     // WHEN_CILK_DEBUG(sf->magic = ~CILK_STACKFRAME_MAGIC);
 
     __cilkrts_stack_frame *parent = sf->call_parent;
@@ -236,7 +236,7 @@ __cilkrts_leave_frame(__cilkrts_stack_frame *sf) {
         return;
     }
 
-    CILK_ASSERT(w, !(flags & CILK_FRAME_DETACHED));
+    CILK_ASSERT(!(flags & CILK_FRAME_DETACHED));
 
     // A detached frame would never need to call Cilk_set_return, which performs
     // the return protocol of a full frame back to its parent when the full
@@ -248,7 +248,7 @@ __cilkrts_leave_frame(__cilkrts_stack_frame *sf) {
         // leaving a full frame; need to get the full frame of its call
         // parent back onto the deque
         Cilk_set_return(w);
-        CILK_ASSERT(w, CHECK_CILK_FRAME_MAGIC(w->g, sf));
+        CILK_ASSERT(CHECK_CILK_FRAME_MAGIC(w->g, sf));
     }
 }
 
@@ -257,7 +257,7 @@ __cilkrts_leave_frame_helper(__cilkrts_stack_frame *sf) {
     __cilkrts_worker *w = get_worker_from_stack(sf);
     cilkrts_alert(CFRAME, w, "__cilkrts_leave_frame_helper %p", (void *)sf);
 
-    CILK_ASSERT(w, CHECK_CILK_FRAME_MAGIC(w->g, sf));
+    CILK_ASSERT(CHECK_CILK_FRAME_MAGIC(w->g, sf));
     // WHEN_CILK_DEBUG(sf->magic = ~CILK_STACKFRAME_MAGIC);
 
     // Pop this frame off the cactus stack.  This logic used to be in
@@ -271,7 +271,7 @@ __cilkrts_leave_frame_helper(__cilkrts_stack_frame *sf) {
     }
     sf->call_parent = NULL;
 
-    CILK_ASSERT(w, sf->flags & CILK_FRAME_DETACHED);
+    CILK_ASSERT(sf->flags & CILK_FRAME_DETACHED);
 
     __cilkrts_stack_frame **tail =
             atomic_load_explicit(&w->tail, memory_order_relaxed);
@@ -325,7 +325,7 @@ void __cilkrts_pause_frame(__cilkrts_stack_frame *sf, char *exn) {
     __cilkrts_worker *w = get_worker_from_stack(sf);
     cilkrts_alert(CFRAME, w, "__cilkrts_pause_frame %p", (void *)sf);
 
-    CILK_ASSERT(w, CHECK_CILK_FRAME_MAGIC(w->g, sf));
+    CILK_ASSERT(CHECK_CILK_FRAME_MAGIC(w->g, sf));
 
     __cilkrts_stack_frame *parent = sf->call_parent;
 

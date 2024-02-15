@@ -206,9 +206,9 @@ get_worker_counts(__cilkrts_worker *const w, uint64_t disengaged_sentinel,
                   unsigned int nworkers) {
     uint32_t disengaged = GET_DISENGAGED(disengaged_sentinel);
     uint32_t sentinel = GET_SENTINEL(disengaged_sentinel);
-    CILK_ASSERT(w, disengaged < nworkers);
-    CILK_ASSERT(w, sentinel <= nworkers);
-    CILK_ASSERT(w, sentinel + disengaged <= nworkers);
+    CILK_ASSERT(disengaged < nworkers);
+    CILK_ASSERT(sentinel <= nworkers);
+    CILK_ASSERT(sentinel + disengaged <= nworkers);
     int32_t active =
         (int32_t)nworkers - (int32_t)disengaged - (int32_t)sentinel;
 
@@ -267,7 +267,7 @@ maybe_reengage_workers(global_state *const rts, worker_id self,
         // Get the current worker counts, with this sentinel now active.
         worker_counts counts =
             get_worker_counts(w, disengaged_sentinel - 1, nworkers);
-        CILK_ASSERT(w, counts.active >= 1);
+        CILK_ASSERT(counts.active >= 1);
 
         history_t my_efficient_history = *efficient_history;
         history_t my_inefficient_history = *inefficient_history;
@@ -603,7 +603,7 @@ decrease_fails_by_work(global_state *const rts, __cilkrts_worker *const w,
 
     // The fail count must be a multiple of ATTEMPTS for the sleep logic to
     // work.
-    CILK_ASSERT(w, fails % ATTEMPTS == 0);
+    CILK_ASSERT(fails % ATTEMPTS == 0);
 
     if (scaled_elapsed > (uint64_t)(*sample_threshold) - SENTINEL_THRESHOLD)
         *sample_threshold = SENTINEL_THRESHOLD;

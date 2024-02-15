@@ -344,8 +344,7 @@ void cilk_fiber_deallocate(__cilkrts_worker *w, struct cilk_fiber *fiber) {
                   (void *)fiber->stack_low,
                   (void *)sysdep_get_stack_start(fiber));
     if (DEBUG_ENABLED_STATIC(FIBER))
-        CILK_ASSERT(
-            w, !in_fiber(fiber, fiber->current_stack_frame));
+        CILK_ASSERT(!in_fiber(fiber, fiber->current_stack_frame));
     free_stack(fiber);
 }
 

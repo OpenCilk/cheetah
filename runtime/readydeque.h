@@ -31,7 +31,7 @@ struct ReadyDeque {
 static inline void deque_assert_ownership(ReadyDeque *deques,
                                           __cilkrts_worker *const w,
                                           worker_id self, worker_id pn) {
-    CILK_ASSERT(w, atomic_load_explicit(&deques[pn].mutex_owner,
+    CILK_ASSERT(atomic_load_explicit(&deques[pn].mutex_owner,
                                         memory_order_relaxed) == self);
 }
 
@@ -106,19 +106,19 @@ static inline Closure *deque_xtract_top(ReadyDeque *deques,
 
     cl = deques[pn].top;
     if (cl) {
-        CILK_ASSERT(w, cl->owner_ready_deque == pn);
+        CILK_ASSERT(cl->owner_ready_deque == pn);
         deques[pn].top = cl->next_ready;
         /* ANGE: if there is only one entry in the deque ... */
         if (cl == deques[pn].bottom) {
-            CILK_ASSERT(w, cl->next_ready == (Closure *)NULL);
+            CILK_ASSERT(cl->next_ready == (Closure *)NULL);
             deques[pn].bottom = (Closure *)NULL;
         } else {
-            CILK_ASSERT(w, cl->next_ready);
+            CILK_ASSERT(cl->next_ready);
             (cl->next_ready)->prev_ready = (Closure *)NULL;
         }
         WHEN_CILK_DEBUG(cl->owner_ready_deque = NO_WORKER);
     } else {
-        CILK_ASSERT(w, deques[pn].bottom == (Closure *)NULL);
+        CILK_ASSERT(deques[pn].bottom == (Closure *)NULL);
     }
 
     return cl;
@@ -140,10 +140,10 @@ static inline Closure *deque_peek_top(ReadyDeque *deques,
         // who is in the midst of exiting a Cilkified region.  In that case, cl
         // will be the root closure, and cl->owner_ready_deque is not
         // necessarily pn.  The steal will subsequently fail do_dekker_on.
-        CILK_ASSERT(w, cl->owner_ready_deque == pn ||
+        CILK_ASSERT(cl->owner_ready_deque == pn ||
                            (self != pn && cl == w->g->root_closure));
     } else {
-        CILK_ASSERT(w, deques[pn].bottom == (Closure *)NULL);
+        CILK_ASSERT(deques[pn].bottom == (Closure *)NULL);
     }
 
     return cl;
@@ -161,19 +161,19 @@ static inline Closure *deque_xtract_bottom(ReadyDeque *deques,
 
     cl = deques[pn].bottom;
     if (cl) {
-        CILK_ASSERT(w, cl->owner_ready_deque == pn);
+        CILK_ASSERT(cl->owner_ready_deque == pn);
         deques[pn].bottom = cl->prev_ready;
         if (cl == deques[pn].top) {
-            CILK_ASSERT(w, cl->prev_ready == (Closure *)NULL);
+            CILK_ASSERT(cl->prev_ready == (Closure *)NULL);
             deques[pn].top = (Closure *)NULL;
         } else {
-            CILK_ASSERT(w, cl->prev_ready);
+            CILK_ASSERT(cl->prev_ready);
             (cl->prev_ready)->next_ready = (Closure *)NULL;
         }
 
         WHEN_CILK_DEBUG(cl->owner_ready_deque = NO_WORKER);
     } else {
-        CILK_ASSERT(w, deques[pn].top == (Closure *)NULL);
+        CILK_ASSERT(deques[pn].top == (Closure *)NULL);
     }
 
     return cl;
@@ -189,9 +189,9 @@ deque_peek_bottom(ReadyDeque *deques, __cilkrts_worker *const w, worker_id self,
 
     cl = deques[pn].bottom;
     if (cl) {
-        CILK_ASSERT(w, cl->owner_ready_deque == pn);
+        CILK_ASSERT(cl->owner_ready_deque == pn);
     } else {
-        CILK_ASSERT(w, deques[pn].top == (Closure *)NULL);
+        CILK_ASSERT(deques[pn].top == (Closure *)NULL);
     }
 
     return cl;
@@ -206,7 +206,7 @@ static inline void deque_add_bottom(ReadyDeque *deques,
                                     worker_id self, worker_id pn) {
 
     deque_assert_ownership(deques, w, self, pn);
-    CILK_ASSERT(w, cl->owner_ready_deque == NO_WORKER);
+    CILK_ASSERT(cl->owner_ready_deque == NO_WORKER);
 
     cl->prev_ready = deques[pn].bottom;
     cl->next_ready = (Closure *)NULL;
@@ -214,7 +214,7 @@ static inline void deque_add_bottom(ReadyDeque *deques,
     WHEN_CILK_DEBUG(cl->owner_ready_deque = pn);
 
     if (deques[pn].top) {
-        CILK_ASSERT(w, cl->prev_ready);
+        CILK_ASSERT(cl->prev_ready);
         (cl->prev_ready)->next_ready = cl;
     } else {
         deques[pn].top = cl;
