@@ -330,7 +330,7 @@ static void free_stack(struct cilk_fiber *f) {
 // Supported public functions
 //===============================================================
 
-struct cilk_fiber *cilk_fiber_allocate(__cilkrts_worker *w, size_t stacksize) {
+struct cilk_fiber *cilk_fiber_allocate(size_t stacksize) {
     struct cilk_fiber *fiber = make_stack(stacksize);
     init_fiber_header(fiber);
     cilkrts_alert(FIBER, "Allocate fiber %p [%p--%p]", (void *)fiber,
@@ -339,7 +339,7 @@ struct cilk_fiber *cilk_fiber_allocate(__cilkrts_worker *w, size_t stacksize) {
     return fiber;
 }
 
-void cilk_fiber_deallocate(__cilkrts_worker *w, struct cilk_fiber *fiber) {
+void cilk_fiber_deallocate(struct cilk_fiber *fiber) {
     cilkrts_alert(FIBER, "Deallocate fiber %p [%p--%p]", (void *)fiber,
                   (void *)fiber->stack_low,
                   (void *)sysdep_get_stack_start(fiber));

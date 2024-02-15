@@ -277,7 +277,7 @@ global_state *__cilkrts_startup(int argc, char *argv[]) {
     // allocate the closure and fiber.
     __cilkrts_worker *w0 = g->workers[0];
     Closure *t = Closure_create(w0, NULL);
-    struct cilk_fiber *fiber = cilk_fiber_allocate(w0, g->options.stacksize);
+    struct cilk_fiber *fiber = cilk_fiber_allocate(g->options.stacksize);
     t->fiber = fiber;
     g->root_closure = t;
 
@@ -403,7 +403,7 @@ void __cilkrts_internal_invoke_cilkified_root(__cilkrts_stack_frame *sf) {
 #endif
         if (USE_EXTENSION) {
             g->root_closure->ext_fiber =
-                cilk_fiber_allocate(w0, g->options.stacksize);
+                cilk_fiber_allocate(g->options.stacksize);
         }
         boss_initialized = true;
     }
