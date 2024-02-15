@@ -105,8 +105,7 @@ __cilkrts_enter_frame(__cilkrts_stack_frame *sf) {
     if (__cilkrts_need_to_cilkify) {
         cilkify(sf);
     }
-    __cilkrts_worker *w = __cilkrts_get_tls_worker();
-    cilkrts_alert(CFRAME, w, "__cilkrts_enter_frame %p", (void *)sf);
+    cilkrts_alert(CFRAME, NULL, "__cilkrts_enter_frame %p", (void *)sf);
 
     sf->magic = frame_magic;
 
@@ -124,8 +123,7 @@ __cilkrts_enter_frame(__cilkrts_stack_frame *sf) {
 // its counterpart, __cilkrts_enter_frame.
 __attribute__((always_inline)) void
 __cilkrts_enter_frame_helper(__cilkrts_stack_frame *sf) {
-    __cilkrts_worker *w = __cilkrts_get_tls_worker();
-    cilkrts_alert(CFRAME, w, "__cilkrts_enter_frame_helper %p", (void *)sf);
+    cilkrts_alert(CFRAME, NULL, "__cilkrts_enter_frame_helper %p", (void *)sf);
 
     sf->flags = 0;
     sf->magic = frame_magic;

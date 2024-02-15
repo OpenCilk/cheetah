@@ -1078,7 +1078,7 @@ static Closure *Closure_steal(__cilkrts_worker **workers,
             // from the top of a deque while a new Cilkified region was
             // starting.
             if (cl != w->g->root_closure)
-                cilkrts_bug(victim_w, "Bug: %s closure in ready deque",
+                cilkrts_bug("Bug: %s closure in ready deque",
                             Closure_status_to_str(cl->status));
         }
     } else {
@@ -1106,7 +1106,7 @@ void promote_own_deque(__cilkrts_worker *w) {
     worker_id self = w->self;
     if (deque_trylock(deques, self, self) == 0) {
         cilkrts_bug(
-            w, "Bug: failed to acquire deque lock when promoting own deque");
+            "Bug: failed to acquire deque lock when promoting own deque");
         return;
     }
 
@@ -1119,7 +1119,6 @@ void promote_own_deque(__cilkrts_worker *w) {
         if (Closure_trylock(w, self, cl) == 0) {
             deque_unlock(deques, self, self);
             cilkrts_bug(
-                w,
                 "Bug: failed to acquire deque lock when promoting own deque");
             return;
         }
@@ -1378,7 +1377,7 @@ static void do_what_it_says(ReadyDeque *deques, __cilkrts_worker *w,
             break; // ?
 
         default:
-            cilkrts_bug(w, "do_what_it_says() invalid closure status: %s",
+            cilkrts_bug("do_what_it_says() invalid closure status: %s",
                         Closure_status_to_str(t->status));
             break;
         }
