@@ -150,6 +150,9 @@ static void parse_rts_environment(global_state *g) {
 global_state *global_state_init(int argc, char *argv[]) {
     cilkrts_alert(BOOT, "(global_state_init) Initializing global state");
 
+    (void)argc; // not currently used
+    (void)argv; // not currently used
+
 #ifdef DEBUG
     setlinebuf(stderr);
 #endif

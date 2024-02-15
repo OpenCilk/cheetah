@@ -50,6 +50,8 @@ sysdep_save_fp_ctrl_state(__cilkrts_stack_frame *sf) {
     /* Disabled because LLVM's implementation is bad. */
     sf->mxcsr = __builtin_ia32_stmxcsr(); /* aka _mm_setcsr */
 #endif
+#else
+    (void)sf; // intentionally unused
 #endif
 }
 
@@ -68,6 +70,8 @@ sysdep_restore_fp_state(__cilkrts_stack_frame *sf) {
     /* Disabled because LLVM's implementation is bad. */
     __builtin_ia32_ldmxcsr(sf->mxcsr); /* aka _mm_getcsr */
 #endif
+#else
+    (void)sf; // intentionally unused
 #endif
 
 #ifdef __AVX__
@@ -161,9 +165,15 @@ void sanitizer_finish_switch_fiber(void);
 CHEETAH_INTERNAL void sanitizer_poison_fiber(struct cilk_fiber *fiber);
 CHEETAH_INTERNAL void sanitizer_unpoison_fiber(struct cilk_fiber *fiber);
 #else
-static inline void sanitizer_start_switch_fiber(struct cilk_fiber *fiber) {}
+static inline void sanitizer_start_switch_fiber(struct cilk_fiber *fiber) {
+  (void)fiber;
+}
 static inline void sanitizer_finish_switch_fiber() {}
-static inline void sanitizer_poison_fiber(struct cilk_fiber *fiber) {}
-static inline void sanitizer_unpoison_fiber(struct cilk_fiber *fiber) {}
+static inline void sanitizer_poison_fiber(struct cilk_fiber *fiber) {
+  (void)fiber;
+}
+static inline void sanitizer_unpoison_fiber(struct cilk_fiber *fiber) {
+  (void)fiber;
+}
 #endif // CILK_ENABLE_ASAN_HOOKS
 #endif

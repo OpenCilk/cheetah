@@ -55,6 +55,8 @@ static local_state *worker_local_init(local_state *l, global_state *g) {
 }
 
 static void worker_local_destroy(local_state *l, global_state *g) {
+    (void)l; // not currently used
+    (void)g; // not currently used
     /* currently nothing to do here */
 }
 
@@ -623,6 +625,8 @@ static void deques_deinit(global_state *g) {
 }
 
 static void worker_terminate(__cilkrts_worker *w, void *data) {
+    (void)data; // not currently used
+
     cilk_fiber_pool_per_worker_terminate(w);
     hyper_table *ht = w->hyper_table;
     if (ht) {
@@ -646,6 +650,8 @@ static void sum_allocations(__cilkrts_worker *w, void *data) {
 }
 
 static void wrap_fiber_pool_destroy(__cilkrts_worker *w, void *data) {
+    (void)data; // not currently used
+
     cilk_fiber_pool_per_worker_destroy(w);
 }
 

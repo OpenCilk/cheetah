@@ -29,10 +29,12 @@ struct ReadyDeque {
  *********************************************************/
 
 static inline void deque_assert_ownership(ReadyDeque *deques,
-                                          __cilkrts_worker *const w,
                                           worker_id self, worker_id pn) {
     CILK_ASSERT(atomic_load_explicit(&deques[pn].mutex_owner,
                                         memory_order_relaxed) == self);
+    (void)deques;
+    (void)self;
+    (void)pn;
 }
 
 static inline void deque_lock_self(ReadyDeque *deques, worker_id self) {
@@ -84,6 +86,7 @@ static inline void deque_lock(ReadyDeque *deques, worker_id self,
 
 static inline void deque_unlock(ReadyDeque *deques, worker_id self,
                                 worker_id pn) {
+    (void)self; // TODO: Remove unused parameter?
     atomic_store_explicit(&deques[pn].mutex_owner, NO_WORKER,
                           memory_order_release);
 }
@@ -95,14 +98,13 @@ static inline void deque_unlock(ReadyDeque *deques, worker_id self,
  * ANGE: the precondition of these functions is that the worker w -> self
  * must have locked worker pn's deque before entering the function
  */
-static inline Closure *deque_xtract_top(ReadyDeque *deques,
-                                        __cilkrts_worker *const w,
-                                        worker_id self, worker_id pn) {
+static inline Closure *deque_xtract_top(ReadyDeque *deques, worker_id self,
+                                        worker_id pn) {
 
     Closure *cl;
 
     /* ANGE: make sure w has the lock on worker pn's deque */
-    deque_assert_ownership(deques, w, self, pn);
+    deque_assert_ownership(deques, self, pn);
 
     cl = deques[pn].top;
     if (cl) {
@@ -128,10 +130,12 @@ static inline Closure *deque_peek_top(ReadyDeque *deques,
                                       __cilkrts_worker *const w, worker_id self,
                                       worker_id pn) {
 
+    (void)w;  // unused if assertions disabled
+
     Closure *cl;
 
     /* ANGE: make sure w has the lock on worker pn's deque */
-    deque_assert_ownership(deques, w, self, pn);
+    deque_assert_ownership(deques, self, pn);
 
     /* ANGE: return the top but does not unlink it from the rest */
     cl = deques[pn].top;
@@ -149,15 +153,13 @@ static inline Closure *deque_peek_top(ReadyDeque *deques,
     return cl;
 }
 
-static inline Closure *deque_xtract_bottom(ReadyDeque *deques,
-                                           __cilkrts_worker *const w,
-                                           worker_id self,
+static inline Closure *deque_xtract_bottom(ReadyDeque *deques, worker_id self,
                                            worker_id pn) {
 
     Closure *cl;
 
     /* ANGE: make sure w has the lock on worker pn's deque */
-    deque_assert_ownership(deques, w, self, pn);
+    deque_assert_ownership(deques, self, pn);
 
     cl = deques[pn].bottom;
     if (cl) {
@@ -180,12 +182,12 @@ static inline Closure *deque_xtract_bottom(ReadyDeque *deques,
 }
 
 static inline Closure *
-deque_peek_bottom(ReadyDeque *deques, __cilkrts_worker *const w, worker_id self, worker_id pn) {
+deque_peek_bottom(ReadyDeque *deques, worker_id self, worker_id pn) {
 
     Closure *cl;
 
     /* ANGE: make sure w has the lock on worker pn's deque */
-    deque_assert_ownership(deques, w, self, pn);
+    deque_assert_ownership(deques, self, pn);
 
     cl = deques[pn].bottom;
     if (cl) {
@@ -201,11 +203,10 @@ deque_peek_bottom(ReadyDeque *deques, __cilkrts_worker *const w, worker_id self,
  * ANGE: this allow w -> self to append Closure cl onto worker pn's ready
  *       deque (i.e. make cl the new bottom).
  */
-static inline void deque_add_bottom(ReadyDeque *deques,
-                                    __cilkrts_worker *const w, Closure *cl,
+static inline void deque_add_bottom(ReadyDeque *deques, Closure *cl,
                                     worker_id self, worker_id pn) {
 
-    deque_assert_ownership(deques, w, self, pn);
+    deque_assert_ownership(deques, self, pn);
     CILK_ASSERT(cl->owner_ready_deque == NO_WORKER);
 
     cl->prev_ready = deques[pn].bottom;

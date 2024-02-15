@@ -105,6 +105,8 @@ void __cilkrts_check_exception_resume(__cilkrts_stack_frame *sf) {
 // points at the fiber and call-stack frame containing sf before any catch
 // handlers in that frame execute.
 void __cilkrts_cleanup_fiber(__cilkrts_stack_frame *sf, int32_t sel) {
+    (void)sel; // currently unused
+
     __cilkrts_worker *w = get_worker_from_stack(sf);
     CILK_ASSERT_POINTER_EQUAL(w, __cilkrts_get_tls_worker());
 

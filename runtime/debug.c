@@ -101,7 +101,7 @@ static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 CHEETAH_INTERNAL
 #endif
 void cilkrts_alert(const int lvl, const char *fmt, ...) {
-    if (ALERT_LVL == 0)
+    if ((ALERT_LVL & lvl) == 0)
         return;
     char prefix[10], body[200];
     size_t size1 = 0, size2 = 0;

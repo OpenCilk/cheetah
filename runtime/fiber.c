@@ -350,6 +350,8 @@ void cilk_fiber_deallocate(struct cilk_fiber *fiber) {
 
 void cilk_fiber_deallocate_global(struct global_state *g,
                                   struct cilk_fiber *fiber) {
+    (void)g; // not currently used
+
     cilkrts_alert(FIBER, "Deallocate fiber %p [%p--%p]", (void *)fiber,
                   (void *)fiber->stack_low,
                   (void *)sysdep_get_stack_start(fiber));

@@ -72,6 +72,7 @@ static inline void Closure_checkmagic(Closure *t) {
 static inline void Closure_change_status(Closure *t, enum ClosureStatus old,
                                          enum ClosureStatus status) {
     CILK_ASSERT(t->status == old);
+    (void)old; // unused if assertions disabled
     t->status = status;
 }
 
@@ -107,6 +108,7 @@ static inline void Closure_lock(worker_id self, Closure *t) {
 }
 
 static inline void Closure_unlock(worker_id self, Closure *t) {
+    (void)self; // unused if assertions disabled
     Closure_checkmagic(t);
     Closure_assert_ownership(self, t);
     atomic_store_explicit(&t->mutex_owner, NO_WORKER, memory_order_release);
@@ -238,6 +240,7 @@ static inline void unlink_child(Closure *cl) {
  ***/
 static inline
 void Closure_add_child(worker_id self, Closure *parent, Closure *child) {
+    (void)self; // unused if assertions disabled
 
     /* ANGE: w must have the lock on parent */
     Closure_assert_ownership(self, parent);
@@ -264,6 +267,8 @@ void Closure_add_child(worker_id self, Closure *parent, Closure *child) {
  ***/
 static inline
 void Closure_remove_child(worker_id self, Closure *parent, Closure *child) {
+    (void)self; // unused if assertions disabled
+
     CILK_ASSERT(child);
     CILK_ASSERT(parent == child->spawn_parent);
 
@@ -327,28 +332,24 @@ void Closure_remove_callee(Closure *caller) {
 /* This function is used for steal, the next function for sync.
    The invariants are slightly different. */
 static inline void Closure_suspend_victim(struct ReadyDeque *deques,
-                                          __cilkrts_worker *thief,
-                                          worker_id thief_id, worker_id victim_id,
+                                          worker_id thief_id,
+                                          worker_id victim_id,
                                           Closure *cl) {
 
     Closure *cl1;
 
     Closure_checkmagic(cl);
     Closure_assert_ownership(thief_id, cl);
-    deque_assert_ownership(deques, thief, thief_id, victim_id);
-
-    CILK_ASSERT(cl == thief->g->root_closure || cl->spawn_parent ||
-                cl->call_parent);
+    deque_assert_ownership(deques, thief_id, victim_id);
 
     Closure_change_status(cl, CLOSURE_RUNNING, CLOSURE_SUSPENDED);
 
-    cl1 = deque_xtract_bottom(deques, thief, thief_id, victim_id);
+    cl1 = deque_xtract_bottom(deques, thief_id, victim_id);
     CILK_ASSERT(cl == cl1);
     USE_UNUSED(cl1);
 }
 
-static inline void Closure_suspend(struct ReadyDeque *deques,
-                                   __cilkrts_worker *const w, worker_id self,
+static inline void Closure_suspend(struct ReadyDeque *deques, worker_id self,
                                    Closure *cl) {
 
     Closure *cl1;
@@ -357,16 +358,14 @@ static inline void Closure_suspend(struct ReadyDeque *deques,
 
     Closure_checkmagic(cl);
     Closure_assert_ownership(self, cl);
-    deque_assert_ownership(deques, w, self, self);
+    deque_assert_ownership(deques, self, self);
 
-    CILK_ASSERT(cl == w->g->root_closure || cl->spawn_parent ||
-                       cl->call_parent);
     CILK_ASSERT(cl->frame != NULL);
     CILK_ASSERT(__cilkrts_stolen(cl->frame));
 
     Closure_change_status(cl, CLOSURE_RUNNING, CLOSURE_SUSPENDED);
 
-    cl1 = deque_xtract_bottom(deques, w, self, self);
+    cl1 = deque_xtract_bottom(deques, self, self);
 
     CILK_ASSERT(cl == cl1);
     USE_UNUSED(cl1);
@@ -375,6 +374,8 @@ static inline void Closure_suspend(struct ReadyDeque *deques,
 static inline void Closure_make_ready(Closure *cl) { cl->status = CLOSURE_READY; }
 
 static inline void Closure_clean(Closure *t) {
+    (void)t;  // unused if assertions disabled
+
     // sanity checks
     CILK_ASSERT(t->left_sib == (Closure *)NULL);
     CILK_ASSERT(t->right_sib == (Closure *)NULL);

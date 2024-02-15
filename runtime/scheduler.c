@@ -88,8 +88,7 @@ static void worker_change_state(__cilkrts_worker *w,
 /***********************************************************
  * Managing the 'E' in the THE protocol
  ***********************************************************/
-static void increment_exception_pointer(__cilkrts_worker *const w,
-                                        worker_id self,
+static void increment_exception_pointer(worker_id self,
                                         __cilkrts_worker *const victim_w,
                                         Closure *cl) {
     Closure_assert_ownership(self, cl);
@@ -104,14 +103,10 @@ static void increment_exception_pointer(__cilkrts_worker *const w,
     }
 }
 
-static void decrement_exception_pointer(__cilkrts_worker *const w,
-                                        worker_id self,
+static void decrement_exception_pointer(worker_id self,
                                         __cilkrts_worker *const victim_w,
                                         Closure *cl) {
     Closure_assert_ownership(self, cl);
-    // It's possible that this steal attempt peeked the root closure from the
-    // top of a deque while a new Cilkified region was starting.
-    CILK_ASSERT(cl->status == CLOSURE_RUNNING || cl == w->g->root_closure);
     __cilkrts_stack_frame **exc =
         atomic_load_explicit(&victim_w->exc, memory_order_relaxed);
     if (exc != EXCEPTION_INFINITY) {
@@ -233,7 +228,7 @@ static Closure *setup_call_parent_resumption(ReadyDeque *deques,
                                              __cilkrts_worker *const w,
                                              worker_id self,
                                              Closure *t) {
-    deque_assert_ownership(deques, w, self, self);
+    deque_assert_ownership(deques, self, self);
     Closure_assert_ownership(self, t);
 
     CILK_ASSERT_POINTER_EQUAL(w, __cilkrts_get_tls_worker());
@@ -253,7 +248,7 @@ void Cilk_set_return(__cilkrts_worker *const w) {
     worker_id self = w->self;
 
     deque_lock_self(deques, self);
-    t = deque_peek_bottom(deques, w, self, self);
+    t = deque_peek_bottom(deques, self, self);
     Closure_lock(self, t);
 
     CILK_ASSERT(t->status == CLOSURE_RUNNING);
@@ -267,13 +262,13 @@ void Cilk_set_return(__cilkrts_worker *const w) {
     CILK_ASSERT((t->frame->flags & CILK_FRAME_DETACHED) == 0);
 
     Closure *call_parent = t->call_parent;
-    Closure *t1 = deque_xtract_bottom(deques, w, self, self);
+    Closure *t1 = deque_xtract_bottom(deques, self, self);
 
     USE_UNUSED(t1);
     CILK_ASSERT(t == t1);
     CILK_ASSERT(__cilkrts_stolen(t->frame));
 
-    deque_add_bottom(deques, w, call_parent, self, self);
+    deque_add_bottom(deques, call_parent, self, self);
 
     t->frame = NULL;
     Closure_unlock(self, t);
@@ -425,10 +420,10 @@ static Closure *Closure_return(__cilkrts_worker *const w, worker_id self,
 
         // merge reducers
         if (lht) {
-            active_ht = merge_two_hts(w, lht, active_ht);
+            active_ht = merge_two_hts(lht, active_ht);
         }
         if (rht) {
-            active_ht = merge_two_hts(w, active_ht, rht);
+            active_ht = merge_two_hts(active_ht, rht);
         }
 
         Closure_lock(self, parent);
@@ -496,7 +491,7 @@ static Closure *Closure_return(__cilkrts_worker *const w, worker_id self,
         hyper_table *active_ht = parent->user_ht;
         parent->child_ht = NULL;
         parent->user_ht = NULL;
-        w->hyper_table = merge_two_hts(w, child_ht, active_ht);
+        w->hyper_table = merge_two_hts(child_ht, active_ht);
 
         setup_for_execution(w, res);
     }
@@ -551,7 +546,7 @@ void Cilk_exception_handler(__cilkrts_worker *w, char *exn) {
     ReadyDeque *deques = w->g->deques;
 
     deque_lock_self(deques, self);
-    t = deque_peek_bottom(deques, w, self, self);
+    t = deque_peek_bottom(deques, self, self);
 
     CILK_ASSERT(t);
     Closure_lock(self, t);
@@ -708,14 +703,13 @@ static void setup_closures_in_stacklet(__cilkrts_worker *const w,
  * success, NULL otherwise.  The protocol fails when the victim already popped T
  * so that E=T.
  */
-static __cilkrts_stack_frame **do_dekker_on(__cilkrts_worker *const w,
-                                            worker_id self,
+static __cilkrts_stack_frame **do_dekker_on(worker_id self,
                                             __cilkrts_worker *const victim_w,
                                             Closure *cl) {
 
     Closure_assert_ownership(self, cl);
 
-    increment_exception_pointer(w, self, victim_w, cl);
+    increment_exception_pointer(self, victim_w, cl);
     /* Force a global order between the increment of exc above and any
        decrement of tail by the victim.  __cilkrts_leave_frame must also
        have a SEQ_CST fence or atomic.  Additionally the increment of
@@ -732,7 +726,7 @@ static __cilkrts_stack_frame **do_dekker_on(__cilkrts_worker *const w,
     __cilkrts_stack_frame **tail =
         atomic_load_explicit(&victim_w->tail, memory_order_acquire);
     if (head >= tail) {
-        decrement_exception_pointer(w, self, victim_w, cl);
+        decrement_exception_pointer(self, victim_w, cl);
         return NULL;
     }
 
@@ -762,7 +756,7 @@ static Closure *promote_child(__cilkrts_stack_frame **head, ReadyDeque *deques,
                               __cilkrts_worker *const w,
                               __cilkrts_worker *const victim_w, Closure *cl,
                               Closure **res, worker_id self, worker_id pn) {
-    deque_assert_ownership(deques, w, self, pn);
+    deque_assert_ownership(deques, self, pn);
     Closure_assert_ownership(self, cl);
 
     CILK_ASSERT(cl->status == CLOSURE_RUNNING);
@@ -861,7 +855,7 @@ static Closure *promote_child(__cilkrts_stack_frame **head, ReadyDeque *deques,
         spawn_parent->call_parent = cl;
 
         // suspend cl & remove it from deque
-        Closure_suspend_victim(deques, w, self, pn, cl);
+        Closure_suspend_victim(deques, self, pn, cl);
         Closure_unlock(self, cl);
 
         Closure_lock(self, spawn_parent);
@@ -892,7 +886,7 @@ static Closure *promote_child(__cilkrts_stack_frame **head, ReadyDeque *deques,
 
 
     /* insert the closure on the victim processor's deque */
-    deque_add_bottom(deques, w, spawn_child, self, pn);
+    deque_add_bottom(deques, spawn_child, self, pn);
 
     /* at this point the child can be freely executed */
     return spawn_child;
@@ -953,7 +947,7 @@ static Closure *extract_top_spawning_closure(__cilkrts_stack_frame **head,
     struct cilk_fiber *parent_fiber = cl->fiber;
     struct cilk_fiber *parent_ext_fiber = cl->ext_fiber;
 
-    deque_assert_ownership(deques, w, self, victim_id);
+    deque_assert_ownership(deques, self, victim_id);
     Closure_assert_ownership(self, cl);
     CILK_ASSERT(parent_fiber);
 
@@ -971,7 +965,7 @@ static Closure *extract_top_spawning_closure(__cilkrts_stack_frame **head,
         // ANGE: in this case, the spawning parent to steal / resume
         // is simply cl (i.e., there is only one frame in the stacklet),
         // so we didn't set res in promote_child.
-        res = deque_xtract_top(deques, w, self, victim_id);
+        res = deque_xtract_top(deques, self, victim_id);
         CILK_ASSERT(cl == res);
     }
 
@@ -1034,7 +1028,7 @@ static Closure *Closure_steal(__cilkrts_worker **workers,
         case CLOSURE_RUNNING: {
 
             /* send the exception to the worker */
-            __cilkrts_stack_frame **head = do_dekker_on(w, self, victim_w, cl);
+            __cilkrts_stack_frame **head = do_dekker_on(self, victim_w, cl);
             if (head) {
                 cilkrts_alert(STEAL,
                               "(Closure_steal) can steal from W%d; cl=%p",
@@ -1122,7 +1116,7 @@ void promote_own_deque(__cilkrts_worker *w) {
                 "Bug: failed to acquire deque lock when promoting own deque");
             return;
         }
-        __cilkrts_stack_frame **head = do_dekker_on(w, self, w, cl);
+        __cilkrts_stack_frame **head = do_dekker_on(self, w, cl);
         if (head) {
             // unfortunately this function releases both locks
             Closure *res = extract_top_spawning_closure(head, deques, w, w, cl, self, self);
@@ -1234,7 +1228,7 @@ int Cilk_sync(__cilkrts_worker *const w, __cilkrts_stack_frame *frame) {
     worker_id self = w->self;
 
     deque_lock_self(deques, self);
-    t = deque_peek_bottom(deques, w, self, self);
+    t = deque_peek_bottom(deques, self, self);
     Closure_lock(self, t);
     /* assert we are really at the top of the stack */
     CILK_ASSERT(Closure_at_top_of_stack(w, frame));
@@ -1267,7 +1261,7 @@ int Cilk_sync(__cilkrts_worker *const w, __cilkrts_stack_frame *frame) {
         hyper_table *ht = w->hyper_table;
         w->hyper_table = NULL;
 
-        Closure_suspend(deques, w, self, t);
+        Closure_suspend(deques, self, t);
         t->user_ht = ht; /* set this after state change to suspended */
         res = SYNC_NOT_READY;
     } else {
@@ -1283,7 +1277,7 @@ int Cilk_sync(__cilkrts_worker *const w, __cilkrts_stack_frame *frame) {
         hyper_table *child_ht = t->child_ht;
         if (child_ht) {
             t->child_ht = NULL;
-            w->hyper_table = merge_two_hts(w, child_ht, w->hyper_table);
+            w->hyper_table = merge_two_hts(child_ht, w->hyper_table);
         }
 
 #if CILK_ENABLE_ASAN_HOOKS
@@ -1323,7 +1317,7 @@ static void do_what_it_says(ReadyDeque *deques, __cilkrts_worker *w,
             // MUST unlock the closure before locking the queue
             // (rule A in file PROTOCOLS)
             deque_lock_self(deques, self);
-            deque_add_bottom(deques, w, t, self, self);
+            deque_add_bottom(deques, t, self, self);
             deque_unlock_self(deques, self);
 
             /* now execute it */
@@ -1360,7 +1354,7 @@ static void do_what_it_says(ReadyDeque *deques, __cilkrts_worker *w,
                     // Attempt to get a closure from the bottom of our deque.
                     // We should already have the lock on the deque at this
                     // point, as we jumped here from Cilk_exception_handler.
-                    t = deque_xtract_bottom(deques, w, self, self);
+                    t = deque_xtract_bottom(deques, self, self);
                     deque_unlock_self(deques, self);
                 }
             }
@@ -1593,7 +1587,7 @@ void worker_scheduler(__cilkrts_worker *w) {
                 uint64_t elapsed = end - start;
                 // Decrement the count of failed steal attempts based on the
                 // amount of work done.
-                fails = decrease_fails_by_work(rts, w, fails, elapsed,
+                fails = decrease_fails_by_work(rts, fails, elapsed,
                                                &sample_threshold);
                 if (fails < SENTINEL_THRESHOLD) {
                     inefficient_history = 0;

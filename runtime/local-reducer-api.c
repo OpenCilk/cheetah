@@ -11,6 +11,9 @@
 void __cilkrts_reducer_register(void *key, size_t size,
 				__cilk_identity_fn id,
 				__cilk_reduce_fn reduce) {
+    (void)size; // not currently used here, only in lookup
+    (void)id; // not currently used here, only in lookup
+
     struct local_hyper_table *table = get_hyper_table();
     struct bucket b = {.key = (uintptr_t)key,
                        .value = {.view = key, .reduce_fn = reduce}};
