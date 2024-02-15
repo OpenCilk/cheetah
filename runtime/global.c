@@ -46,7 +46,7 @@ static void set_alert_debug_level() {
 }
 
 static global_state *global_state_allocate() {
-    cilkrts_alert(BOOT, NULL,
+    cilkrts_alert(BOOT,
                   "(global_state_init) Allocating global state");
     global_state *g = (global_state *)cilk_aligned_alloc(
         __alignof(global_state), sizeof(global_state));
@@ -148,8 +148,7 @@ static void parse_rts_environment(global_state *g) {
 }
 
 global_state *global_state_init(int argc, char *argv[]) {
-    cilkrts_alert(BOOT, NULL,
-                  "(global_state_init) Initializing global state");
+    cilkrts_alert(BOOT, "(global_state_init) Initializing global state");
 
 #ifdef DEBUG
     setlinebuf(stderr);

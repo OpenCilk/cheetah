@@ -175,7 +175,7 @@ static inline Closure *Closure_create(__cilkrts_worker *const w,
 
     Closure_init(new_closure, sf);
 
-    cilkrts_alert(CLOSURE, w, "Allocate closure %p", (void *)new_closure);
+    cilkrts_alert(CLOSURE, "Allocate closure %p", (void *)new_closure);
 
     return new_closure;
 }
@@ -353,7 +353,7 @@ static inline void Closure_suspend(struct ReadyDeque *deques,
 
     Closure *cl1;
 
-    cilkrts_alert(SCHED, w, "Closure_suspend %p", (void *)cl);
+    cilkrts_alert(SCHED, "Closure_suspend %p", (void *)cl);
 
     Closure_checkmagic(cl);
     Closure_assert_ownership(self, cl);
@@ -389,7 +389,7 @@ static inline void Closure_clean(Closure *t) {
    pool) */
 static inline void Closure_destroy(struct __cilkrts_worker *const w,
                                    Closure *t) {
-    cilkrts_alert(CLOSURE, w, "Deallocate closure %p", (void *)t);
+    cilkrts_alert(CLOSURE, "Deallocate closure %p", (void *)t);
     Closure_checkmagic(t);
     t->status = CLOSURE_POST_INVALID;
     Closure_clean(t);
@@ -400,7 +400,7 @@ static inline void Closure_destroy(struct __cilkrts_worker *const w,
    workers have been terminated. */
 static inline void Closure_destroy_global(struct global_state *const g,
                                           Closure *t) {
-    cilkrts_alert(CLOSURE, NULL, "Deallocate closure %p", (void *)t);
+    cilkrts_alert(CLOSURE, "Deallocate closure %p", (void *)t);
     t->status = CLOSURE_POST_INVALID;
     Closure_clean(t);
     cilk_internal_free_global(g, t, sizeof(*t), IM_CLOSURE);

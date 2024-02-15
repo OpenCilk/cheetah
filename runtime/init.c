@@ -59,7 +59,7 @@ static void worker_local_destroy(local_state *l, global_state *g) {
 }
 
 static void deques_init(global_state *g) {
-    cilkrts_alert(BOOT, NULL, "(deques_init) Initializing deques");
+    cilkrts_alert(BOOT, "(deques_init) Initializing deques");
     for (unsigned int i = 0; i < g->options.nproc; i++) {
         g->deques[i].top = NULL;
         g->deques[i].bottom = NULL;
@@ -68,7 +68,7 @@ static void deques_init(global_state *g) {
 }
 
 static void workers_init(global_state *g) {
-    cilkrts_alert(BOOT, NULL, "(workers_init) Initializing workers");
+    cilkrts_alert(BOOT, "(workers_init) Initializing workers");
     for (unsigned int i = 0; i < g->options.nproc; i++) {
         if (i == 0) {
             // Initialize worker 0, so we always have a worker structure to fall
@@ -90,7 +90,7 @@ static void workers_init(global_state *g) {
 }
 
 __cilkrts_worker *__cilkrts_init_tls_worker(worker_id i, global_state *g) {
-    cilkrts_alert(BOOT, NULL, "(workers_init) Initializing worker %u", i);
+    cilkrts_alert(BOOT, "(workers_init) Initializing worker %u", i);
     __cilkrts_worker *w;
     if (i == 0) {
         // Use default_worker structure for worker 0.
@@ -192,7 +192,7 @@ static void threads_init(global_state *g) {
 
     /* TODO: Apple supports thread affinity using a different interface. */
 
-    cilkrts_alert(BOOT, NULL, "(threads_init) Setting up threads");
+    cilkrts_alert(BOOT, "(threads_init) Setting up threads");
 
 #if ENABLE_WORKER_PINNING
 #ifdef CPU_SETSIZE
@@ -242,7 +242,7 @@ static void threads_init(global_state *g) {
                 ++cpu;
             }
 
-            cilkrts_alert(BOOT, NULL, "Bind worker %u to core %d of %d", w, cpu,
+            cilkrts_alert(BOOT, "Bind worker %u to core %d of %d", w, cpu,
                           available_cores);
 
             CPU_CLR(cpu, &process_mask);
@@ -252,7 +252,7 @@ static void threads_init(global_state *g) {
             int off;
             for (off = 1; off < group_size; ++off) {
                 move_bit(cpu + off * step_in, &worker_mask, &process_mask);
-                cilkrts_alert(BOOT, NULL, "Bind worker %u to core %d of %d", w,
+                cilkrts_alert(BOOT, "Bind worker %u to core %d of %d", w,
                               cpu + off * step_in, available_cores);
             }
             cpu += step_out;
@@ -267,7 +267,7 @@ static void threads_init(global_state *g) {
 }
 
 global_state *__cilkrts_startup(int argc, char *argv[]) {
-    cilkrts_alert(BOOT, NULL, "(__cilkrts_startup) argc %d", argc);
+    cilkrts_alert(BOOT, "(__cilkrts_startup) argc %d", argc);
     global_state *g = global_state_init(argc, argv);
     workers_init(g);
     deques_init(g);
@@ -336,7 +336,7 @@ static void __cilkrts_stop_workers(global_state *g) {
             cilkrts_bug(NULL, "Cilk runtime error: thread join (%u) failed: %s",
                         i, strerror(status));
     }
-    cilkrts_alert(BOOT, NULL, "(threads_join) All workers joined!");
+    cilkrts_alert(BOOT, "(threads_join) All workers joined!");
     g->workers_started = false;
 }
 
@@ -584,7 +584,7 @@ static void global_state_terminate(global_state *g) {
 }
 
 static void global_state_deinit(global_state *g) {
-    cilkrts_alert(BOOT, NULL, "(global_state_deinit) Clean up global state");
+    cilkrts_alert(BOOT, "(global_state_deinit) Clean up global state");
 
     cilk_fiber_pool_global_destroy(g);
     cilk_internal_malloc_global_destroy(g); // internal malloc last
@@ -616,7 +616,7 @@ static void global_state_deinit(global_state *g) {
 }
 
 static void deques_deinit(global_state *g) {
-    cilkrts_alert(BOOT, NULL, "(deques_deinit) Clean up deques");
+    cilkrts_alert(BOOT, "(deques_deinit) Clean up deques");
     for (unsigned int i = 0; i < g->options.nproc; i++) {
         CILK_ASSERT(g->deques[i].mutex_owner == NO_WORKER);
     }
@@ -650,7 +650,7 @@ static void wrap_fiber_pool_destroy(__cilkrts_worker *w, void *data) {
 }
 
 static void workers_deinit(global_state *g) {
-    cilkrts_alert(BOOT, NULL, "(workers_deinit) Clean up workers");
+    cilkrts_alert(BOOT, "(workers_deinit) Clean up workers");
 
     long allocations[NUM_BUCKETS] = {0, 0, 0, 0};
 

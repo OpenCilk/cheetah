@@ -108,7 +108,7 @@ static inline char *sysdep_reset_stack_for_resume(struct cilk_fiber *fiber,
 
 static inline __attribute__((noreturn))
 void sysdep_longjmp_to_sf(__cilkrts_stack_frame *sf) {
-    cilkrts_alert(FIBER, get_worker_from_stack(sf),
+    cilkrts_alert(FIBER,
                   "longjmp to sf, BP/SP/PC: %p/%p/%p", FP(sf), SP(sf), PC(sf));
 
 #if defined CHEETAH_SAVE_MXCSR

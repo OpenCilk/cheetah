@@ -143,7 +143,7 @@ static void signal_immediate_exception_to_all(__cilkrts_worker *const w) {
 */
 
 static void setup_for_execution(__cilkrts_worker *w, Closure *t) {
-    cilkrts_alert(SCHED, w, "(setup_for_execution) closure %p", (void *)t);
+    cilkrts_alert(SCHED, "(setup_for_execution) closure %p", (void *)t);
     struct cilk_fiber *fh = t->fiber;
     fh->worker = w;
     Closure_set_status(t, CLOSURE_RUNNING);
@@ -193,7 +193,7 @@ static void setup_for_sync(__cilkrts_worker *w, worker_id self, Closure *t) {
     }
 
     CILK_ASSERT(t->fiber);
-    // __cilkrts_alert(STEAL | ALERT_FIBER, w,
+    // __cilkrts_alert(STEAL | ALERT_FIBER,
     //         "(setup_for_sync) set t %p and t->fiber %p", (void *)t,
     //         (void *)t->fiber);
     __cilkrts_set_synced(t->frame);
@@ -248,7 +248,7 @@ void Cilk_set_return(__cilkrts_worker *const w) {
 
     Closure *t;
 
-    cilkrts_alert(RETURN, w, "(Cilk_set_return)");
+    cilkrts_alert(RETURN, "(Cilk_set_return)");
     ReadyDeque *deques = w->g->deques;
     worker_id self = w->self;
 
@@ -300,12 +300,12 @@ static Closure *provably_good_steal_maybe(__cilkrts_worker *const w,
 
     Closure_assert_ownership(self, parent);
     local_state *l = w->l;
-    // cilkrts_alert(STEAL, w, "(provably_good_steal_maybe) cl %p",
+    // cilkrts_alert(STEAL, "(provably_good_steal_maybe) cl %p",
     //               (void *)parent);
     CILK_ASSERT(!l->provably_good_steal);
 
     if (!Closure_has_children(parent) && parent->status == CLOSURE_SUSPENDED) {
-        // cilkrts_alert(STEAL | ALERT_SYNC, w,
+        // cilkrts_alert(STEAL | ALERT_SYNC,
         //      "(provably_good_steal_maybe) completing a sync");
 
         CILK_ASSERT(parent->frame != NULL);
@@ -317,7 +317,7 @@ static Closure *provably_good_steal_maybe(__cilkrts_worker *const w,
         CILK_ASSERT(parent->owner_ready_deque == NO_WORKER);
         Closure_make_ready(parent);
 
-        cilkrts_alert(STEAL | ALERT_SYNC, w,
+        cilkrts_alert(STEAL | ALERT_SYNC,
                       "(provably_good_steal_maybe) returned %p",
                       (void *)parent);
 
@@ -371,7 +371,7 @@ static Closure *Closure_return(__cilkrts_worker *const w, worker_id self,
     CILK_ASSERT(child->call_parent == NULL);
     CILK_ASSERT(parent != NULL);
 
-    cilkrts_alert(RETURN, w, "(Closure_return) child %p, parent %p",
+    cilkrts_alert(RETURN, "(Closure_return) child %p, parent %p",
                   (void *)child, (void *)parent);
 
     /* The frame should have passed a sync successfully meaning it
@@ -517,7 +517,7 @@ static Closure *Closure_return(__cilkrts_worker *const w, worker_id self,
  */
 static Closure *return_value(__cilkrts_worker *const w, worker_id self,
                              Closure *t) {
-    cilkrts_alert(RETURN, w, "(return_value) closure %p", (void *)t);
+    cilkrts_alert(RETURN, "(return_value) closure %p", (void *)t);
 
     Closure *res = NULL;
     CILK_ASSERT(t->status == CLOSURE_RETURNING);
@@ -531,7 +531,7 @@ static Closure *return_value(__cilkrts_worker *const w, worker_id self,
       // Not supported at the moment
     } */
 
-    cilkrts_alert(RETURN, w, "(return_value) returning closure %p", (void *)t);
+    cilkrts_alert(RETURN, "(return_value) returning closure %p", (void *)t);
 
     return res;
 }
@@ -556,7 +556,7 @@ void Cilk_exception_handler(__cilkrts_worker *w, char *exn) {
     CILK_ASSERT(t);
     Closure_lock(self, t);
 
-    cilkrts_alert(EXCEPT, w, "(Cilk_exception_handler) closure %p!", (void *)t);
+    cilkrts_alert(EXCEPT, "(Cilk_exception_handler) closure %p!", (void *)t);
 
     /* Reset the E pointer. */
     reset_exception_pointer(w, self, t);
@@ -571,7 +571,7 @@ void Cilk_exception_handler(__cilkrts_worker *w, char *exn) {
     __cilkrts_stack_frame **tail =
         atomic_load_explicit(&w->tail, memory_order_relaxed);
     if (head > tail) {
-        cilkrts_alert(EXCEPT, w, "(Cilk_exception_handler) this is a steal!");
+        cilkrts_alert(EXCEPT, "(Cilk_exception_handler) this is a steal!");
         if (NULL != exn) {
             // The spawned child is throwing an exception.  Save that exception
             // object for later processing.
@@ -962,7 +962,7 @@ static Closure *extract_top_spawning_closure(__cilkrts_stack_frame **head,
      * and steal the parent
      */
     child = promote_child(head, deques, w, victim_w, cl, &res, self, victim_id);
-    cilkrts_alert(STEAL, w,
+    cilkrts_alert(STEAL,
                   "(Closure_steal) promote gave cl/res/child = %p/%p/%p",
                   (void *)cl, (void *)res, (void *)child);
 
@@ -1036,7 +1036,7 @@ static Closure *Closure_steal(__cilkrts_worker **workers,
             /* send the exception to the worker */
             __cilkrts_stack_frame **head = do_dekker_on(w, self, victim_w, cl);
             if (head) {
-                cilkrts_alert(STEAL, w,
+                cilkrts_alert(STEAL,
                               "(Closure_steal) can steal from W%d; cl=%p",
                               victim, (void *)cl);
                 res = extract_top_spawning_closure(head, deques, w, victim_w,
@@ -1052,7 +1052,7 @@ static Closure *Closure_steal(__cilkrts_worker **workers,
                 finish_promote(w, self, victim_w, res,
                                /* has_frames_to_promote */ false);
 
-                cilkrts_alert(STEAL, w,
+                cilkrts_alert(STEAL,
                               "(Closure_steal) success; res %p has "
                               "fiber %p; child %p has fiber %p",
                               (void *)res, (void *)res->fiber,
@@ -1208,7 +1208,7 @@ void longjmp_to_user_code(__cilkrts_worker *w, Closure *t) {
 }
 
 __attribute__((noreturn)) void longjmp_to_runtime(__cilkrts_worker *w) {
-    cilkrts_alert(SCHED | ALERT_FIBER, w, "(longjmp_to_runtime)");
+    cilkrts_alert(SCHED | ALERT_FIBER, "(longjmp_to_runtime)");
 
     CILK_SWITCH_TIMING(w, INTERVAL_WORK, INTERVAL_SCHED);
     /* Can't change to WORKER_SCHED yet because the reducer map
@@ -1224,7 +1224,7 @@ __attribute__((noreturn)) void longjmp_to_runtime(__cilkrts_worker *w) {
    SYNC_NOT_READY to suspend the frame. */
 int Cilk_sync(__cilkrts_worker *const w, __cilkrts_stack_frame *frame) {
 
-    // cilkrts_alert(SYNC, w, "(Cilk_sync) frame %p", (void *)frame);
+    // cilkrts_alert(SYNC, "(Cilk_sync) frame %p", (void *)frame);
 
     Closure *t;
     int res = SYNC_READY;
@@ -1250,8 +1250,7 @@ int Cilk_sync(__cilkrts_worker *const w, __cilkrts_stack_frame *frame) {
     CILK_ASSERT(t->user_ht == (hyper_table *)NULL);
 
     if (Closure_has_children(t)) {
-        cilkrts_alert(SYNC, w,
-                      "(Cilk_sync) Closure %p has outstanding children",
+        cilkrts_alert(SYNC, "(Cilk_sync) Closure %p has outstanding children",
                       (void *)t);
         if (t->fiber) {
             cilk_fiber_deallocate_to_pool(w, t->fiber);
@@ -1272,7 +1271,7 @@ int Cilk_sync(__cilkrts_worker *const w, __cilkrts_stack_frame *frame) {
         t->user_ht = ht; /* set this after state change to suspended */
         res = SYNC_NOT_READY;
     } else {
-        cilkrts_alert(SYNC, w, "(Cilk_sync) closure %p sync successfully",
+        cilkrts_alert(SYNC, "(Cilk_sync) closure %p sync successfully",
                       (void *)t);
         setup_for_sync(w, self, t);
     }
@@ -1309,14 +1308,14 @@ static void do_what_it_says(ReadyDeque *deques, __cilkrts_worker *w,
     local_state *l = w->l;
 
     do {
-        cilkrts_alert(SCHED, w, "(do_what_it_says) closure %p", (void *)t);
+        cilkrts_alert(SCHED, "(do_what_it_says) closure %p", (void *)t);
 
         switch (t->status) {
         case CLOSURE_RUNNING:
-            cilkrts_alert(SCHED, w, "(do_what_it_says) CLOSURE_READY");
+            cilkrts_alert(SCHED, "(do_what_it_says) CLOSURE_READY");
             /* just execute it */
             f = t->frame;
-            cilkrts_alert(SCHED, w, "(do_what_it_says) resume_sf = %p",
+            cilkrts_alert(SCHED, "(do_what_it_says) resume_sf = %p",
                           (void *)f);
             CILK_ASSERT(f);
             USE_UNUSED(f);
@@ -1328,7 +1327,7 @@ static void do_what_it_says(ReadyDeque *deques, __cilkrts_worker *w,
             deque_unlock_self(deques, self);
 
             /* now execute it */
-            cilkrts_alert(SCHED, w, "(do_what_it_says) Jump into user code");
+            cilkrts_alert(SCHED, "(do_what_it_says) Jump into user code");
 
             // longjmp invalidates non-volatile variables
             __cilkrts_worker *volatile w_save = w;
@@ -1369,7 +1368,7 @@ static void do_what_it_says(ReadyDeque *deques, __cilkrts_worker *w,
             break; // ?
 
         case CLOSURE_RETURNING:
-            cilkrts_alert(SCHED, w, "(do_what_it_says) CLOSURE_RETURNING");
+            cilkrts_alert(SCHED, "(do_what_it_says) CLOSURE_RETURNING");
             // The return protocol requires t to not be locked, so that it can
             // acquire locks on t and t's parent in the correct order.
             t = return_value(w, self, t);
@@ -1641,7 +1640,7 @@ void *scheduler_thread_proc(void *arg) {
     struct worker_args *w_arg = (struct worker_args *)arg;
     __cilkrts_worker *w = __cilkrts_init_tls_worker(w_arg->id, w_arg->g);
 
-    cilkrts_alert(BOOT, w, "scheduler_thread_proc");
+    cilkrts_alert(BOOT, "scheduler_thread_proc");
     __cilkrts_set_tls_worker(w);
 
 #if BOSS_THIEF

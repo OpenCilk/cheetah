@@ -105,7 +105,7 @@ __cilkrts_enter_frame(__cilkrts_stack_frame *sf) {
     if (__cilkrts_need_to_cilkify) {
         cilkify(sf);
     }
-    cilkrts_alert(CFRAME, NULL, "__cilkrts_enter_frame %p", (void *)sf);
+    cilkrts_alert(CFRAME, "__cilkrts_enter_frame %p", (void *)sf);
 
     sf->magic = frame_magic;
 
@@ -123,7 +123,7 @@ __cilkrts_enter_frame(__cilkrts_stack_frame *sf) {
 // its counterpart, __cilkrts_enter_frame.
 __attribute__((always_inline)) void
 __cilkrts_enter_frame_helper(__cilkrts_stack_frame *sf) {
-    cilkrts_alert(CFRAME, NULL, "__cilkrts_enter_frame_helper %p", (void *)sf);
+    cilkrts_alert(CFRAME, "__cilkrts_enter_frame_helper %p", (void *)sf);
 
     sf->flags = 0;
     sf->magic = frame_magic;
@@ -149,7 +149,7 @@ __cilk_prepare_spawn(__cilkrts_stack_frame *sf) {
 __attribute__((always_inline)) void
 __cilkrts_detach(__cilkrts_stack_frame *sf) {
     __cilkrts_worker *w = get_worker_from_stack(sf);
-    cilkrts_alert(CFRAME, w, "__cilkrts_detach %p", (void *)sf);
+    cilkrts_alert(CFRAME, "__cilkrts_detach %p", (void *)sf);
 
     CILK_ASSERT(CHECK_CILK_FRAME_MAGIC(w->g, sf));
 
@@ -210,8 +210,9 @@ __cilk_sync_nothrow(__cilkrts_stack_frame *sf) {
 
 __attribute__((always_inline)) void
 __cilkrts_leave_frame(__cilkrts_stack_frame *sf) {
+    // TODO: Move load of worker pointer out of fast path.
     __cilkrts_worker *w = get_worker_from_stack(sf);
-    cilkrts_alert(CFRAME, w, "__cilkrts_leave_frame %p", (void *)sf);
+    cilkrts_alert(CFRAME, "__cilkrts_leave_frame %p", (void *)sf);
 
     CILK_ASSERT(CHECK_CILK_FRAME_MAGIC(w->g, sf));
     // WHEN_CILK_DEBUG(sf->magic = ~CILK_STACKFRAME_MAGIC);
@@ -243,7 +244,7 @@ __cilkrts_leave_frame(__cilkrts_stack_frame *sf) {
     // frame is called (not spawned).  A spawned full frame returning is done
     // via a different protocol, which is triggered in Cilk_exception_handler.
     if (flags & CILK_FRAME_STOLEN) { // if this frame has a full frame
-        cilkrts_alert(RETURN, w,
+        cilkrts_alert(RETURN,
                       "__cilkrts_leave_frame parent is call_parent!");
         // leaving a full frame; need to get the full frame of its call
         // parent back onto the deque
@@ -255,7 +256,7 @@ __cilkrts_leave_frame(__cilkrts_stack_frame *sf) {
 __attribute__((always_inline)) void
 __cilkrts_leave_frame_helper(__cilkrts_stack_frame *sf) {
     __cilkrts_worker *w = get_worker_from_stack(sf);
-    cilkrts_alert(CFRAME, w, "__cilkrts_leave_frame_helper %p", (void *)sf);
+    cilkrts_alert(CFRAME, "__cilkrts_leave_frame_helper %p", (void *)sf);
 
     CILK_ASSERT(CHECK_CILK_FRAME_MAGIC(w->g, sf));
     // WHEN_CILK_DEBUG(sf->magic = ~CILK_STACKFRAME_MAGIC);
@@ -323,7 +324,7 @@ void __cilkrts_pause_frame(__cilkrts_stack_frame *sf, char *exn) {
         __cilkrts_cleanup_fiber(sf, 1);
 
     __cilkrts_worker *w = get_worker_from_stack(sf);
-    cilkrts_alert(CFRAME, w, "__cilkrts_pause_frame %p", (void *)sf);
+    cilkrts_alert(CFRAME, "__cilkrts_pause_frame %p", (void *)sf);
 
     CILK_ASSERT(CHECK_CILK_FRAME_MAGIC(w->g, sf));
 

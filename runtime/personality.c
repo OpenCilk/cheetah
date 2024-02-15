@@ -184,7 +184,7 @@ uncilkify(global_state *g, __cilkrts_stack_frame *sf) {
 __attribute__((always_inline)) static void
 resume_from_last_frame(__cilkrts_worker *w, __cilkrts_stack_frame *sf,
                  struct _Unwind_Exception *ue_header) {
-    cilkrts_alert(CFRAME, w, "resume_from_last_frame %p", (void *)sf);
+    cilkrts_alert(CFRAME, "resume_from_last_frame %p", (void *)sf);
     CILK_ASSERT(CHECK_CILK_FRAME_MAGIC(w->g, sf));
     // WHEN_CILK_DEBUG(sf->magic = ~CILK_STACKFRAME_MAGIC);
 
@@ -220,7 +220,7 @@ _Unwind_Reason_Code __cilk_personality_internal(
         return std_lib_personality(version, actions, exception_class, ue_header,
                                    context);
     } else if (actions & _UA_CLEANUP_PHASE) {
-        cilkrts_alert(EXCEPT, w,
+        cilkrts_alert(EXCEPT,
                       "cilk_personality called %p  CFA %p\n", (void *)sf,
                       (void *)get_cfa(context));
 
@@ -258,7 +258,7 @@ _Unwind_Reason_Code __cilk_personality_internal(
             struct _Unwind_Exception *exn =
                     (struct _Unwind_Exception *)(exn_r->exn);
             exn_r->exn = NULL;
-            cilkrts_alert(EXCEPT, w,
+            cilkrts_alert(EXCEPT,
                           "cilk_personality calling RaiseException %p\n",
                           (void *)sf);
 
