@@ -448,7 +448,7 @@ void __cilkrts_internal_invoke_cilkified_root(__cilkrts_stack_frame *sf) {
 
     // Associate sf with this root closure
     Closure_clear_frame(root_closure);
-    Closure_set_frame(w, root_closure, sf);
+    Closure_set_frame(root_closure, sf);
 
     // Now kick off execution of the Cilkified region by setting appropriate
     // flags.

@@ -135,13 +135,13 @@ sync_in_personality(__cilkrts_worker *w, __cilkrts_stack_frame *sf,
 
         deque_lock_self(deques, self);
         Closure *t = deque_peek_bottom(deques, w, self, self);
-        Closure_lock(w, self, t);
+        Closure_lock(self, t);
 
         // ensure that we return here after a cilk_sync.
         exn_r->parent_rsp = t->orig_rsp;
         t->orig_rsp = (char *)SP(sf);
 
-        Closure_unlock(w, self, t);
+        Closure_unlock(self, t);
         deque_unlock_self(deques, self);
 
         // save the current fiber for further stack unwinding.
