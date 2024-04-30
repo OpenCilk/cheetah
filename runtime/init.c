@@ -373,8 +373,6 @@ static void threads_init(global_state *g) {
 
     // Make sure we are supposed to create worker threads
     if (worker_start < (int)g->nworkers) {
-        printf("Nworkers: %u\nStart: %d\n", g->nworkers, worker_start);
-        fflush(stdout);
         int status = pthread_create(&g->threads[worker_start], NULL,
                                     init_threads_and_enter_scheduler,
                                     &g->worker_args[worker_start]);
