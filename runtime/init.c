@@ -371,13 +371,18 @@ static void threads_init(global_state *g) {
 #endif
         ;
 
-    int status = pthread_create(&g->threads[worker_start], NULL,
-                                init_threads_and_enter_scheduler,
-                                &g->worker_args[worker_start]);
+    // Make sure we are supposed to create worker threads
+    if (worker_start < (int)g->nworkers) {
+        printf("Nworkers: %u\nStart: %d\n", g->nworkers, worker_start);
+        fflush(stdout);
+        int status = pthread_create(&g->threads[worker_start], NULL,
+                                    init_threads_and_enter_scheduler,
+                                    &g->worker_args[worker_start]);
 
-    if (status != 0) {
-        cilkrts_bug(NULL, "Cilk: thread creation (%u) failed: %s", worker_start,
-                    strerror(status));
+        if (status != 0) {
+            cilkrts_bug(NULL, "Cilk: thread creation (%u) failed: %s",
+                        worker_start, strerror(status));
+        }
     }
 }
 
