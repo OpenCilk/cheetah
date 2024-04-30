@@ -139,7 +139,11 @@ static void move_bit(int cpu, cpu_set_t *to, cpu_set_t *from) {
     }
 }
 
-static inline int get_next_cpu(int const w_id, int const cpu_start, cpu_set_t *const process_mask, cpu_set_t *const worker_mask, int const group_size, int const step_in, int const step_out, int const available_cores) {
+static inline int get_next_cpu(int const w_id, int const cpu_start,
+                               cpu_set_t *const process_mask,
+                               cpu_set_t *const worker_mask,
+                               int const group_size, int const step_in,
+                               int const step_out, int const available_cores) {
     int cpu = cpu_start;
 
     while (!CPU_ISSET(cpu, process_mask)) {
