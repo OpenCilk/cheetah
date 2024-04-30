@@ -138,15 +138,56 @@ static void move_bit(int cpu, cpu_set_t *to, cpu_set_t *from) {
         CPU_SET(cpu, to);
     }
 }
+
+static inline int get_next_cpu(int const w_id, int const cpu_start, cpu_set_t *const process_mask, cpu_set_t *const worker_mask, int const group_size, int const step_in, int const step_out, int const available_cores) {
+    int cpu = cpu_start;
+
+    while (!CPU_ISSET(cpu, process_mask)) {
+        ++cpu;
+    }
+
+    CPU_CLR(cpu, process_mask);
+
+    CPU_ZERO(worker_mask);
+    CPU_SET(cpu, worker_mask);
+    for (int off = 1; off < group_size; ++off) {
+        move_bit(cpu + off * step_in, worker_mask, process_mask);
+        cilkrts_alert(BOOT, NULL, "Bind worker %u to core %d of %d", w_id,
+                      cpu + off * step_in, available_cores);
+    }
+    cpu += step_out;
+
+
+    return cpu;
+}
+
+static inline void pin_worker_thread(struct global_state *const g, worker_id const w_id, cpu_set_t *const worker_mask) {
+    int const err = pthread_setaffinity_np(g->threads[w_id], sizeof(*worker_mask),
+                                     worker_mask);
+    CILK_ASSERT_G(err == 0);
+}
 #endif
 #endif // ENABLE_WORKER_PINNING
 
-static void threads_init(global_state *g) {
+void *init_threads_and_enter_scheduler(void* args) {
+    struct worker_args *w_arg = (struct worker_args *)args;
+    struct global_state *g = w_arg->g;
+
+    int const worker_start =
+#if BOSS_THIEF
+            2
+#else
+            1
+#endif
+            ;
+
     /* TODO: Mac OS has a better interface allowing the application
        to request that two threads run as far apart as possible by
        giving them distinct "affinity tags". */
 #if ENABLE_WORKER_PINNING
 #ifdef CPU_SETSIZE
+    int const my_id = worker_start - 1;
+
     // Affinity setting, from cilkplus-rts
     cpu_set_t process_mask;
     int available_cores = 0;
@@ -174,6 +215,7 @@ static void threads_init(global_state *g) {
 #else
     int pin_strategy = 0; /* (0, N/2), (1, N/2 + 1), ... */
 #endif
+
     switch (env_get_int("CILK_PIN")) {
     case 1:
         pin_strategy = 0;
@@ -196,10 +238,13 @@ static void threads_init(global_state *g) {
 
 #if ENABLE_WORKER_PINNING
 #ifdef CPU_SETSIZE
+    cpu_set_t my_worker_mask;
+
     /* Three cases: core count at least twice worker count, allocate
        groups of floor(worker count / core count) CPUs.
        Core count greater than worker count, do not bind workers to CPUs.
        Otherwise, bind workers to single CPUs. */
+    int my_cpu = 0;
     int cpu = 0;
     int group_size = 1;
     int step_in = 1, step_out = 1;
@@ -216,53 +261,59 @@ static void threads_init(global_state *g) {
             step_out = 1;
             step_in = n_threads;
         }
+
+        cpu = my_cpu = get_next_cpu(my_id, cpu, &process_mask, &my_worker_mask, group_size, step_in, step_out, available_cores);
     }
 #endif
 #endif // ENABLE_WORKER_PINNING
-    int worker_start =
+
+    for (int w = worker_start; w < n_threads; w++) {
+        int status = pthread_create(&g->threads[w], NULL, scheduler_thread_proc,
+                                    &g->worker_args[w]);
+
+        if (status != 0) {
+            cilkrts_bug(NULL, "Cilk: thread creation (%u) failed: %s", w,
+                        strerror(status));
+        }
+
+#if ENABLE_WORKER_PINNING
+#ifdef CPU_SETSIZE
+        if (available_cores > 0) {
+            cpu_set_t worker_mask;
+            /* Skip to the next active CPU ID.  */
+            cpu = get_next_cpu(w, cpu, &process_mask, &worker_mask, group_size, step_in, step_out, available_cores);
+            pin_worker_thread(g, w, &worker_mask);
+        }
+#endif
+#endif // ENABLE_WORKER_PINNING
+    }
+
+#if ENABLE_WORKER_PINNING
+#ifdef CPU_SETSIZE
+    if (available_cores > 0) {
+        pin_worker_thread(g, my_id, &my_worker_mask);
+    }
+#endif
+#endif
+
+    return scheduler_thread_proc(args);
+}
+
+static void threads_init(global_state *g) {
+    int const worker_start =
 #if BOSS_THIEF
             1
 #else
             0
 #endif
             ;
-    for (int w = worker_start; w < n_threads; w++) {
-        int status = pthread_create(&g->threads[w], NULL, scheduler_thread_proc,
-                                    &g->worker_args[w]);
 
-        if (status != 0)
-            cilkrts_bug(NULL, "Cilk: thread creation (%u) failed: %s", w,
-                        strerror(status));
+    int status = pthread_create(&g->threads[worker_start], NULL, init_threads_and_enter_scheduler,
+                                    &g->worker_args[worker_start]);
 
-#if ENABLE_WORKER_PINNING
-#ifdef CPU_SETSIZE
-        if (available_cores > 0) {
-            /* Skip to the next active CPU ID.  */
-            while (!CPU_ISSET(cpu, &process_mask)) {
-                ++cpu;
-            }
-
-            cilkrts_alert(BOOT, NULL, "Bind worker %u to core %d of %d", w, cpu,
-                          available_cores);
-
-            CPU_CLR(cpu, &process_mask);
-            cpu_set_t worker_mask;
-            CPU_ZERO(&worker_mask);
-            CPU_SET(cpu, &worker_mask);
-            int off;
-            for (off = 1; off < group_size; ++off) {
-                move_bit(cpu + off * step_in, &worker_mask, &process_mask);
-                cilkrts_alert(BOOT, NULL, "Bind worker %u to core %d of %d", w,
-                              cpu + off * step_in, available_cores);
-            }
-            cpu += step_out;
-
-            int err = pthread_setaffinity_np(g->threads[w], sizeof(worker_mask),
-                                             &worker_mask);
-            CILK_ASSERT_G(err == 0);
-        }
-#endif
-#endif // ENABLE_WORKER_PINNING
+    if (status != 0) {
+        cilkrts_bug(NULL, "Cilk: thread creation (%u) failed: %s", worker_start,
+                    strerror(status));
     }
 }
 
