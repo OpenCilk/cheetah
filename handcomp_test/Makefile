@@ -14,7 +14,7 @@ OPTIONS = $(OPT) $(ARCH) $(DBG) -Wall $(DEFINES) -fno-omit-frame-pointer
 # static linking
 RESOURCE_DIR=$(realpath ..)
 RTS_LIBS = $(RTS_LIBDIR)/$(RTS_LIB).a
-TIMING_COUNT := 10
+TIMING_COUNT := 1
 
 .PHONY: all check memcheck clean
 

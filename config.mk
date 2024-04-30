@@ -1,4 +1,4 @@
-COMPILER_BASE=/mnt/opencilk-dev/build/opencilk/bin/
+COMPILER_BASE=
 CC=$(COMPILER_BASE)clang
 CXX=$(COMPILER_BASE)clang++
 LINK_CC=$(CC)
