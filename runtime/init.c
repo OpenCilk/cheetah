@@ -75,8 +75,10 @@ static void workers_init(global_state *g) {
             // back on.
             __cilkrts_init_tls_worker(0, g);
 
-            atomic_store_explicit(&g->dummy_worker.tail, NULL, memory_order_relaxed);
-            atomic_store_explicit(&g->dummy_worker.head, NULL, memory_order_relaxed);
+            atomic_store_explicit(&g->dummy_worker.tail, NULL,
+                                  memory_order_relaxed);
+            atomic_store_explicit(&g->dummy_worker.head, NULL,
+                                  memory_order_relaxed);
         } else {
             g->workers[i] = &g->dummy_worker;
         }
@@ -95,7 +97,8 @@ __cilkrts_worker *__cilkrts_init_tls_worker(worker_id i, global_state *g) {
     if (i == 0) {
         // Use default_worker structure for worker 0.
         w = &default_worker;
-        *(struct local_state **)(&w->l) = worker_local_init(&default_worker_local_state, g);
+        *(struct local_state **)(&w->l) =
+            worker_local_init(&default_worker_local_state, g);
         __cilkrts_set_tls_worker(w);
     } else {
         size_t alignment = 2 * __alignof__(__cilkrts_worker);
@@ -132,6 +135,16 @@ __cilkrts_worker *__cilkrts_init_tls_worker(worker_id i, global_state *g) {
 
 #if ENABLE_WORKER_PINNING
 #ifdef CPU_SETSIZE
+
+/**
+ * Move the <code>cpu<\code> bit from the <code>cpu_set_t<\code>
+ * <code>from<\code> to the <code>cpu_set_t<\code> <code>to<\code>, iff the bit
+ * is set in <code>from<\code>.
+ *
+ * @param cpu  the id of the cpu to move
+ * @param to   the set to move the cpu into
+ * @param from the set to move the cpu out of
+ */
 static void move_bit(int cpu, cpu_set_t *to, cpu_set_t *from) {
     if (CPU_ISSET(cpu, from)) {
         CPU_CLR(cpu, from);
@@ -139,51 +152,91 @@ static void move_bit(int cpu, cpu_set_t *to, cpu_set_t *from) {
     }
 }
 
-static inline int get_next_cpu(int const w_id, int const cpu_start,
-                               cpu_set_t *const process_mask,
-                               cpu_set_t *const worker_mask,
-                               int const group_size, int const step_in,
-                               int const step_out, int const available_cores) {
+/**
+ * Fill in the passed in <code>worker_mask<\code> to contain all the cpus in
+ * the next group of cpus, as defined by <code>group_size<\code>,
+ * <code>step_in<\code>, and <code>step_out<\code>. The
+ * <code>unassigned_mask<\code> is cleared of these bits to avoid reusing cpus
+ * for different workers.
+ *
+ * @param worker_mask     (output) the processor mask that will store the set
+ *                        of all cpu ids to assigne to worker <code>w_id<\code>
+ * @param w_id            the id of the worker that will be pinned using the
+ *                        <code>worker_mask<\code> (used for debug messages)
+ * @param cpu_start       the cpu id from which to start searching in the
+ *                        <code>unassigned_mask<\code> for an available cpu
+ * @param unassigned_mask the set of cores in the process that are unassigned
+ *                        to any workers
+ * @param group_size      the number of cpus to allow <code>w_id<\code> to use
+ * @param step_in         the offset between cpus in the same group
+ * @param step_out        the offset between the start of one group and the
+ *                        next
+ * @param available_cores the total number of cores available to the process
+ *                        (used for debug messages)
+ *
+ * @return                the first possible cpu id for the next group (not
+ *                        guaranteed to be available in the
+ *                        <code>unassigned_mask<\code>)
+ */
+static inline int fill_worker_mask_and_get_next_cpu(
+    cpu_set_t *const worker_mask, int const w_id, int const cpu_start,
+    cpu_set_t *const unassigned_mask, int const group_size, int const step_in,
+    int const step_out, int const available_cores) {
     int cpu = cpu_start;
 
-    while (!CPU_ISSET(cpu, process_mask)) {
+    while (!CPU_ISSET(cpu, unassigned_mask)) {
         ++cpu;
     }
 
-    CPU_CLR(cpu, process_mask);
+    CPU_CLR(cpu, unassigned_mask);
 
     CPU_ZERO(worker_mask);
     CPU_SET(cpu, worker_mask);
     for (int off = 1; off < group_size; ++off) {
-        move_bit(cpu + off * step_in, worker_mask, process_mask);
+        move_bit(cpu + off * step_in, worker_mask, unassigned_mask);
         cilkrts_alert(BOOT, NULL, "Bind worker %u to core %d of %d", w_id,
                       cpu + off * step_in, available_cores);
     }
     cpu += step_out;
 
-
     return cpu;
 }
 
-static inline void pin_worker_thread(struct global_state *const g, worker_id const w_id, cpu_set_t *const worker_mask) {
-    int const err = pthread_setaffinity_np(g->threads[w_id], sizeof(*worker_mask),
-                                     worker_mask);
+/**
+ * Pins the passed in thread to the set of cpus in the <code>worker_mask<\code>.
+ *
+ * @param thread_id   the id of the thread that should be pinned
+ * @param worker_mask the set of cpus to which the thread should be pinned
+ */
+static inline void pin_thread(pthread_t const thread_id,
+                              cpu_set_t *const worker_mask) {
+    int const err =
+        pthread_setaffinity_np(thread_id, sizeof(*worker_mask), worker_mask);
     CILK_ASSERT_G(err == 0);
 }
 #endif
 #endif // ENABLE_WORKER_PINNING
 
-void *init_threads_and_enter_scheduler(void* args) {
+/**
+ * Initializes all other threads in the runtime, and then enters the
+ * scheduling loop.
+ *
+ * @param args the arguments to be used by this worker in
+ *             <code>scheduler_thread_proc<\code>
+ *
+ * @return     the result of <code>scheduler_thread_proc<\code>
+ */
+void *init_threads_and_enter_scheduler(void *args) {
     struct worker_args *w_arg = (struct worker_args *)args;
     struct global_state *g = w_arg->g;
 
     int const worker_start =
 #if BOSS_THIEF
-            2
+        2
 #else
-            1
+        1
 #endif
-            ;
+        ;
 
     /* TODO: Mac OS has a better interface allowing the application
        to request that two threads run as far apart as possible by
@@ -248,7 +301,6 @@ void *init_threads_and_enter_scheduler(void* args) {
        groups of floor(worker count / core count) CPUs.
        Core count greater than worker count, do not bind workers to CPUs.
        Otherwise, bind workers to single CPUs. */
-    int my_cpu = 0;
     int cpu = 0;
     int group_size = 1;
     int step_in = 1, step_out = 1;
@@ -266,7 +318,12 @@ void *init_threads_and_enter_scheduler(void* args) {
             step_in = n_threads;
         }
 
-        cpu = my_cpu = get_next_cpu(my_id, cpu, &process_mask, &my_worker_mask, group_size, step_in, step_out, available_cores);
+        // Get my CPU first, but don't pin yet; special OS permissions are
+        // required to pin a thread to a cpu not in the current thread's
+        // cpu affinity set
+        cpu = fill_worker_mask_and_get_next_cpu(
+            &my_worker_mask, my_id, cpu, &process_mask, group_size, step_in,
+            step_out, available_cores);
     }
 #endif
 #endif // ENABLE_WORKER_PINNING
@@ -285,8 +342,10 @@ void *init_threads_and_enter_scheduler(void* args) {
         if (available_cores > 0) {
             cpu_set_t worker_mask;
             /* Skip to the next active CPU ID.  */
-            cpu = get_next_cpu(w, cpu, &process_mask, &worker_mask, group_size, step_in, step_out, available_cores);
-            pin_worker_thread(g, w, &worker_mask);
+            cpu = fill_worker_mask_and_get_next_cpu(
+                &worker_mask, w, cpu, &process_mask, group_size, step_in,
+                step_out, available_cores);
+            pin_thread(g->threads[w], &worker_mask);
         }
 #endif
 #endif // ENABLE_WORKER_PINNING
@@ -295,7 +354,7 @@ void *init_threads_and_enter_scheduler(void* args) {
 #if ENABLE_WORKER_PINNING
 #ifdef CPU_SETSIZE
     if (available_cores > 0) {
-        pin_worker_thread(g, my_id, &my_worker_mask);
+        pin_thread(g->threads[my_id], &my_worker_mask);
     }
 #endif
 #endif
@@ -306,14 +365,15 @@ void *init_threads_and_enter_scheduler(void* args) {
 static void threads_init(global_state *g) {
     int const worker_start =
 #if BOSS_THIEF
-            1
+        1
 #else
-            0
+        0
 #endif
-            ;
+        ;
 
-    int status = pthread_create(&g->threads[worker_start], NULL, init_threads_and_enter_scheduler,
-                                    &g->worker_args[worker_start]);
+    int status = pthread_create(&g->threads[worker_start], NULL,
+                                init_threads_and_enter_scheduler,
+                                &g->worker_args[worker_start]);
 
     if (status != 0) {
         cilkrts_bug(NULL, "Cilk: thread creation (%u) failed: %s", worker_start,
@@ -361,7 +421,8 @@ static void __cilkrts_start_workers(global_state *g) {
     g->workers_started = true;
 }
 
-// Stop the Cilk workers in g, for example, by joining their underlying Pthreads.
+// Stop the Cilk workers in g, for example, by joining their underlying
+// Pthreads.
 static void __cilkrts_stop_workers(global_state *g) {
     /* CILK_ASSERT_G( */
     /*     !atomic_load_explicit(&g->start_thieves, memory_order_acquire)); */
@@ -380,11 +441,11 @@ static void __cilkrts_stop_workers(global_state *g) {
     // Join the worker pthreads
     unsigned int worker_start =
 #if BOSS_THIEF
-            1
+        1
 #else
-            0
+        0
 #endif
-            ;
+        ;
     for (unsigned int i = worker_start; i < g->nworkers; i++) {
         int status = pthread_join(g->threads[i], NULL);
         if (status != 0)
