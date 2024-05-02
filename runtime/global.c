@@ -56,14 +56,11 @@ static global_state *global_state_allocate() {
     cilk_mutex_init(&g->index_lock);
     cilk_mutex_init(&g->print_lock);
 
-    atomic_store_explicit(&g->start_root_worker, 0, memory_order_relaxed);
     atomic_store_explicit(&g->cilkified_futex, 0, memory_order_relaxed);
 
     // TODO: Convert to cilk_* equivalents
     pthread_mutex_init(&g->cilkified_lock, NULL);
     pthread_cond_init(&g->cilkified_cond_var, NULL);
-    pthread_mutex_init(&g->start_root_worker_lock, NULL);
-    pthread_cond_init(&g->start_root_worker_cond_var, NULL);
 
     pthread_mutex_init(&g->disengaged_lock, NULL);
     pthread_cond_init(&g->disengaged_cond_var, NULL);
@@ -100,7 +97,7 @@ static void set_fiber_pool_cap(global_state *g, unsigned int fiber_pool_cap) {
 void set_nworkers(global_state *g, unsigned int nworkers) {
     CILK_ASSERT_G(!g->workers_started);
     CILK_ASSERT_G(nworkers <= g->options.nproc);
-    CILK_ASSERT_G(nworkers > g->exiting_worker);
+    CILK_ASSERT_G(nworkers > 0);
     g->nworkers = nworkers;
 }
 
@@ -173,7 +170,6 @@ global_state *global_state_init(int argc, char *argv[]) {
     atomic_store_explicit(&g->disengaged_sentinel, 0, memory_order_relaxed);
 
     g->terminate = false;
-    g->exiting_worker = 0;
 
     g->worker_args =
         (struct worker_args *)calloc(active_size, sizeof(struct worker_args));

@@ -69,17 +69,13 @@ struct global_state {
 
     // These fields are shared between the boss thread and a couple workers.
 
-    _Atomic uint32_t start_root_worker __attribute__((aligned(CILK_CACHE_LINE)));
     // NOTE: We can probably update the runtime system so that, when it uses
     // cilkified_futex, it does not also use the cilkified field.  But the
     // cilkified field is helpful for debugging, and it seems unlikely that this
     // optimization would improve performance.
-    _Atomic uint32_t cilkified_futex;
-    worker_id exiting_worker;
+    _Atomic uint32_t cilkified_futex __attribute__((aligned(CILK_CACHE_LINE)));
     atomic_bool cilkified;
 
-    pthread_mutex_t start_root_worker_lock;
-    pthread_cond_t start_root_worker_cond_var;
     pthread_mutex_t cilkified_lock;
     pthread_cond_t cilkified_cond_var;
 
