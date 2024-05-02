@@ -230,13 +230,7 @@ void *init_threads_and_enter_scheduler(void *args) {
     struct worker_args *w_arg = (struct worker_args *)args;
     struct global_state *g = w_arg->g;
 
-    int const worker_start =
-#if BOSS_THIEF
-        2
-#else
-        1
-#endif
-        ;
+    int const worker_start = 2;
 
     /* TODO: Mac OS has a better interface allowing the application
        to request that two threads run as far apart as possible by
@@ -363,13 +357,7 @@ void *init_threads_and_enter_scheduler(void *args) {
 }
 
 static void threads_init(global_state *g) {
-    int const worker_start =
-#if BOSS_THIEF
-        1
-#else
-        0
-#endif
-        ;
+    int const worker_start = 1;
 
     // Make sure we are supposed to create worker threads
     if (worker_start < (int)g->nworkers) {
@@ -442,13 +430,7 @@ static void __cilkrts_stop_workers(global_state *g) {
     wake_root_worker(g, (uint32_t)(-1));
 
     // Join the worker pthreads
-    unsigned int worker_start =
-#if BOSS_THIEF
-        1
-#else
-        0
-#endif
-        ;
+    unsigned int worker_start = 1;
     for (unsigned int i = worker_start; i < g->nworkers; i++) {
         int status = pthread_join(g->threads[i], NULL);
         if (status != 0)
@@ -475,16 +457,6 @@ static inline __attribute__((noinline)) void boss_wait_helper(void) {
     global_state *g = __cilkrts_tls_worker->g;
     __cilkrts_stack_frame *sf = g->root_closure->frame;
     CILK_BOSS_START_TIMING(g);
-
-#if !BOSS_THIEF
-    worker_id self = __cilkrts_tls_worker->self;
-#endif
-
-#if !BOSS_THIEF
-    // Wake up the worker the boss was impersonating, to let it take
-    // over the computation.
-    try_wake_root_worker(g, &self, (uint32_t)(-1));
-#endif
 
     // Wait until the cilkified region is done executing.
     wait_until_cilk_done(g);
@@ -516,10 +488,8 @@ void __cilkrts_internal_invoke_cilkified_root(__cilkrts_stack_frame *sf) {
     static bool boss_initialized = false;
     if (!boss_initialized) {
         __cilkrts_worker *w0 = g->workers[0];
-#if BOSS_THIEF
         cilk_fiber_pool_per_worker_init(w0);
         w0->l->rand_next = 162347;
-#endif
         if (USE_EXTENSION) {
             g->root_closure->ext_fiber =
                 cilk_fiber_allocate(w0, g->options.stacksize);
@@ -532,11 +502,7 @@ void __cilkrts_internal_invoke_cilkified_root(__cilkrts_stack_frame *sf) {
     // The boss thread will impersonate the last exiting worker until it tries
     // to become a thief.
     __cilkrts_worker *w;
-#if BOSS_THIEF
     w = g->workers[0];
-#else
-    w = g->workers[g->exiting_worker];
-#endif
     Closure *root_closure = g->root_closure;
     if (USE_EXTENSION) {
         // Initialize sf->extension, to appease the later call to
@@ -634,7 +600,6 @@ void __cilkrts_internal_exit_cilkified_root(global_state *g,
     atomic_store_explicit(&g->done, 1, memory_order_release);
     /* wake_all_disengaged(g); */
 
-#if BOSS_THIEF
     if (!is_boss) {
         w->l->exiting = true;
         __cilkrts_worker **workers = g->workers;
@@ -644,17 +609,6 @@ void __cilkrts_internal_exit_cilkified_root(global_state *g,
         w0->extension = w->extension;
         w->extension = NULL;
     }
-#endif
-
-#if !BOSS_THIEF
-    if (!is_boss && self != atomic_load_explicit(&g->start_root_worker,
-                                                 memory_order_acquire)) {
-        // If a thread other than the boss thread finishes the cilkified region,
-        // make sure that the previous root worker is awake, so that it can
-        // become a thief and this worker can become the new root worker.
-        wake_root_worker(g, self);
-    }
-#endif
 
     // Clear this worker's deque.  Nobody can successfully steal from this deque
     // at this point, because head == tail, but we still want any subsequent

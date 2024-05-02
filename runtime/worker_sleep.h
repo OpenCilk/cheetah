@@ -463,7 +463,6 @@ handle_failed_steal_attempts(global_state *const rts, worker_id self,
             *inefficient_history = my_inefficient_history;
 
 #endif
-#if BOSS_THIEF
             if (is_boss) {
                 if (fails % NAP_THRESHOLD == 0) {
                     // The boss thread should never disengage.  Sleep instead.
@@ -474,9 +473,6 @@ handle_failed_steal_attempts(global_state *const rts, worker_id self,
                     nanosleep(&sleeptime, NULL);
                 }
             } else {
-#else
-            {
-#endif
 #if ENABLE_THIEF_SLEEP
 
                 if (ENABLE_THIEF_SLEEP && curr_ineff &&
