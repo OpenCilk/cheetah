@@ -1403,11 +1403,7 @@ void do_what_it_says_boss(__cilkrts_worker *w, Closure *t) {
 
     CILK_STOP_TIMING(w, INTERVAL_SCHED);
     worker_change_state(w, WORKER_IDLE);
-#if BOSS_THIEF
     worker_scheduler(w);
-#else
-    __builtin_longjmp(w->g->boss_ctx, 1);
-#endif
 }
 
 void worker_scheduler(__cilkrts_worker *w) {
@@ -1631,11 +1627,9 @@ void worker_scheduler(__cilkrts_worker *w) {
 
     CILK_STOP_TIMING(w, INTERVAL_SCHED);
     worker_change_state(w, WORKER_IDLE);
-#if BOSS_THIEF
     if (is_boss) {
         __builtin_longjmp(rts->boss_ctx, 1);
     }
-#endif
 }
 
 void *scheduler_thread_proc(void *arg) {
@@ -1645,9 +1639,8 @@ void *scheduler_thread_proc(void *arg) {
     cilkrts_alert(BOOT, w, "scheduler_thread_proc");
     __cilkrts_set_tls_worker(w);
 
-#if BOSS_THIEF
     CILK_ASSERT(w, w->self != 0);
-#endif
+
     // Initialize the worker's fiber pool.  We have each worker do this itself
     // to improve the locality of the initial fibers.
     cilk_fiber_pool_per_worker_init(w);
@@ -1667,19 +1660,11 @@ void *scheduler_thread_proc(void *arg) {
         // Wait for g->start == 1 to start executing the work-stealing loop.  We
         // use a condition variable to wait on g->start, because this approach
         // seems to result in better performance.
-#if !BOSS_THIEF
-        if (self == rts->exiting_worker) {
-            root_worker_wait(rts, self);
-        } else {
-#endif
-            if (thief_should_wait(rts)) {
-                disengage_worker(rts, nworkers, self);
-                l->wake_val = thief_wait(rts);
-                reengage_worker(rts, nworkers, self);
-            }
-#if !BOSS_THIEF
+        if (thief_should_wait(rts)) {
+            disengage_worker(rts, nworkers, self);
+            l->wake_val = thief_wait(rts);
+            reengage_worker(rts, nworkers, self);
         }
-#endif
         CILK_STOP_TIMING(w, INTERVAL_SLEEP_UNCILK);
 
         // Check if we should exit this scheduling function.

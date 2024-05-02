@@ -32,8 +32,6 @@
 #define CILK_STATS 0
 #endif
 
-#define BOSS_THIEF 1
-
 // Use 128-bit cache lines to account for adjacent-cache-line prefetchers.
 #define CILK_CACHE_LINE 128
 
