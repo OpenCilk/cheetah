@@ -377,7 +377,6 @@ global_state *__cilkrts_startup(int argc, char *argv[]) {
     global_state *g = global_state_init(argc, argv);
     workers_init(g);
     deques_init(g);
-    CILK_ASSERT_G(0 == g->exiting_worker);
 
     // Create the root closure and a fiber to go with it.  Use worker 0 to
     // allocate the closure and fiber.
@@ -427,7 +426,6 @@ static void __cilkrts_stop_workers(global_state *g) {
     // terminate all thieves, whether they're disengaged inside or outside the
     // work-stealing loop.
     wake_all_disengaged(g);
-    wake_root_worker(g, (uint32_t)(-1));
 
     // Join the worker pthreads
     unsigned int worker_start = 1;
@@ -583,11 +581,7 @@ void __cilkrts_internal_exit_cilkified_root(global_state *g,
     __cilkrts_worker *w = __cilkrts_get_tls_worker();
     CILK_ASSERT(w, w->l->state == WORKER_RUN);
     CILK_SWITCH_TIMING(w, INTERVAL_WORK, INTERVAL_CILKIFY_EXIT);
-    // Record this worker as the exiting worker.  We keep track of this exiting
-    // worker so that code outside of Cilkified regions can use this worker's
-    // state, specifically, its reducer_map.  We make sure to do this before
-    // setting done, so that other workers will properly observe the new
-    // exiting_worker.
+
     worker_id self = w->self;
     const bool is_boss = (0 == self);
     ReadyDeque *deques = g->deques;
@@ -668,8 +662,6 @@ static void global_state_deinit(global_state *g) {
     pthread_cond_destroy(&g->cilkified_cond_var);
     /* pthread_mutex_destroy(&g->start_thieves_lock); */
     /* pthread_cond_destroy(&g->start_thieves_cond_var); */
-    pthread_mutex_destroy(&g->start_root_worker_lock);
-    pthread_cond_destroy(&g->start_root_worker_cond_var);
     pthread_mutex_destroy(&g->disengaged_lock);
     pthread_cond_destroy(&g->disengaged_cond_var);
     free(g->worker_args);
