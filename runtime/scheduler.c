@@ -1682,12 +1682,6 @@ void *scheduler_thread_proc(void *arg) {
             worker_scheduler(w);
         }
 
-        // At this point, some worker will have finished the Cilkified region,
-        // meaning it recorded its ID in g->exiting_worker and set g->done = 1.
-        // That worker's state accurately reflects the execution of the
-        // Cilkified region, including all updates to reducers.  Wait for that
-        // worker to exit the work-stealing loop, and use it to wake-up the
-        // original Cilkifying thread.
         CILK_START_TIMING(w, INTERVAL_SLEEP_UNCILK);
     } while (true);
 }
