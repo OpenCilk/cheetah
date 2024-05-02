@@ -125,6 +125,7 @@ add_to_disengaged(global_state *const rts, int32_t val) {
     }
 }
 
+#if ENABLE_THIEF_SLEEP
 // Called by a thief thread.  Causes the thief thread to try to sleep, that is,
 // to wait for a signal to resume work-stealing.
 static bool try_to_disengage_thief(global_state *g, worker_id self,
@@ -198,6 +199,7 @@ static bool try_to_disengage_thief(global_state *g, worker_id self,
         return false;
     }
 }
+#endif // ENABLE_THIEF_SLEEP
 
 // Helper function to parse the given value of disengaged_sentinel to determine
 // the number of active, sentinel, and disengaged workers.
@@ -355,14 +357,12 @@ maybe_reengage_workers(global_state *const rts, worker_id self,
     return fails;
 }
 
+#if ENABLE_THIEF_SLEEP
 // Attempt to disengage this thief thread.  The __cilkrts_worker parameter is only
 // used for debugging.
 static bool maybe_disengage_thief(global_state *g, worker_id self,
                                   unsigned int nworkers,
                                   __cilkrts_worker *const w) {
-#if !ENABLE_THIEF_SLEEP
-    return false;
-#endif // !ENABLE_THIEF_SLEEP
     // Check the number of active and sentinel workers, and disengage this
     // worker if there are too many sentinel workers.
     while (true) {
@@ -388,6 +388,7 @@ static bool maybe_disengage_thief(global_state *g, worker_id self,
     }
     return false;
 }
+#endif // ENABLE_THIEF_SLEEP
 
 // If steal attempts did not find work, update histories as appropriate and
 // possibly disengage this worker.
@@ -633,6 +634,7 @@ init_fails(uint32_t wake_val, global_state *rts) {
     return 0;
 }
 
+#if ENABLE_THIEF_SLEEP
 __attribute__((always_inline)) static unsigned int
 reset_fails(global_state *rts, unsigned int fails) {
     if (fails >= SENTINEL_THRESHOLD) {
@@ -642,6 +644,7 @@ reset_fails(global_state *rts, unsigned int fails) {
     }
     return 0;
 }
+#endif // ENABLE_THIEF_SLEEP
 
 __attribute__((always_inline)) static inline void
 disengage_worker(global_state *g, unsigned int nworkers, worker_id self) {
