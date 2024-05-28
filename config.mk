@@ -22,7 +22,7 @@ RTS_PEDIGREE_LIB?=libopencilk-pedigrees
 # all of those files using the flag --opencilk-resource-dir=/path/to/cheetah.
 RTS_LIBDIR_NAME?=lib/$(shell $(LLVM_CONFIG) --host-target)
 RESOURCE_DIR?=$(CONFIG_DIR)
-RTS_LIBDIR?=$(RESOURCE_DIR)$(RTS_LIBDIR_NAME)
+RTS_LIBDIR?=$(RESOURCE_DIR)/$(RTS_LIBDIR_NAME)
 RTS_OPT?=-fopencilk --opencilk-resource-dir=$(RESOURCE_DIR)
 #RTS_LIB_FLAG=-lcheetah
 
