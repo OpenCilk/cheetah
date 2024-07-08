@@ -122,16 +122,22 @@ __cilkrts_enter_frame(__cilkrts_stack_frame *sf) {
 // routine will always be executed by a Cilk worker, it is optimized compared to
 // its counterpart, __cilkrts_enter_frame.
 __attribute__((always_inline)) void
-__cilkrts_enter_frame_helper(__cilkrts_stack_frame *sf) {
+__cilkrts_enter_frame_helper(__cilkrts_stack_frame *sf,
+                             __cilkrts_stack_frame *parent, bool spawner) {
     cilkrts_alert(CFRAME, "__cilkrts_enter_frame_helper %p", (void *)sf);
 
     sf->flags = 0;
     sf->magic = frame_magic;
 
-    struct cilk_fiber *fh = __cilkrts_current_fh;
+    // struct cilk_fiber *fh = __cilkrts_current_fh;
+    // sf->fh = fh;
+    // sf->call_parent = fh->current_stack_frame;
+    struct cilk_fiber *fh = parent->fh;
     sf->fh = fh;
-    sf->call_parent = fh->current_stack_frame;
-    fh->current_stack_frame = sf;
+    if (spawner) {
+        sf->call_parent = parent;
+        fh->current_stack_frame = sf;
+    }
 }
 
 __attribute__((always_inline)) int
@@ -147,13 +153,13 @@ __cilk_prepare_spawn(__cilkrts_stack_frame *sf) {
 // Detach the given Cilk stack frame, allowing other Cilk workers to steal the
 // parent frame.
 __attribute__((always_inline)) void
-__cilkrts_detach(__cilkrts_stack_frame *sf) {
+__cilkrts_detach(__cilkrts_stack_frame *sf, __cilkrts_stack_frame *parent) {
     __cilkrts_worker *w = get_worker_from_stack(sf);
     cilkrts_alert(CFRAME, "__cilkrts_detach %p", (void *)sf);
 
     CILK_ASSERT(CHECK_CILK_FRAME_MAGIC(w->g, sf));
 
-    struct __cilkrts_stack_frame *parent = sf->call_parent;
+    // struct __cilkrts_stack_frame *parent = sf->call_parent;
 
     if (USE_EXTENSION) {
         __cilkrts_extend_spawn(w, &parent->extension, &w->extension);
@@ -254,7 +260,8 @@ __cilkrts_leave_frame(__cilkrts_stack_frame *sf) {
 }
 
 __attribute__((always_inline)) void
-__cilkrts_leave_frame_helper(__cilkrts_stack_frame *sf) {
+__cilkrts_leave_frame_helper(__cilkrts_stack_frame *sf,
+                             __cilkrts_stack_frame *parent, bool spawner) {
     __cilkrts_worker *w = get_worker_from_stack(sf);
     cilkrts_alert(CFRAME, "__cilkrts_leave_frame_helper %p", (void *)sf);
 
@@ -264,8 +271,9 @@ __cilkrts_leave_frame_helper(__cilkrts_stack_frame *sf) {
     // Pop this frame off the cactus stack.  This logic used to be in
     // __cilkrts_pop_frame, but has been manually inlined to avoid reloading the
     // worker unnecessarily.
-    __cilkrts_stack_frame *parent = sf->call_parent;
-    sf->fh->current_stack_frame = parent;
+    // __cilkrts_stack_frame *parent = sf->call_parent;
+    if (spawner)
+        sf->fh->current_stack_frame = parent;
     if (USE_EXTENSION) {
         __cilkrts_extend_return_from_spawn(w, &w->extension);
         w->extension = parent->extension;
@@ -299,8 +307,9 @@ __cilk_parent_epilogue(__cilkrts_stack_frame *sf) {
 }
 
 __attribute__((always_inline)) void
-__cilk_helper_epilogue(__cilkrts_stack_frame *sf) {
-    __cilkrts_leave_frame_helper(sf);
+__cilk_helper_epilogue(__cilkrts_stack_frame *sf, __cilkrts_stack_frame *parent,
+                       bool spawner) {
+    __cilkrts_leave_frame_helper(sf, parent, spawner);
 }
 
 __attribute__((always_inline))
@@ -318,8 +327,9 @@ void __cilkrts_enter_landingpad(__cilkrts_stack_frame *sf, int32_t sel) {
         __cilkrts_cleanup_fiber(sf, sel);
 }
 
-__attribute__((always_inline))
-void __cilkrts_pause_frame(__cilkrts_stack_frame *sf, char *exn) {
+__attribute__((always_inline)) void
+__cilkrts_pause_frame(__cilkrts_stack_frame *sf, __cilkrts_stack_frame *parent,
+                      char *exn, bool spawner) {
     if (0 == __builtin_setjmp(sf->ctx))
         __cilkrts_cleanup_fiber(sf, 1);
 
@@ -328,12 +338,13 @@ void __cilkrts_pause_frame(__cilkrts_stack_frame *sf, char *exn) {
 
     CILK_ASSERT(CHECK_CILK_FRAME_MAGIC(w->g, sf));
 
-    __cilkrts_stack_frame *parent = sf->call_parent;
+    // __cilkrts_stack_frame *parent = sf->call_parent;
 
     // Pop this frame off the cactus stack.  This logic used to be in
     // __cilkrts_pop_frame, but has been manually inlined to avoid reloading the
     // worker unnecessarily.
-    sf->fh->current_stack_frame = parent;
+    if (spawner)
+        sf->fh->current_stack_frame = parent;
     sf->call_parent = NULL;
 
     // A __cilkrts_pause_frame may be reached before the spawn-helper frame has
@@ -364,8 +375,10 @@ void __cilkrts_pause_frame(__cilkrts_stack_frame *sf, char *exn) {
 }
 
 __attribute__((always_inline)) void
-__cilk_helper_epilogue_exn(__cilkrts_stack_frame *sf, char *exn) {
-    __cilkrts_pause_frame(sf, exn);
+__cilk_helper_epilogue_exn(__cilkrts_stack_frame *sf,
+                           __cilkrts_stack_frame *parent, char *exn,
+                           bool spawner) {
+    __cilkrts_pause_frame(sf, parent, exn, spawner);
 }
 
 /// Computes a grainsize for a cilk_for loop, using the following equation:
