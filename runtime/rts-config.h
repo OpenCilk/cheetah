@@ -84,7 +84,7 @@ _Static_assert(MAX_NUM_PAGES_PER_STACK >= MIN_NUM_PAGES_PER_STACK, "Invalid Chee
 
 #ifndef LG_STACK_SIZE
 #define LG_STACK_SIZE 20 // 1 MBytes
-#endif 
+#endif
 
 #ifndef DEFAULT_STACK_SIZE
 #define DEFAULT_STACK_SIZE (1U << LG_STACK_SIZE) // 1 MBytes

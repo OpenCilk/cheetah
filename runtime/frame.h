@@ -3,8 +3,8 @@
 
 #include "rts-config.h"
 
-#include <stdint.h>
 #include "jmpbuf.h"
+#include <stdint.h>
 
 struct __cilkrts_worker;
 struct __cilkrts_stack_frame;
