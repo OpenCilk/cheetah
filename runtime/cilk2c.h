@@ -35,7 +35,9 @@ CHEETAH_INTERNAL void __cilkrts_enter_frame(__cilkrts_stack_frame *sf);
 
 // Inserted at the entry of a spawn helper, i.e., a function that must have been
 // spawned.  Initializes the stack frame sf allocated for that function.
-CHEETAH_INTERNAL void __cilkrts_enter_frame_helper(__cilkrts_stack_frame *sf);
+CHEETAH_INTERNAL void
+__cilkrts_enter_frame_helper(__cilkrts_stack_frame *sf,
+                             __cilkrts_stack_frame *parent, bool spawner);
 
 // Prepare to perform a spawn.  This function may return once or twice,
 // returning 0 the first time and 1 the second time.  This function is intended
@@ -48,7 +50,8 @@ CHEETAH_INTERNAL int __cilk_prepare_spawn(__cilkrts_stack_frame *sf);
 
 // Called in the spawn helper immediately before the spawned computation.
 // Enables the parent function to be stollen.
-CHEETAH_INTERNAL void __cilkrts_detach(__cilkrts_stack_frame *sf);
+CHEETAH_INTERNAL void __cilkrts_detach(__cilkrts_stack_frame *sf,
+                                       __cilkrts_stack_frame *parent);
 
 // Check if the runtime is storing an exception we need to handle later, and
 // raises that exception if so.
@@ -81,14 +84,18 @@ CHEETAH_INTERNAL void __cilkrts_leave_frame(__cilkrts_stack_frame *sf);
 
 // Inserted on return from a spawn-helper function.  Performs Cilk's return
 // protocol for such functions.
-CHEETAH_INTERNAL void __cilkrts_leave_frame_helper(__cilkrts_stack_frame *sf);
+CHEETAH_INTERNAL void
+__cilkrts_leave_frame_helper(__cilkrts_stack_frame *sf,
+                             __cilkrts_stack_frame *parent, bool spawner);
 
 // Performs all necessary operations on return from a spawning function that is
 // not itself a spawn helper.
 CHEETAH_INTERNAL void __cilk_parent_epilogue(__cilkrts_stack_frame *sf);
 
 // Performs all necessary operations on return from a spawn-helper function.
-CHEETAH_INTERNAL void __cilk_helper_epilogue(__cilkrts_stack_frame *sf);
+CHEETAH_INTERNAL void __cilk_helper_epilogue(__cilkrts_stack_frame *sf,
+                                             __cilkrts_stack_frame *parent,
+                                             bool spawner);
 
 // Performs all necessary runtime updates when execution enters a landingpad in
 // a spawning function.
@@ -101,11 +108,15 @@ CHEETAH_API void __cilkrts_cleanup_fiber(__cilkrts_stack_frame *, int32_t sel);
 
 // Performs Cilk's return protocol on an exceptional return (i.e., a resume)
 // from a spawn-helper function.
-CHEETAH_INTERNAL void __cilkrts_pause_frame(__cilkrts_stack_frame *sf, char *exn);
+CHEETAH_INTERNAL void __cilkrts_pause_frame(__cilkrts_stack_frame *sf,
+                                            __cilkrts_stack_frame *parent,
+                                            char *exn, bool spawner);
 
 // Inserted on an exceptional return (i.e., a resume) from a spawn-helper
 // function.
-CHEETAH_INTERNAL void __cilk_pause_frame(__cilkrts_stack_frame *sf, char *exn);
+CHEETAH_INTERNAL void __cilk_pause_frame(__cilkrts_stack_frame *sf,
+                                         __cilkrts_stack_frame *parent,
+                                         char *exn, bool spawner);
 
 // Compute the grainsize for a cilk_for loop at runtime, based on the number n
 // of loop iterations.
