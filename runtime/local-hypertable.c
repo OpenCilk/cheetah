@@ -379,8 +379,7 @@ void *__cilkrts_insert_new_view(hyper_table *table, uintptr_t key, size_t size,
 
 // Merge two hypertables, left and right.  Returns the merged hypertable and
 // deletes the other.
-hyper_table *merge_two_hts(__cilkrts_worker *restrict w,
-                           hyper_table *restrict left,
+hyper_table *merge_two_hts(hyper_table *restrict left,
                            hyper_table *restrict right) {
     // In the trivial case of an empty hyper_table, return the other
     // hyper_table.

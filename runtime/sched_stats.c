@@ -85,7 +85,7 @@ void cilk_sched_stats_init(struct sched_stats *s) {
 void cilk_start_timing(__cilkrts_worker *w, enum timing_type t) {
     if (w) {
         struct sched_stats *s = &(w->l->stats);
-        CILK_ASSERT(w, s->begin[t] == 0);
+        CILK_ASSERT(s->begin[t] == 0);
         s->end[t] = 0;
         s->begin[t] = begin_time();
     }
@@ -94,9 +94,9 @@ void cilk_start_timing(__cilkrts_worker *w, enum timing_type t) {
 void cilk_stop_timing(__cilkrts_worker *w, enum timing_type t) {
     if (w) {
         struct sched_stats *s = &(w->l->stats);
-        CILK_ASSERT(w, s->end[t] == 0);
+        CILK_ASSERT(s->end[t] == 0);
         s->end[t] = end_time();
-        CILK_ASSERT(w, s->end[t] >= s->begin[t]);
+        CILK_ASSERT(s->end[t] >= s->begin[t]);
         s->time[t] += (s->end[t] - s->begin[t]);
         s->count[t]++;
         s->begin[t] = 0;
@@ -108,15 +108,15 @@ void cilk_switch_timing(__cilkrts_worker *w, enum timing_type t1,
     if (w) {
         struct sched_stats *s = &(w->l->stats);
         // Stop timer t1
-        CILK_ASSERT(w, s->end[t1] == 0);
+        CILK_ASSERT(s->end[t1] == 0);
         s->end[t1] = end_time();
-        CILK_ASSERT(w, s->end[t1] >= s->begin[t1]);
+        CILK_ASSERT(s->end[t1] >= s->begin[t1]);
         s->time[t1] += (s->end[t1] - s->begin[t1]);
         s->count[t1]++;
         s->begin[t1] = 0;
 
         // Start timer t2 where t1 left off
-        CILK_ASSERT(w, s->begin[t2] == 0);
+        CILK_ASSERT(s->begin[t2] == 0);
         s->end[t2] = 0;
         s->begin[t2] = begin_time();
     }
@@ -125,24 +125,24 @@ void cilk_switch_timing(__cilkrts_worker *w, enum timing_type t1,
 void cilk_drop_timing(__cilkrts_worker *w, enum timing_type t) {
     if (w) {
         struct sched_stats *s = &(w->l->stats);
-        CILK_ASSERT(w, s->begin[t] != 0);
+        CILK_ASSERT(s->begin[t] != 0);
         s->begin[t] = 0;
     }
 }
 
 void cilk_boss_start_timing(struct global_state *g) {
     struct global_sched_stats *s = &(g->stats);
-    CILK_ASSERT_G(s->boss_begin == 0);
+    CILK_ASSERT(s->boss_begin == 0);
     s->boss_begin = begin_time();
     s->boss_end = 0;
 }
 
 void cilk_boss_stop_timing(struct global_state *g) {
     struct global_sched_stats *s = &(g->stats);
-    CILK_ASSERT_G(s->boss_end == 0);
+    CILK_ASSERT(s->boss_end == 0);
     s->boss_end = end_time();
-    CILK_ASSERT_G(s->boss_end >= s->boss_begin);
-    CILK_ASSERT_G(s->boss_end >= s->exit_time);
+    CILK_ASSERT(s->boss_end >= s->boss_begin);
+    CILK_ASSERT(s->boss_end >= s->exit_time);
     uint64_t last = s->exit_time > s->boss_begin ? s->exit_time : s->boss_begin;
     s->boss_waiting += (s->boss_end - last);
     s->boss_wait_count++;
@@ -152,7 +152,7 @@ void cilk_boss_stop_timing(struct global_state *g) {
 
 void cilk_exit_worker_timing(struct global_state *g) {
     struct global_sched_stats *s = &(g->stats);
-    CILK_ASSERT_G(s->exit_time == 0);
+    CILK_ASSERT(s->exit_time == 0);
     s->exit_time = begin_time();
 }
 

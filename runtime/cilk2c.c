@@ -62,7 +62,7 @@ int __cilkrts_atexit(void (*callback)(void)) {
 // was thrown.
 void __cilkrts_check_exception_raise(__cilkrts_stack_frame *sf) {
     __cilkrts_worker *w = get_worker_from_stack(sf);
-    CILK_ASSERT_POINTER_EQUAL(w, w, __cilkrts_get_tls_worker());
+    CILK_ASSERT_POINTER_EQUAL(w, __cilkrts_get_tls_worker());
 
     struct closure_exception *exn_r = get_exception_reducer(w);
     char *exn = exn_r->exn;
@@ -83,7 +83,7 @@ void __cilkrts_check_exception_raise(__cilkrts_stack_frame *sf) {
 // resumes unwinding with that exception.
 void __cilkrts_check_exception_resume(__cilkrts_stack_frame *sf) {
     __cilkrts_worker *w = get_worker_from_stack(sf);
-    CILK_ASSERT_POINTER_EQUAL(w, w, __cilkrts_get_tls_worker());
+    CILK_ASSERT_POINTER_EQUAL(w, __cilkrts_get_tls_worker());
 
     struct closure_exception *exn_r = get_exception_reducer(w);
     char *exn = exn_r->exn;
@@ -105,10 +105,12 @@ void __cilkrts_check_exception_resume(__cilkrts_stack_frame *sf) {
 // points at the fiber and call-stack frame containing sf before any catch
 // handlers in that frame execute.
 void __cilkrts_cleanup_fiber(__cilkrts_stack_frame *sf, int32_t sel) {
-    __cilkrts_worker *w = get_worker_from_stack(sf);
-    CILK_ASSERT_POINTER_EQUAL(w, w, __cilkrts_get_tls_worker());
+    (void)sel; // currently unused
 
-    CILK_ASSERT(w, __cilkrts_synced(sf));
+    __cilkrts_worker *w = get_worker_from_stack(sf);
+    CILK_ASSERT_POINTER_EQUAL(w, __cilkrts_get_tls_worker());
+
+    CILK_ASSERT(__cilkrts_synced(sf));
 
     struct closure_exception *exn_r = get_exception_reducer_or_null(w);
     struct cilk_fiber *throwing_fiber = NULL;
@@ -153,9 +155,9 @@ void __cilkrts_cleanup_fiber(__cilkrts_stack_frame *sf, int32_t sel) {
 
 void __cilkrts_sync(__cilkrts_stack_frame *sf) {
     __cilkrts_worker *w = get_worker_from_stack(sf);
-    CILK_ASSERT_POINTER_EQUAL(w, w, __cilkrts_get_tls_worker());
+    CILK_ASSERT_POINTER_EQUAL(w, __cilkrts_get_tls_worker());
 
-    CILK_ASSERT(w, CHECK_CILK_FRAME_MAGIC(w->g, sf));
+    CILK_ASSERT(CHECK_CILK_FRAME_MAGIC(w->g, sf));
 
     if (Cilk_sync(w, sf) == SYNC_READY) {
         // The Cilk_sync restores the original rsp stored in sf->ctx

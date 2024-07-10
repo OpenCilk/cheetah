@@ -38,6 +38,7 @@ void __cilkrts_extend_spawn(__cilkrts_worker *w, void **parent_extension,
 void __cilkrts_extend_return_from_spawn(__cilkrts_worker *w, void **extension) {
     // Free the pedigree frame.
     pop_pedigree_frame(w);
+    (void)extension; // TODO: Remove the parameter?
 }
 
 void __cilkrts_extend_sync(void **extension) {

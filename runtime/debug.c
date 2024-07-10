@@ -58,8 +58,9 @@ void cilk_die_internal(struct global_state *const g, const char *fmt, ...) {
 }
 
 CHEETAH_INTERNAL_NORETURN
-void cilkrts_bug(__cilkrts_worker *w, const char *fmt, ...) {
+void cilkrts_bug(const char *fmt, ...) {
     fflush(NULL);
+    __cilkrts_worker *w = __cilkrts_get_tls_worker();
     if (w) {
         cilk_mutex_lock(&(w->g->print_lock));
         flush_alert_log();
@@ -99,11 +100,14 @@ static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 #if !(ALERT_LVL & (ALERT_CFRAME|ALERT_RETURN))
 CHEETAH_INTERNAL
 #endif
-void cilkrts_alert(const int lvl, __cilkrts_worker *w, const char *fmt, ...) {
-    if (ALERT_LVL == 0)
+void cilkrts_alert(const int lvl, const char *fmt, ...) {
+    if ((ALERT_LVL & lvl) == 0)
         return;
     char prefix[10], body[200];
     size_t size1 = 0, size2 = 0;
+
+    __cilkrts_worker *w = __cilkrts_get_tls_worker();
+
     if (w) {
         size1 = snprintf(prefix, sizeof prefix, "[W%02u]: ", w->self);
         assert(size1 >= 7 && size1 < 10);

@@ -55,11 +55,13 @@ static local_state *worker_local_init(local_state *l, global_state *g) {
 }
 
 static void worker_local_destroy(local_state *l, global_state *g) {
+    (void)l; // not currently used
+    (void)g; // not currently used
     /* currently nothing to do here */
 }
 
 static void deques_init(global_state *g) {
-    cilkrts_alert(BOOT, NULL, "(deques_init) Initializing deques");
+    cilkrts_alert(BOOT, "(deques_init) Initializing deques");
     for (unsigned int i = 0; i < g->options.nproc; i++) {
         g->deques[i].top = NULL;
         g->deques[i].bottom = NULL;
@@ -68,7 +70,7 @@ static void deques_init(global_state *g) {
 }
 
 static void workers_init(global_state *g) {
-    cilkrts_alert(BOOT, NULL, "(workers_init) Initializing workers");
+    cilkrts_alert(BOOT, "(workers_init) Initializing workers");
     for (unsigned int i = 0; i < g->options.nproc; i++) {
         if (i == 0) {
             // Initialize worker 0, so we always have a worker structure to fall
@@ -92,7 +94,7 @@ static void workers_init(global_state *g) {
 }
 
 __cilkrts_worker *__cilkrts_init_tls_worker(worker_id i, global_state *g) {
-    cilkrts_alert(BOOT, NULL, "(workers_init) Initializing worker %u", i);
+    cilkrts_alert(BOOT, "(workers_init) Initializing worker %u", i);
     __cilkrts_worker *w;
     if (i == 0) {
         // Use default_worker structure for worker 0.
@@ -281,11 +283,11 @@ void *init_threads_and_enter_scheduler(void *args) {
 #endif
 #endif // ENABLE_WORKER_PINNING
     int n_threads = g->nworkers;
-    CILK_ASSERT_G(n_threads > 0);
+    CILK_ASSERT(n_threads > 0);
 
     /* TODO: Apple supports thread affinity using a different interface. */
 
-    cilkrts_alert(BOOT, NULL, "(threads_init) Setting up threads");
+    cilkrts_alert(BOOT, "(threads_init) Setting up threads");
 
 #if ENABLE_WORKER_PINNING
 #ifdef CPU_SETSIZE
@@ -373,7 +375,7 @@ static void threads_init(global_state *g) {
 }
 
 global_state *__cilkrts_startup(int argc, char *argv[]) {
-    cilkrts_alert(BOOT, NULL, "(__cilkrts_startup) argc %d", argc);
+    cilkrts_alert(BOOT, "(__cilkrts_startup) argc %d", argc);
     global_state *g = global_state_init(argc, argv);
     workers_init(g);
     deques_init(g);
@@ -382,7 +384,7 @@ global_state *__cilkrts_startup(int argc, char *argv[]) {
     // allocate the closure and fiber.
     __cilkrts_worker *w0 = g->workers[0];
     Closure *t = Closure_create(w0, NULL);
-    struct cilk_fiber *fiber = cilk_fiber_allocate(w0, g->options.stacksize);
+    struct cilk_fiber *fiber = cilk_fiber_allocate(g->options.stacksize);
     t->fiber = fiber;
     g->root_closure = t;
 
@@ -414,7 +416,7 @@ static void __cilkrts_start_workers(global_state *g) {
 // Stop the Cilk workers in g, for example, by joining their underlying
 // Pthreads.
 static void __cilkrts_stop_workers(global_state *g) {
-    /* CILK_ASSERT_G( */
+    /* CILK_ASSERT( */
     /*     !atomic_load_explicit(&g->start_thieves, memory_order_acquire)); */
 
     // Set g->start and g->terminate, to allow the workers to exit their
@@ -435,7 +437,7 @@ static void __cilkrts_stop_workers(global_state *g) {
             cilkrts_bug(NULL, "Cilk runtime error: thread join (%u) failed: %s",
                         i, strerror(status));
     }
-    cilkrts_alert(BOOT, NULL, "(threads_join) All workers joined!");
+    cilkrts_alert(BOOT, "(threads_join) All workers joined!");
     g->workers_started = false;
 }
 
@@ -490,7 +492,7 @@ void __cilkrts_internal_invoke_cilkified_root(__cilkrts_stack_frame *sf) {
         w0->l->rand_next = 162347;
         if (USE_EXTENSION) {
             g->root_closure->ext_fiber =
-                cilk_fiber_allocate(w0, g->options.stacksize);
+                cilk_fiber_allocate(g->options.stacksize);
         }
         boss_initialized = true;
     }
@@ -522,7 +524,7 @@ void __cilkrts_internal_invoke_cilkified_root(__cilkrts_stack_frame *sf) {
     void *new_rsp =
         (void *)sysdep_reset_stack_for_resume(root_closure->fiber, sf);
     USE_UNUSED(new_rsp);
-    CILK_ASSERT_G(SP(sf) == new_rsp);
+    CILK_ASSERT(SP(sf) == new_rsp);
 
     // Mark that this root frame is last (meaning, at the top of the stack)
     sf->flags |= CILK_FRAME_LAST;
@@ -531,7 +533,7 @@ void __cilkrts_internal_invoke_cilkified_root(__cilkrts_stack_frame *sf) {
 
     // Associate sf with this root closure
     Closure_clear_frame(root_closure);
-    Closure_set_frame(w, root_closure, sf);
+    Closure_set_frame(root_closure, sf);
 
     // Now kick off execution of the Cilkified region by setting appropriate
     // flags.
@@ -579,7 +581,7 @@ void __cilkrts_internal_invoke_cilkified_root(__cilkrts_stack_frame *sf) {
 void __cilkrts_internal_exit_cilkified_root(global_state *g,
                                             __cilkrts_stack_frame *sf) {
     __cilkrts_worker *w = __cilkrts_get_tls_worker();
-    CILK_ASSERT(w, w->l->state == WORKER_RUN);
+    CILK_ASSERT(w->l->state == WORKER_RUN);
     CILK_SWITCH_TIMING(w, INTERVAL_WORK, INTERVAL_CILKIFY_EXIT);
 
     worker_id self = w->self;
@@ -619,7 +621,7 @@ void __cilkrts_internal_exit_cilkified_root(global_state *g,
     // function, but leave_frame is executed conditionally in Cilk functions
     // based on whether sf->flags == 0.  Clearing sf->flags ensures that the
     // Cilkifying thread does not try to execute leave_frame.
-    CILK_ASSERT(w, __cilkrts_synced(sf));
+    CILK_ASSERT(__cilkrts_synced(sf));
     sf->flags = 0;
 
     CILK_STOP_TIMING(w, INTERVAL_CILKIFY_EXIT);
@@ -651,7 +653,7 @@ static void global_state_terminate(global_state *g) {
 }
 
 static void global_state_deinit(global_state *g) {
-    cilkrts_alert(BOOT, NULL, "(global_state_deinit) Clean up global state");
+    cilkrts_alert(BOOT, "(global_state_deinit) Clean up global state");
 
     cilk_fiber_pool_global_destroy(g);
     cilk_internal_malloc_global_destroy(g); // internal malloc last
@@ -681,13 +683,15 @@ static void global_state_deinit(global_state *g) {
 }
 
 static void deques_deinit(global_state *g) {
-    cilkrts_alert(BOOT, NULL, "(deques_deinit) Clean up deques");
+    cilkrts_alert(BOOT, "(deques_deinit) Clean up deques");
     for (unsigned int i = 0; i < g->options.nproc; i++) {
-        CILK_ASSERT_G(g->deques[i].mutex_owner == NO_WORKER);
+        CILK_ASSERT(g->deques[i].mutex_owner == NO_WORKER);
     }
 }
 
 static void worker_terminate(__cilkrts_worker *w, void *data) {
+    (void)data; // not currently used
+
     cilk_fiber_pool_per_worker_terminate(w);
     hyper_table *ht = w->hyper_table;
     if (ht) {
@@ -711,11 +715,13 @@ static void sum_allocations(__cilkrts_worker *w, void *data) {
 }
 
 static void wrap_fiber_pool_destroy(__cilkrts_worker *w, void *data) {
+    (void)data; // not currently used
+
     cilk_fiber_pool_per_worker_destroy(w);
 }
 
 static void workers_deinit(global_state *g) {
-    cilkrts_alert(BOOT, NULL, "(workers_deinit) Clean up workers");
+    cilkrts_alert(BOOT, "(workers_deinit) Clean up workers");
 
     long allocations[NUM_BUCKETS] = {0, 0, 0, 0};
 
@@ -723,7 +729,7 @@ static void workers_deinit(global_state *g) {
 
     if (DEBUG_ENABLED(MEMORY)) {
         for (int i = 0; i < NUM_BUCKETS; ++i)
-            CILK_ASSERT_INDEX_ZERO(NULL, allocations, i, , "%ld");
+            CILK_ASSERT_INDEX_ZERO(allocations, i, , "%ld");
     }
 
     unsigned i = g->options.nproc;
@@ -744,7 +750,7 @@ static void workers_deinit(global_state *g) {
 }
 
 CHEETAH_INTERNAL void __cilkrts_shutdown(global_state *g) {
-    CILK_ASSERT_G(NULL == exception_reducer.exn);
+    CILK_ASSERT(NULL == exception_reducer.exn);
     // If the workers are still running, stop them now.
     if (g->workers_started)
         __cilkrts_stop_workers(g);

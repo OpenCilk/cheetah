@@ -166,7 +166,7 @@ static inline void reset_disengaged_var(global_state *g) {
 
 // Request to reengage `count` thief threads.
 static inline void request_more_thieves(global_state *g, uint32_t count) {
-    CILK_ASSERT_G(count > 0);
+    CILK_ASSERT(count > 0);
 
     // Don't allow this routine increment the futex beyond half the number of
     // workers on the system.  This bounds how many successful steals can

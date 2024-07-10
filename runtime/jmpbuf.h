@@ -56,6 +56,6 @@ typedef void *jmpbuf[JMPBUF_SIZE];
         char *x_sp;                                                            \
         ASM_GET_FP(x_bp);                                                      \
         ASM_GET_SP(x_sp);                                                      \
-        cilkrts_alert((lvl), (w), "rbp %p rsp %p", x_bp, x_sp);                \
+        cilkrts_alert((lvl), "rbp %p rsp %p", x_bp, x_sp);                \
     }
 #endif

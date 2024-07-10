@@ -50,6 +50,8 @@ sysdep_save_fp_ctrl_state(__cilkrts_stack_frame *sf) {
     /* Disabled because LLVM's implementation is bad. */
     sf->mxcsr = __builtin_ia32_stmxcsr(); /* aka _mm_setcsr */
 #endif
+#else
+    (void)sf; // intentionally unused
 #endif
 }
 
@@ -68,6 +70,8 @@ sysdep_restore_fp_state(__cilkrts_stack_frame *sf) {
     /* Disabled because LLVM's implementation is bad. */
     __builtin_ia32_ldmxcsr(sf->mxcsr); /* aka _mm_getcsr */
 #endif
+#else
+    (void)sf; // intentionally unused
 #endif
 
 #ifdef __AVX__
@@ -97,7 +101,7 @@ static inline char *sysdep_get_stack_start(struct cilk_fiber *fiber) {
 
 static inline char *sysdep_reset_stack_for_resume(struct cilk_fiber *fiber,
                                                   __cilkrts_stack_frame *sf) {
-    CILK_ASSERT_G(fiber);
+    CILK_ASSERT(fiber);
     char *sp = sysdep_get_stack_start(fiber);
     /* Debugging: make sure stack is accessible. */
     ((volatile char *)sp)[-1];
@@ -108,7 +112,7 @@ static inline char *sysdep_reset_stack_for_resume(struct cilk_fiber *fiber,
 
 static inline __attribute__((noreturn))
 void sysdep_longjmp_to_sf(__cilkrts_stack_frame *sf) {
-    cilkrts_alert(FIBER, get_worker_from_stack(sf),
+    cilkrts_alert(FIBER,
                   "longjmp to sf, BP/SP/PC: %p/%p/%p", FP(sf), SP(sf), PC(sf));
 
 #if defined CHEETAH_SAVE_MXCSR
@@ -141,9 +145,9 @@ CHEETAH_INTERNAL void cilk_fiber_pool_per_worker_destroy(__cilkrts_worker *w);
 
 // allocate / deallocate one fiber from / back to OS
 CHEETAH_INTERNAL
-struct cilk_fiber *cilk_fiber_allocate(__cilkrts_worker *w, size_t stacksize);
+struct cilk_fiber *cilk_fiber_allocate(size_t stacksize);
 CHEETAH_INTERNAL
-void cilk_fiber_deallocate(__cilkrts_worker *w, struct cilk_fiber *fiber);
+void cilk_fiber_deallocate(struct cilk_fiber *fiber);
 CHEETAH_INTERNAL
 void cilk_fiber_deallocate_global(global_state *, struct cilk_fiber *fiber);
 // allocate / deallocate one fiber from / back to per-worker pool
@@ -161,9 +165,15 @@ void sanitizer_finish_switch_fiber(void);
 CHEETAH_INTERNAL void sanitizer_poison_fiber(struct cilk_fiber *fiber);
 CHEETAH_INTERNAL void sanitizer_unpoison_fiber(struct cilk_fiber *fiber);
 #else
-static inline void sanitizer_start_switch_fiber(struct cilk_fiber *fiber) {}
+static inline void sanitizer_start_switch_fiber(struct cilk_fiber *fiber) {
+  (void)fiber;
+}
 static inline void sanitizer_finish_switch_fiber() {}
-static inline void sanitizer_poison_fiber(struct cilk_fiber *fiber) {}
-static inline void sanitizer_unpoison_fiber(struct cilk_fiber *fiber) {}
+static inline void sanitizer_poison_fiber(struct cilk_fiber *fiber) {
+  (void)fiber;
+}
+static inline void sanitizer_unpoison_fiber(struct cilk_fiber *fiber) {
+  (void)fiber;
+}
 #endif // CILK_ENABLE_ASAN_HOOKS
 #endif

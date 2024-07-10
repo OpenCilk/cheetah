@@ -132,7 +132,7 @@ static size_t workers_used_and_free(global_state *g) {
         worker_used += l->im_desc.used;
         worker_wasted += wasted_bytes(&l->im_desc);
     }
-    CILK_ASSERT_G(worker_used >= 0 && worker_wasted >= 0);
+    CILK_ASSERT(worker_used >= 0 && worker_wasted >= 0);
     return worker_used + worker_free + worker_wasted;
 }
 
@@ -183,7 +183,7 @@ void internal_malloc_global_check(global_state *g) {
     }
 
     size_t allocated = g->im_pool.allocated;
-    CILK_ASSERT_G(g->im_desc.used >= 0);
+    CILK_ASSERT(g->im_desc.used >= 0);
     size_t global_used = g->im_desc.used;
     size_t global_free = free_bytes(&g->im_desc);
     size_t worker_total = workers_used_and_free(g);
@@ -204,15 +204,15 @@ void internal_malloc_global_check(global_state *g) {
 }
 
 static void assert_global_pool(struct global_im_pool *pool) {
-    CILK_ASSERT_G(pool->mem_list_index < pool->mem_list_size);
+    CILK_ASSERT(pool->mem_list_index < pool->mem_list_size);
     if (pool->wasted > 0)
-        CILK_ASSERT_G(pool->wasted < pool->allocated);
+        CILK_ASSERT(pool->wasted < pool->allocated);
 }
 
 static void assert_bucket(struct im_bucket *bucket) {
-    CILK_ASSERT_G(!!bucket->free_list == !!bucket->free_list_size);
-    CILK_ASSERT_G_LE(bucket->free_list_size, bucket->free_list_limit, "%u");
-    CILK_ASSERT_G_LE(bucket->allocated, bucket->max_allocated, "%d");
+    CILK_ASSERT(!!bucket->free_list == !!bucket->free_list_size);
+    CILK_ASSERT_LE(bucket->free_list_size, bucket->free_list_limit, "%u");
+    CILK_ASSERT_LE(bucket->allocated, bucket->max_allocated, "%d");
 }
 
 //=========================================================
@@ -325,7 +325,7 @@ static void extend_global_pool(__cilkrts_worker *w) {
     im_pool->mem_list_index++;
 
     if (im_pool->mem_list_index >= im_pool->mem_list_size) {
-        CILK_ASSERT(w, im_pool->mem_list_size > 0);
+        CILK_ASSERT(im_pool->mem_list_size > 0);
         size_t new_list_size = 2 * im_pool->mem_list_size;
         im_pool->mem_list = realloc(im_pool->mem_list,
                                     new_list_size * sizeof(*im_pool->mem_list));
@@ -348,9 +348,9 @@ static void extend_global_pool(__cilkrts_worker *w) {
 static void *global_im_alloc(__cilkrts_worker *w, size_t size,
                              unsigned int which_bucket) {
     global_state *g = w->g;
-    CILK_ASSERT(w, g);
-    CILK_ASSERT(w, size <= SIZE_THRESH);
-    CILK_ASSERT(w, which_bucket < NUM_BUCKETS);
+    CILK_ASSERT(g);
+    CILK_ASSERT(size <= SIZE_THRESH);
+    CILK_ASSERT(which_bucket < NUM_BUCKETS);
 
     struct im_bucket *bucket = &(g->im_desc.buckets[which_bucket]);
     struct cilk_im_desc *im_desc = &(g->im_desc);
@@ -393,7 +393,7 @@ void cilk_internal_malloc_global_init(global_state *g) {
         long cheetah_page_size = sysconf(_SC_PAGESIZE);
         /* The global store here should be atomic. */
         cheetah_page_shift = ffs(cheetah_page_size) - 1;
-        CILK_ASSERT_G((1 << cheetah_page_shift) == cheetah_page_size);
+        CILK_ASSERT((1 << cheetah_page_shift) == cheetah_page_size);
     }
     cilk_mutex_init(&(g->im_lock));
     g->im_pool.mem_begin = g->im_pool.mem_end = NULL;
@@ -423,7 +423,7 @@ void cilk_internal_malloc_global_destroy(global_state *g) {
     global_im_pool_destroy(&(g->im_pool)); // free global mem blocks
     cilk_mutex_destroy(&(g->im_lock));
     for (int i = 0; i < IM_NUM_TAGS; ++i) {
-        CILK_ASSERT_G(g->im_desc.num_malloc[i] == 0);
+        CILK_ASSERT(g->im_desc.num_malloc[i] == 0);
     }
 }
 
@@ -501,7 +501,7 @@ void *cilk_internal_malloc(__cilkrts_worker *w, size_t size, enum im_tag tag) {
     if (!mem) { // when out of memory, allocate a batch from global pool
         im_allocate_batch(w, csize, which_bucket);
         mem = remove_from_free_list(bucket);
-        CILK_ASSERT(w, mem);
+        CILK_ASSERT(mem);
     }
     if (ALERT_ENABLED(MEMORY))
         dump_memory_state(NULL, w->g);
@@ -529,7 +529,7 @@ void cilk_internal_free(__cilkrts_worker *w, void *p, size_t size,
     l->im_desc.num_malloc[tag] -= 1;
 
     unsigned int which_bucket = size_to_bucket(size);
-    CILK_ASSERT(w, which_bucket >= 0 && which_bucket < NUM_BUCKETS);
+    CILK_ASSERT(which_bucket >= 0 && which_bucket < NUM_BUCKETS);
     unsigned int csize = bucket_to_size(which_bucket); // canonicalize the size
     struct im_bucket *bucket = &(l->im_desc.buckets[which_bucket]);
     bucket->wasted -= csize - size;
@@ -590,8 +590,8 @@ void cilk_internal_malloc_per_worker_destroy(__cilkrts_worker *w) {
     local_state *l = w->l;
     (void)l;
     for (unsigned int i = 0; i < NUM_BUCKETS; i++) {
-        CILK_ASSERT_INDEX_ZERO(w, l->im_desc.buckets, i, .free_list_size, "%u");
-        CILK_ASSERT_INDEX_ZERO(w, l->im_desc.buckets, i, .free_list, "%p");
+        CILK_ASSERT_INDEX_ZERO(l->im_desc.buckets, i, .free_list_size, "%u");
+        CILK_ASSERT_INDEX_ZERO(l->im_desc.buckets, i, .free_list, "%p");
         /* allocated may be nonzero due to memory migration */
     }
 #endif

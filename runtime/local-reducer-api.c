@@ -11,12 +11,14 @@
 void __cilkrts_reducer_register(void *key, size_t size,
 				__cilk_identity_fn id,
 				__cilk_reduce_fn reduce) {
+    (void)size; // not currently used here, only in lookup
+    (void)id; // not currently used here, only in lookup
+
     struct local_hyper_table *table = get_hyper_table();
     struct bucket b = {.key = (uintptr_t)key,
                        .value = {.view = key, .reduce_fn = reduce}};
     bool success = insert_hyperobject(table, b);
-    CILK_ASSERT(__cilkrts_get_tls_worker(),
-                success && "Failed to register reducer.");
+    CILK_ASSERT(success && "Failed to register reducer.");
     (void)success;
 }
 
@@ -35,8 +37,7 @@ void __cilkrts_reducer_register_64(void *key, uint64_t size,
 void __cilkrts_reducer_unregister(void *key) {
     struct local_hyper_table *table = get_hyper_table();
     bool success = remove_hyperobject(table, (uintptr_t)key);
-    /* CILK_ASSERT(__cilkrts_get_tls_worker(), */
-    /*             success && "Failed to unregister reducer."); */
+    /* CILK_ASSERT(success && "Failed to unregister reducer."); */
     (void)success;
 }
 
@@ -48,7 +49,7 @@ void *internal_reducer_lookup(__cilkrts_worker *w, void *key, size_t size,
     struct local_hyper_table *table = get_local_hyper_table(w);
     struct bucket *b = find_hyperobject(table, (uintptr_t)key);
     if (__builtin_expect(!!b, true)) {
-        CILK_ASSERT(w, key == (void *)b->key);
+        CILK_ASSERT(key == (void *)b->key);
         // Return the existing view.
         return b->value.view;
     }

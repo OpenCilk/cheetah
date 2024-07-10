@@ -46,8 +46,7 @@ CHEETAH_INTERNAL
 bool insert_hyperobject(hyper_table *table, struct bucket b);
 
 CHEETAH_INTERNAL
-hyper_table *merge_two_hts(__cilkrts_worker *restrict w,
-                           hyper_table *restrict left,
+hyper_table *merge_two_hts(hyper_table *restrict left,
                            hyper_table *restrict right);
 
 #ifndef MOCK_HASH
