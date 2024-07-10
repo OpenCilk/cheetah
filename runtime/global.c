@@ -46,7 +46,7 @@ static void set_alert_debug_level() {
 }
 
 static global_state *global_state_allocate() {
-    cilkrts_alert(BOOT, NULL,
+    cilkrts_alert(BOOT,
                   "(global_state_init) Allocating global state");
     global_state *g = (global_state *)cilk_aligned_alloc(
         __alignof(global_state), sizeof(global_state));
@@ -70,34 +70,34 @@ static global_state *global_state_allocate() {
 
 static void set_stacksize(global_state *g, size_t stacksize) {
     // TODO: Verify that g has not yet been initialized.
-    CILK_ASSERT_G(!g->workers_started);
-    CILK_ASSERT_G(stacksize >= 16384);
-    CILK_ASSERT_G(stacksize <= 100 * 1024 * 1024);
+    CILK_ASSERT(!g->workers_started);
+    CILK_ASSERT(stacksize >= 16384);
+    CILK_ASSERT(stacksize <= 100 * 1024 * 1024);
     g->options.stacksize = stacksize;
 }
 
 static void set_deqdepth(global_state *g, unsigned int deqdepth) {
     // TODO: Verify that g has not yet been initialized.
-    CILK_ASSERT_G(!g->workers_started);
-    CILK_ASSERT_G(deqdepth >= 1);
-    CILK_ASSERT_G(deqdepth <= 99999);
+    CILK_ASSERT(!g->workers_started);
+    CILK_ASSERT(deqdepth >= 1);
+    CILK_ASSERT(deqdepth <= 99999);
     g->options.deqdepth = deqdepth;
 }
 
 static void set_fiber_pool_cap(global_state *g, unsigned int fiber_pool_cap) {
     // TODO: Verify that g has not yet been initialized.
-    CILK_ASSERT_G(!g->workers_started);
-    CILK_ASSERT_G(fiber_pool_cap >= 2);
-    CILK_ASSERT_G(fiber_pool_cap <= 999999);
+    CILK_ASSERT(!g->workers_started);
+    CILK_ASSERT(fiber_pool_cap >= 2);
+    CILK_ASSERT(fiber_pool_cap <= 999999);
     g->options.fiber_pool_cap = fiber_pool_cap;
 }
 
 // not marked as static as it's called by __cilkrts_internal_set_nworkers
 // used by Cilksan to set nworker to 1 
 void set_nworkers(global_state *g, unsigned int nworkers) {
-    CILK_ASSERT_G(!g->workers_started);
-    CILK_ASSERT_G(nworkers <= g->options.nproc);
-    CILK_ASSERT_G(nworkers > 0);
+    CILK_ASSERT(!g->workers_started);
+    CILK_ASSERT(nworkers <= g->options.nproc);
+    CILK_ASSERT(nworkers > 0);
     g->nworkers = nworkers;
 }
 
@@ -140,13 +140,15 @@ static void parse_rts_environment(global_state *g) {
         }
 #endif
     } else {
-        CILK_ASSERT_G(g->options.nproc < 10000);
+        CILK_ASSERT(g->options.nproc < 10000);
     }
 }
 
 global_state *global_state_init(int argc, char *argv[]) {
-    cilkrts_alert(BOOT, NULL,
-                  "(global_state_init) Initializing global state");
+    cilkrts_alert(BOOT, "(global_state_init) Initializing global state");
+
+    (void)argc; // not currently used
+    (void)argv; // not currently used
 
 #ifdef DEBUG
     setlinebuf(stderr);
@@ -159,7 +161,7 @@ global_state *global_state_init(int argc, char *argv[]) {
     parse_rts_environment(g);
 
     unsigned active_size = g->options.nproc;
-    CILK_ASSERT_G(active_size > 0);
+    CILK_ASSERT(active_size > 0);
     g->nworkers = active_size;
     cilkg_nproc = active_size;
 
