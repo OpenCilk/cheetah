@@ -330,28 +330,29 @@ static void free_stack(struct cilk_fiber *f) {
 // Supported public functions
 //===============================================================
 
-struct cilk_fiber *cilk_fiber_allocate(__cilkrts_worker *w, size_t stacksize) {
+struct cilk_fiber *cilk_fiber_allocate(size_t stacksize) {
     struct cilk_fiber *fiber = make_stack(stacksize);
     init_fiber_header(fiber);
-    cilkrts_alert(FIBER, w, "Allocate fiber %p [%p--%p]", (void *)fiber,
+    cilkrts_alert(FIBER, "Allocate fiber %p [%p--%p]", (void *)fiber,
                   (void *)fiber->stack_low,
                   (void *)sysdep_get_stack_start(fiber));
     return fiber;
 }
 
-void cilk_fiber_deallocate(__cilkrts_worker *w, struct cilk_fiber *fiber) {
-    cilkrts_alert(FIBER, w, "Deallocate fiber %p [%p--%p]", (void *)fiber,
+void cilk_fiber_deallocate(struct cilk_fiber *fiber) {
+    cilkrts_alert(FIBER, "Deallocate fiber %p [%p--%p]", (void *)fiber,
                   (void *)fiber->stack_low,
                   (void *)sysdep_get_stack_start(fiber));
     if (DEBUG_ENABLED_STATIC(FIBER))
-        CILK_ASSERT(
-            w, !in_fiber(fiber, fiber->current_stack_frame));
+        CILK_ASSERT(!in_fiber(fiber, fiber->current_stack_frame));
     free_stack(fiber);
 }
 
 void cilk_fiber_deallocate_global(struct global_state *g,
                                   struct cilk_fiber *fiber) {
-    cilkrts_alert(FIBER, NULL, "Deallocate fiber %p [%p--%p]", (void *)fiber,
+    (void)g; // not currently used
+
+    cilkrts_alert(FIBER, "Deallocate fiber %p [%p--%p]", (void *)fiber,
                   (void *)fiber->stack_low,
                   (void *)sysdep_get_stack_start(fiber));
     free_stack(fiber);

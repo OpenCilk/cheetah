@@ -98,7 +98,7 @@ get_exception_reducer_or_null(__cilkrts_worker *w) {
 
     struct bucket *b = find_hyperobject(table, (uintptr_t)key);
     if (b) {
-        CILK_ASSERT(w, key == (void *)b->key);
+        CILK_ASSERT(key == (void *)b->key);
         // Return the existing view.
         return (struct closure_exception *)(b->value.view);
     }
@@ -109,7 +109,7 @@ get_exception_reducer_or_null(__cilkrts_worker *w) {
 // Destroy the current view of the exception-reducer state.
 void clear_exception_reducer(__cilkrts_worker *w,
                              struct closure_exception *exn_r) {
-    CILK_ASSERT(w, exn_r->throwing_fiber == NULL);
+    CILK_ASSERT(exn_r->throwing_fiber == NULL);
     free(exn_r);
     internal_reducer_remove(w, &exception_reducer);
 }
@@ -134,14 +134,14 @@ sync_in_personality(__cilkrts_worker *w, __cilkrts_stack_frame *sf,
         exn_r->exn = (char *)ue_header;
 
         deque_lock_self(deques, self);
-        Closure *t = deque_peek_bottom(deques, w, self, self);
-        Closure_lock(w, self, t);
+        Closure *t = deque_peek_bottom(deques, self, self);
+        Closure_lock(self, t);
 
         // ensure that we return here after a cilk_sync.
         exn_r->parent_rsp = t->orig_rsp;
         t->orig_rsp = (char *)SP(sf);
 
-        Closure_unlock(w, self, t);
+        Closure_unlock(self, t);
         deque_unlock_self(deques, self);
 
         // save the current fiber for further stack unwinding.
@@ -184,8 +184,8 @@ uncilkify(global_state *g, __cilkrts_stack_frame *sf) {
 __attribute__((always_inline)) static void
 resume_from_last_frame(__cilkrts_worker *w, __cilkrts_stack_frame *sf,
                  struct _Unwind_Exception *ue_header) {
-    cilkrts_alert(CFRAME, w, "resume_from_last_frame %p", (void *)sf);
-    CILK_ASSERT(w, CHECK_CILK_FRAME_MAGIC(w->g, sf));
+    cilkrts_alert(CFRAME, "resume_from_last_frame %p", (void *)sf);
+    CILK_ASSERT(CHECK_CILK_FRAME_MAGIC(w->g, sf));
     // WHEN_CILK_DEBUG(sf->magic = ~CILK_STACKFRAME_MAGIC);
 
     // Pop this frame off the cactus stack.  This logic used to be in
@@ -212,7 +212,7 @@ _Unwind_Reason_Code __cilk_personality_internal(
 
     struct cilk_fiber *fh = __cilkrts_current_fh;
     __cilkrts_worker *w = fh->worker;
-    CILK_ASSERT_POINTER_EQUAL(w, w, __cilkrts_get_tls_worker());
+    CILK_ASSERT_POINTER_EQUAL(w, __cilkrts_get_tls_worker());
     __cilkrts_stack_frame *sf = fh->current_stack_frame;
 
     if (actions & _UA_SEARCH_PHASE) {
@@ -220,7 +220,7 @@ _Unwind_Reason_Code __cilk_personality_internal(
         return std_lib_personality(version, actions, exception_class, ue_header,
                                    context);
     } else if (actions & _UA_CLEANUP_PHASE) {
-        cilkrts_alert(EXCEPT, w,
+        cilkrts_alert(EXCEPT,
                       "cilk_personality called %p  CFA %p\n", (void *)sf,
                       (void *)get_cfa(context));
 
@@ -230,7 +230,7 @@ _Unwind_Reason_Code __cilk_personality_internal(
 
         // After the cilk_sync, the worker may have changed.
         w = get_worker_from_stack(sf);
-        CILK_ASSERT_POINTER_EQUAL(w, w, __cilkrts_get_tls_worker());
+        CILK_ASSERT_POINTER_EQUAL(w, __cilkrts_get_tls_worker());
 
         // Unset the CILK_FRAME_THROWING flag.
         sf->flags &= ~CILK_FRAME_THROWING;
@@ -258,7 +258,7 @@ _Unwind_Reason_Code __cilk_personality_internal(
             struct _Unwind_Exception *exn =
                     (struct _Unwind_Exception *)(exn_r->exn);
             exn_r->exn = NULL;
-            cilkrts_alert(EXCEPT, w,
+            cilkrts_alert(EXCEPT,
                           "cilk_personality calling RaiseException %p\n",
                           (void *)sf);
 

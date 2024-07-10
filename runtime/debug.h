@@ -58,18 +58,18 @@ CHEETAH_INTERNAL void set_alert_level(unsigned int);
 CHEETAH_INTERNAL void set_debug_level(unsigned int);
 CHEETAH_INTERNAL void flush_alert_log(void);
 
-__attribute__((__format__(__printf__, 2, 3))) CHEETAH_INTERNAL_NORETURN void
-cilkrts_bug(struct __cilkrts_worker *w, const char *fmt, ...);
+__attribute__((__format__(__printf__, 1, 2))) CHEETAH_INTERNAL_NORETURN void
+cilkrts_bug(const char *fmt, ...);
 CHEETAH_INTERNAL_NORETURN
 void cilk_die_internal(struct global_state *const g, const char *fmt, ...);
 
 #if ALERT_LVL != 0
-__attribute__((__format__(__printf__, 3, 4))) void
-cilkrts_alert(int lvl, struct __cilkrts_worker *w, const char *fmt, ...);
+__attribute__((__format__(__printf__, 2, 3))) void
+cilkrts_alert(int lvl, const char *fmt, ...);
 #pragma GCC diagnostic ignored "-Wgnu-zero-variadic-macro-arguments"
-#define cilkrts_alert(CODE, W, FMT, ...)                                       \
+#define cilkrts_alert(CODE, FMT, ...)                                          \
     (alert_level & ((ALERT_##CODE) & ALERT_LVL))                               \
-        ? cilkrts_alert(ALERT_##CODE, W, FMT, ##__VA_ARGS__)                   \
+        ? cilkrts_alert(ALERT_##CODE, FMT, ##__VA_ARGS__)                      \
         : (void)0
 #else
 #define cilkrts_alert(lvl, fmt, ...)
@@ -82,60 +82,43 @@ cilkrts_alert(int lvl, struct __cilkrts_worker *w, const char *fmt, ...);
 /** Standard text for failed assertion */
 CHEETAH_INTERNAL extern const char *const __cilkrts_assertion_failed;
 
-#define CILK_ASSERT(w, ex)                                                     \
+#define CILK_ASSERT(ex)                                                        \
     (__builtin_expect((ex) != 0, 1)                                            \
          ? (void)0                                                             \
-         : cilkrts_bug(w, __cilkrts_assertion_failed, __FILE__, __LINE__,      \
-                       #ex))
+         : cilkrts_bug(__cilkrts_assertion_failed, __FILE__, __LINE__, #ex))
 
-#define CILK_ASSERT_POINTER_EQUAL(w, P1, P2)                                   \
+#define CILK_ASSERT_POINTER_EQUAL(P1, P2)                                      \
     ({ void *_t1 = (P1), *_t2 = (P2); __builtin_expect(_t1 == _t2, 1)          \
          ? (void)0                                                             \
-         : cilkrts_bug(w, "%s: %d: cilk_assertion failed: %s (%p) == %s (%p)", \
+         : cilkrts_bug("%s: %d: cilk_assertion failed: %s (%p) == %s (%p)",    \
                        __FILE__, __LINE__, #P1, _t1, #P2, _t2);})
 
-#define CILK_ASSERT_ZERO(w, ex, FMT)                                           \
-    (__builtin_expect(!(ex), 1)                                                \
-         ? (void)0                                                             \
-         : cilkrts_bug(w, "%s: %d: cilk_assertion failed: %s (" FMT ") == 0",  \
-                       __FILE__, __LINE__, #ex, ex))
-
-#define CILK_ASSERT_INDEX_ZERO(w, LEFT, I, RIGHT, FMT)                         \
+#define CILK_ASSERT_INDEX_ZERO(LEFT, I, RIGHT, FMT)                            \
     (__builtin_expect(!(LEFT[I] RIGHT), 1)                                     \
          ? (void)0                                                             \
-         : cilkrts_bug(w,                                                      \
-                       "%s: %d: cilk_assertion failed: %s[%u]%s = " FMT        \
+         : cilkrts_bug("%s: %d: cilk_assertion failed: %s[%u]%s = " FMT        \
                        " should be 0",                                         \
                        __FILE__, __LINE__, #LEFT, I, #RIGHT, LEFT[I] RIGHT))
 
-#define CILK_ASSERT_G(ex)                                                      \
-    (__builtin_expect((ex) != 0, 1)                                            \
-         ? (void)0                                                             \
-         : cilkrts_bug(NULL, __cilkrts_assertion_failed, __FILE__, __LINE__,   \
-                       #ex))
-
-#define CILK_ASSERT_G_LE(A, B, FMT)                                            \
+#define CILK_ASSERT_LE(A, B, FMT)                                            \
     (__builtin_expect(((A) <= (B)) != 0, 1)                                    \
          ? (void)0                                                             \
-         : cilkrts_bug(NULL,                                                   \
-                       "%s: %d: cilk assertion failed: %s (" FMT               \
+         : cilkrts_bug("%s: %d: cilk assertion failed: %s (" FMT               \
                        ") <= %s " FMT ")",                                     \
                        __FILE__, __LINE__, #A, A, #B, B))
 
-#define CILK_ABORT(w, msg)                                                     \
-    cilkrts_bug(w, __cilkrts_assertion_failed, __FILE__, __LINE__, msg)
+#define CILK_ABORT(msg)                                                     \
+    cilkrts_bug(__cilkrts_assertion_failed, __FILE__, __LINE__, msg)
 
 #define CILK_ABORT_G(msg)                                                      \
-    cilkrts_bug(NULL, __cilkrts_assertion_failed_g, __FILE__, __LINE__, msg)
+    cilkrts_bug(__cilkrts_assertion_failed_g, __FILE__, __LINE__, msg)
 
 #else
-#define CILK_ASSERT(w, ex)
-#define CILK_ASSERT_POINTER_EQUAL(w, P1, P2)
-#define CILK_ASSERT_ZERO(w, ex, FMT)
-#define CILK_ASSERT_INDEX_ZERO(w, LEFT, I, RIGHT, FMT)
-#define CILK_ASSERT_G(ex)
-#define CILK_ASSERT_G_LE(A, B, FMT)
-#define CILK_ABORT(w, msg)
+#define CILK_ASSERT(ex)
+#define CILK_ASSERT_POINTER_EQUAL(P1, P2)
+#define CILK_ASSERT_INDEX_ZERO(LEFT, I, RIGHT, FMT)
+#define CILK_ASSERT_LE(A, B, FMT)
+#define CILK_ABORT(msg)
 #define CILK_ABORT_G(msg)
 #define WHEN_CILK_DEBUG(ex)
 #endif // CILK_DEBUG
