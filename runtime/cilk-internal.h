@@ -14,7 +14,6 @@ extern "C" {
 #include "fiber-header.h"
 #include "frame.h"
 #include "internal-malloc.h"
-#include "jmpbuf.h"
 #include "rts-config.h"
 #include "sched_stats.h"
 #include "types.h"

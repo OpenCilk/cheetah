@@ -16,9 +16,7 @@
 #include "frame.h"
 #include "global.h"
 #include "init.h"
-#include "jmpbuf.h"
 #include "local-reducer-api.h"
-#include "readydeque.h"
 #include "scheduler.h"
 
 #include "pedigree_ext.c"

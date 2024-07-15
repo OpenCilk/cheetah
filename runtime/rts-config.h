@@ -98,8 +98,4 @@ _Static_assert(MAX_NUM_PAGES_PER_STACK >= MIN_NUM_PAGES_PER_STACK, "Invalid Chee
 #define MAX_CALLBACKS 32 // Maximum number of init or exit callbacks
 #endif
 
-#ifndef HYPER_TABLE_HIDDEN
-#define HYPER_TABLE_HIDDEN 1
-#endif
-
 #endif                   // _CONFIG_H
