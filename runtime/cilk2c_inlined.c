@@ -127,9 +127,6 @@ __cilkrts_enter_frame_helper(__cilkrts_stack_frame *sf,
     sf->flags = 0;
     sf->magic = frame_magic;
 
-    // struct cilk_fiber *fh = __cilkrts_current_fh;
-    // sf->fh = fh;
-    // sf->call_parent = fh->current_stack_frame;
     struct cilk_fiber *fh = parent->fh;
     sf->fh = fh;
     if (spawner) {
@@ -156,8 +153,6 @@ __cilkrts_detach(__cilkrts_stack_frame *sf, __cilkrts_stack_frame *parent) {
     cilkrts_alert(CFRAME, "__cilkrts_detach %p", (void *)sf);
 
     CILK_ASSERT(CHECK_CILK_FRAME_MAGIC(w->g, sf));
-
-    // struct __cilkrts_stack_frame *parent = sf->call_parent;
 
     if (USE_EXTENSION) {
         __cilkrts_extend_spawn(w, &parent->extension, &w->extension);
@@ -269,7 +264,6 @@ __cilkrts_leave_frame_helper(__cilkrts_stack_frame *sf,
     // Pop this frame off the cactus stack.  This logic used to be in
     // __cilkrts_pop_frame, but has been manually inlined to avoid reloading the
     // worker unnecessarily.
-    // __cilkrts_stack_frame *parent = sf->call_parent;
     if (spawner)
         sf->fh->current_stack_frame = parent;
     if (USE_EXTENSION) {
@@ -335,8 +329,6 @@ __cilkrts_pause_frame(__cilkrts_stack_frame *sf, __cilkrts_stack_frame *parent,
     cilkrts_alert(CFRAME, "__cilkrts_pause_frame %p", (void *)sf);
 
     CILK_ASSERT(CHECK_CILK_FRAME_MAGIC(w->g, sf));
-
-    // __cilkrts_stack_frame *parent = sf->call_parent;
 
     // Pop this frame off the cactus stack.  This logic used to be in
     // __cilkrts_pop_frame, but has been manually inlined to avoid reloading the
