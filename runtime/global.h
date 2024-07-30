@@ -75,6 +75,10 @@ struct global_state {
     // optimization would improve performance.
     _Atomic uint32_t cilkified_futex __attribute__((aligned(CILK_CACHE_LINE)));
     atomic_bool cilkified;
+    // Set to true by any worker to signal that the cilkifying function
+    // needs to run on the original worker.  The cilkifying closure should
+    // be locked when this is set.
+    bool activate_boss;
 
     pthread_mutex_t cilkified_lock;
     pthread_cond_t cilkified_cond_var;
