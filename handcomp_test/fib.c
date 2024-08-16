@@ -34,7 +34,8 @@ int fib(int n) {
 extern size_t ZERO;
 void __attribute__((weak)) dummy(void *p) { return; }
 
-static void __attribute__ ((noinline)) fib_spawn_helper(int *x, int n); 
+static void __attribute__ ((noinline)) fib_spawn_helper(int *x, int n,
+                                                        __cilkrts_stack_frame *parent); 
 
 int fib(int n) {
     int x = 0, y, _tmp;
@@ -48,7 +49,7 @@ int fib(int n) {
 
     /* x = spawn fib(n-1) */
     if (!__cilk_prepare_spawn(&sf)) {
-      fib_spawn_helper(&x, n-1);
+      fib_spawn_helper(&x, n-1, &sf);
     }
 
     y = fib(n - 2);
@@ -62,13 +63,14 @@ int fib(int n) {
     return _tmp;
 }
 
-static void __attribute__ ((noinline)) fib_spawn_helper(int *x, int n) {
+static void __attribute__ ((noinline)) fib_spawn_helper(int *x, int n,
+                                                        __cilkrts_stack_frame *parent) {
 
     __cilkrts_stack_frame sf;
-    __cilkrts_enter_frame_helper(&sf);
-    __cilkrts_detach(&sf);
+    __cilkrts_enter_frame_helper(&sf, parent, false);
+    __cilkrts_detach(&sf, parent);
     *x = fib(n);
-    __cilk_helper_epilogue(&sf);
+    __cilk_helper_epilogue(&sf, parent, false);
 }
 
 int main(int argc, char * args[]) {
