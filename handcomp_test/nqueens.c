@@ -52,7 +52,8 @@ static int ok (int n, char *a) {
 }
 
 static void __attribute__ ((noinline))
-nqueens_spawn_helper(int *count, int n, int j, char *a); 
+nqueens_spawn_helper(int *count, int n, int j, char *a,
+                     __cilkrts_stack_frame *parent); 
 
 static int nqueens(int n, int j, char *a) {
 
@@ -88,7 +89,7 @@ static int nqueens(int n, int j, char *a) {
 
             /* count[i] = cilk_spawn nqueens(n, j + 1, b); */
             if (!__cilk_prepare_spawn(&sf)) {
-                nqueens_spawn_helper(&(count[i]), n, j+1, b);
+                nqueens_spawn_helper(&(count[i]), n, j+1, b, &sf);
             }
         }
     }
@@ -105,13 +106,14 @@ static int nqueens(int n, int j, char *a) {
 }
 
 static void __attribute__ ((noinline)) 
-nqueens_spawn_helper(int *count, int n, int j, char *a) {
+nqueens_spawn_helper(int *count, int n, int j, char *a,
+                     __cilkrts_stack_frame *parent) {
 
     __cilkrts_stack_frame sf;
-    __cilkrts_enter_frame_helper(&sf);
-    __cilkrts_detach(&sf);
+    __cilkrts_enter_frame_helper(&sf, parent, false);
+    __cilkrts_detach(&sf, parent);
     *count = nqueens(n, j, a);
-    __cilk_helper_epilogue(&sf);
+    __cilk_helper_epilogue(&sf, parent, false);
 }
 
 int main(int argc, char *argv[]) {
