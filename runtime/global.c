@@ -41,7 +41,7 @@ unsigned __cilkrts_nproc = 0;
 
 static void set_alert_debug_level() {
     /* Only the bits also set in ALERT_LVL are used. */
-    set_alert_level(getenv("CILK_ALERT"));
+    set_alert_level_from_str(getenv("CILK_ALERT"));
     /* Only the bits also set in DEBUG_LVL are used. */
     set_debug_level(env_get_int("CILK_DEBUG"));
 }

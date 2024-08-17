@@ -30,6 +30,7 @@ struct __cilkrts_worker;
 #define ALERT_BOOT             0x1000
 #define ALERT_START            0x2000
 #define ALERT_CLOSURE          0x4000
+#define ALERT_NOBUF            0x80000000
 
 #if ALERT_LVL & (ALERT_CFRAME|ALERT_RETURN)
 extern unsigned int alert_level;
@@ -53,7 +54,8 @@ extern CHEETAH_INTERNAL unsigned int debug_level;
 // Unused: compiler inlines the stack frame creation
 // #define CILK_STACKFRAME_MAGIC 0xCAFEBABE
 
-CHEETAH_INTERNAL void set_alert_level(const char *const);
+CHEETAH_INTERNAL void set_alert_level_from_str(const char *const);
+CHEETAH_INTERNAL void set_alert_level(unsigned int);
 CHEETAH_INTERNAL void set_debug_level(unsigned int);
 CHEETAH_INTERNAL void flush_alert_log(void);
 

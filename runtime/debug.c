@@ -9,7 +9,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define ALERT_STR_BUF_LEN 16
 
 #if ALERT_LVL & (ALERT_CFRAME|ALERT_RETURN)
 unsigned int alert_level = 0;
@@ -23,6 +22,7 @@ CHEETAH_INTERNAL unsigned int debug_level = 0;
 static size_t alert_log_size = 0, alert_log_offset = 0;
 static char *alert_log = NULL;
 
+#define ALERT_STR_BUF_LEN 16
 static const char *const ALERT_NONE_STR =      "none";
 static const char *const ALERT_FIBER_STR =     "fiber";
 static const char *const ALERT_MEMORY_STR =    "memory";
@@ -37,42 +37,48 @@ static const char *const ALERT_REDUCE_ID_STR = "reduce_id";
 static const char *const ALERT_BOOT_STR =      "boot";
 static const char *const ALERT_START_STR =     "start";
 static const char *const ALERT_CLOSURE_STR =   "closure";
+static const char *const ALERT_NOBUF_STR =     "nobuf";
 
-static void parse_alert_level_str(const char *const alert_str) {
+static int parse_alert_level_str(const char *const alert_str) {
     if (strcmp(ALERT_NONE_STR, alert_str) == 0) {
-        // no-op
+        return ALERT_NONE;
     } else if (strcmp(ALERT_FIBER_STR, alert_str) == 0) {
-        alert_level |= ALERT_FIBER;
+        return ALERT_FIBER;
     } else if (strcmp(ALERT_MEMORY_STR, alert_str) == 0) {
-        alert_level |= ALERT_MEMORY;
+        return ALERT_MEMORY;
     } else if (strcmp(ALERT_SYNC_STR, alert_str) == 0) {
-        alert_level |= ALERT_SYNC;
+        return ALERT_SYNC;
     } else if (strcmp(ALERT_SCHED_STR, alert_str) == 0) {
-        alert_level |= ALERT_SCHED;
+        return ALERT_SCHED;
     } else if (strcmp(ALERT_STEAL_STR, alert_str) == 0) {
-        alert_level |= ALERT_STEAL;
+        return ALERT_STEAL;
     } else if (strcmp(ALERT_RETURN_STR, alert_str) == 0) {
-        alert_level |= ALERT_RETURN;
+        return ALERT_RETURN;
     } else if (strcmp(ALERT_EXCEPT_STR, alert_str) == 0) {
-        alert_level |= ALERT_EXCEPT;
+        return ALERT_EXCEPT;
     } else if (strcmp(ALERT_CFRAME_STR, alert_str) == 0) {
-        alert_level |= ALERT_CFRAME;
+        return ALERT_CFRAME;
     } else if (strcmp(ALERT_REDUCE_STR, alert_str) == 0) {
-        alert_level |= ALERT_REDUCE;
+        return ALERT_REDUCE;
     } else if (strcmp(ALERT_REDUCE_ID_STR, alert_str) == 0) {
-        alert_level |= ALERT_REDUCE_ID;
+        return ALERT_REDUCE_ID;
     } else if (strcmp(ALERT_BOOT_STR, alert_str) == 0) {
-        alert_level |= ALERT_BOOT;
+        return ALERT_BOOT;
     } else if (strcmp(ALERT_START_STR, alert_str) == 0) {
-        alert_level |= ALERT_START;
+        return ALERT_START;
     } else if (strcmp(ALERT_CLOSURE_STR, alert_str) == 0) {
-        alert_level |= ALERT_CLOSURE;
-    } else {
-        fprintf(stderr, "Invalid CILK_ALERT value: %s\n", alert_str);
+        return ALERT_CLOSURE;
+    } else if (strcmp(ALERT_NOBUF_STR, alert_str) == 0) {
+        return ALERT_NOBUF;
     }
+
+    fprintf(stderr, "Invalid CILK_ALERT value: %s\n", alert_str);
+
+    return ALERT_NONE;
 }
 
-static void parse_alert_level_env(const char *const alert_env) {
+static int parse_alert_level_env(const char *const alert_env) {
+    int new_alert_lvl = 0;
     char curr_alert[ALERT_STR_BUF_LEN + 1];
 
     size_t buf_str_len = 0;
@@ -91,15 +97,20 @@ static void parse_alert_level_env(const char *const alert_env) {
                 fputc('\n', stderr);
                 invalid = false;
             } else {
-                parse_alert_level_str(curr_alert);
+                new_alert_lvl |= parse_alert_level_str(curr_alert);
             }
             buf_str_len = 0;
         } else if (buf_str_len < ALERT_STR_BUF_LEN) {
             curr_alert[buf_str_len++] = tolower(alert_env[i]);
         } else {
             curr_alert[buf_str_len] = '\0';
-            fprintf(stderr, "Invalid CILK_ALERT option: %s%c", curr_alert, alert_env[i]);
+            fprintf(stderr, "%s%s%c",
+                    // Only print the prefix the first time we get here.
+                    invalid ? "" : "Invalid CILK_ALERT value: ",
+                    curr_alert,
+                    alert_env[i]);
             curr_alert[0] = '\0';
+            invalid = true;
         }
     }
 
@@ -113,39 +124,41 @@ static void parse_alert_level_env(const char *const alert_env) {
 
         if (numbers_allowed) {
             char **tol_end = &alert_env;
-            alert_level = strtol(alert_env, tol_end, 0);
-            if (alert_level == 0 && (**tol_end != '\0' || *tol_end == alert_env)) {
-                parse_alert_level_str(curr_alert);
+            new_alert_lvl = strtol(alert_env, tol_end, 0);
+            if (new_alert_lvl == 0 && (**tol_end != '\0' || *tol_end == alert_env)) {
+                new_alert_lvl |= parse_alert_level_str(curr_alert);
             }
         } else {
-            parse_alert_level_str(curr_alert);
+            new_alert_lvl |= parse_alert_level_str(curr_alert);
+        }
+    }
+
+    set_alert_level(new_alert_lvl);
+}
+
+void set_alert_level_from_str(const char *const alert_env) {
+    if (alert_env) {
+        int new_alert_lvl = parse_alert_level_env(alert_env);
+    }
+}
+
+void set_alert_level(unsigned int level) {
+    alert_level = level;
+    if (level == 0) {
+        flush_alert_log();
+        return;
+    }
+    if (level & ALERT_NOBUF) {
+        return;
+    }
+    if (alert_log == NULL) {
+        alert_log_size = 5000;
+        alert_log = malloc(alert_log_size);
+        if (alert_log) {
+            memset(alert_log, ' ', alert_log_size);
         }
     }
 }
-
-void set_alert_level(const char *const alert_env) {
-    if (alert_env) {
-        parse_alert_level_env(alert_env);
-    }
-}
-
-//void set_alert_level(unsigned int level) {
-//    alert_level = level;
-//    if (level == 0) {
-//        flush_alert_log();
-//        return;
-//    }
-//    if (level & ALERT_NOBUF) {
-//        return;
-//    }
-//    if (alert_log == NULL) {
-//        alert_log_size = 5000;
-//        alert_log = malloc(alert_log_size);
-//        if (alert_log) {
-//            memset(alert_log, ' ', alert_log_size);
-//        }
-//    }
-//}
 
 void set_debug_level(unsigned int level) { debug_level = level; }
 
