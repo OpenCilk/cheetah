@@ -9,7 +9,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-
 #if ALERT_LVL & (ALERT_CFRAME|ALERT_RETURN)
 unsigned int alert_level = 0;
 #else
