@@ -3,10 +3,13 @@
 #include "global.h"
 
 #include <assert.h>
+#include <ctype.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#define ALERT_STR_BUF_LEN 16
 
 #if ALERT_LVL & (ALERT_CFRAME|ALERT_RETURN)
 unsigned int alert_level = 0;
@@ -20,23 +23,129 @@ CHEETAH_INTERNAL unsigned int debug_level = 0;
 static size_t alert_log_size = 0, alert_log_offset = 0;
 static char *alert_log = NULL;
 
-void set_alert_level(unsigned int level) {
-    alert_level = level;
-    if (level == 0) {
-        flush_alert_log();
-        return;
+static const char *const ALERT_NONE_STR =      "none";
+static const char *const ALERT_FIBER_STR =     "fiber";
+static const char *const ALERT_MEMORY_STR =    "memory";
+static const char *const ALERT_SYNC_STR =      "sync";
+static const char *const ALERT_SCHED_STR =     "sched";
+static const char *const ALERT_STEAL_STR =     "steal";
+static const char *const ALERT_RETURN_STR =    "return";
+static const char *const ALERT_EXCEPT_STR =    "except";
+static const char *const ALERT_CFRAME_STR =    "cframe";
+static const char *const ALERT_REDUCE_STR =    "reduce";
+static const char *const ALERT_REDUCE_ID_STR = "reduce_id";
+static const char *const ALERT_BOOT_STR =      "boot";
+static const char *const ALERT_START_STR =     "start";
+static const char *const ALERT_CLOSURE_STR =   "closure";
+
+static void parse_alert_level_str(const char *const alert_str) {
+    if (strcmp(ALERT_NONE_STR, alert_str) == 0) {
+        // no-op
+    } else if (strcmp(ALERT_FIBER_STR, alert_str) == 0) {
+        alert_level |= ALERT_FIBER;
+    } else if (strcmp(ALERT_MEMORY_STR, alert_str) == 0) {
+        alert_level |= ALERT_MEMORY;
+    } else if (strcmp(ALERT_SYNC_STR, alert_str) == 0) {
+        alert_level |= ALERT_SYNC;
+    } else if (strcmp(ALERT_SCHED_STR, alert_str) == 0) {
+        alert_level |= ALERT_SCHED;
+    } else if (strcmp(ALERT_STEAL_STR, alert_str) == 0) {
+        alert_level |= ALERT_STEAL;
+    } else if (strcmp(ALERT_RETURN_STR, alert_str) == 0) {
+        alert_level |= ALERT_RETURN;
+    } else if (strcmp(ALERT_EXCEPT_STR, alert_str) == 0) {
+        alert_level |= ALERT_EXCEPT;
+    } else if (strcmp(ALERT_CFRAME_STR, alert_str) == 0) {
+        alert_level |= ALERT_CFRAME;
+    } else if (strcmp(ALERT_REDUCE_STR, alert_str) == 0) {
+        alert_level |= ALERT_REDUCE;
+    } else if (strcmp(ALERT_REDUCE_ID_STR, alert_str) == 0) {
+        alert_level |= ALERT_REDUCE_ID;
+    } else if (strcmp(ALERT_BOOT_STR, alert_str) == 0) {
+        alert_level |= ALERT_BOOT;
+    } else if (strcmp(ALERT_START_STR, alert_str) == 0) {
+        alert_level |= ALERT_START;
+    } else if (strcmp(ALERT_CLOSURE_STR, alert_str) == 0) {
+        alert_level |= ALERT_CLOSURE;
+    } else {
+        fprintf(stderr, "Invalid CILK_ALERT value: %s\n", alert_str);
     }
-    if (level & ALERT_NOBUF) {
-        return;
+}
+
+static void parse_alert_level_env(const char *const alert_env) {
+    char curr_alert[ALERT_STR_BUF_LEN + 1];
+
+    size_t buf_str_len = 0;
+
+    // We only allow numbers for backwards compatibility, so
+    // only allow numbers if they are the only thing passed to
+    // CILK_ALERT
+    bool numbers_allowed = true;
+    bool invalid = false;
+
+    for (size_t i = 0; i < strlen(alert_env); ++i) {
+        if (alert_env[i] == ',') {
+            curr_alert[buf_str_len] = '\0';
+            numbers_allowed = false;
+            if (invalid) {
+                fputc('\n', stderr);
+                invalid = false;
+            } else {
+                parse_alert_level_str(curr_alert);
+            }
+            buf_str_len = 0;
+        } else if (buf_str_len < ALERT_STR_BUF_LEN) {
+            curr_alert[buf_str_len++] = tolower(alert_env[i]);
+        } else {
+            curr_alert[buf_str_len] = '\0';
+            fprintf(stderr, "Invalid CILK_ALERT option: %s%c", curr_alert, alert_env[i]);
+            curr_alert[0] = '\0';
+        }
     }
-    if (alert_log == NULL) {
-        alert_log_size = 5000;
-        alert_log = malloc(alert_log_size);
-        if (alert_log) {
-            memset(alert_log, ' ', alert_log_size);
+
+    if (invalid) {
+        fputc('\n', stderr);
+        buf_str_len = 0;
+    }
+
+    if (buf_str_len > 0) {
+        curr_alert[buf_str_len] = '\0';
+
+        if (numbers_allowed) {
+            char **tol_end = &alert_env;
+            alert_level = strtol(alert_env, tol_end, 0);
+            if (alert_level == 0 && (**tol_end != '\0' || *tol_end == alert_env)) {
+                parse_alert_level_str(curr_alert);
+            }
+        } else {
+            parse_alert_level_str(curr_alert);
         }
     }
 }
+
+void set_alert_level(const char *const alert_env) {
+    if (alert_env) {
+        parse_alert_level_env(alert_env);
+    }
+}
+
+//void set_alert_level(unsigned int level) {
+//    alert_level = level;
+//    if (level == 0) {
+//        flush_alert_log();
+//        return;
+//    }
+//    if (level & ALERT_NOBUF) {
+//        return;
+//    }
+//    if (alert_log == NULL) {
+//        alert_log_size = 5000;
+//        alert_log = malloc(alert_log_size);
+//        if (alert_log) {
+//            memset(alert_log, ' ', alert_log_size);
+//        }
+//    }
+//}
 
 void set_debug_level(unsigned int level) { debug_level = level; }
 
