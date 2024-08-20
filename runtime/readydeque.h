@@ -112,7 +112,7 @@ static inline Closure *deque_xtract_top(ReadyDeque *deques, worker_id self,
         deques[pn].top = cl->next_ready;
         /* ANGE: if there is only one entry in the deque ... */
         if (cl == deques[pn].bottom) {
-            CILK_ASSERT(cl->next_ready == (Closure *)NULL);
+            CILK_ASSERT_NULL(cl->next_ready);
             deques[pn].bottom = (Closure *)NULL;
         } else {
             CILK_ASSERT(cl->next_ready);
@@ -120,7 +120,7 @@ static inline Closure *deque_xtract_top(ReadyDeque *deques, worker_id self,
         }
         WHEN_CILK_DEBUG(cl->owner_ready_deque = NO_WORKER);
     } else {
-        CILK_ASSERT(deques[pn].bottom == (Closure *)NULL);
+        CILK_ASSERT_NULL(deques[pn].bottom);
     }
 
     return cl;
@@ -147,7 +147,7 @@ static inline Closure *deque_peek_top(ReadyDeque *deques,
         CILK_ASSERT(cl->owner_ready_deque == pn ||
                            (self != pn && cl == w->g->root_closure));
     } else {
-        CILK_ASSERT(deques[pn].bottom == (Closure *)NULL);
+        CILK_ASSERT_NULL(deques[pn].bottom);
     }
 
     return cl;
@@ -166,7 +166,7 @@ static inline Closure *deque_xtract_bottom(ReadyDeque *deques, worker_id self,
         CILK_ASSERT(cl->owner_ready_deque == pn);
         deques[pn].bottom = cl->prev_ready;
         if (cl == deques[pn].top) {
-            CILK_ASSERT(cl->prev_ready == (Closure *)NULL);
+            CILK_ASSERT_NULL(cl->prev_ready);
             deques[pn].top = (Closure *)NULL;
         } else {
             CILK_ASSERT(cl->prev_ready);
@@ -175,7 +175,7 @@ static inline Closure *deque_xtract_bottom(ReadyDeque *deques, worker_id self,
 
         WHEN_CILK_DEBUG(cl->owner_ready_deque = NO_WORKER);
     } else {
-        CILK_ASSERT(deques[pn].top == (Closure *)NULL);
+        CILK_ASSERT_NULL(deques[pn].top);
     }
 
     return cl;
@@ -193,7 +193,7 @@ deque_peek_bottom(ReadyDeque *deques, worker_id self, worker_id pn) {
     if (cl) {
         CILK_ASSERT(cl->owner_ready_deque == pn);
     } else {
-        CILK_ASSERT(deques[pn].top == (Closure *)NULL);
+        CILK_ASSERT_NULL(deques[pn].top);
     }
 
     return cl;

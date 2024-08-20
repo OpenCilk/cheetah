@@ -524,7 +524,7 @@ void __cilkrts_internal_invoke_cilkified_root(__cilkrts_stack_frame *sf) {
     void *new_rsp =
         (void *)sysdep_reset_stack_for_resume(root_closure->fiber, sf);
     USE_UNUSED(new_rsp);
-    CILK_ASSERT(SP(sf) == new_rsp);
+    CILK_ASSERT_POINTER_EQUAL(SP(sf), new_rsp);
 
     // Mark that this root frame is last (meaning, at the top of the stack)
     sf->flags |= CILK_FRAME_LAST;
@@ -750,7 +750,7 @@ static void workers_deinit(global_state *g) {
 }
 
 CHEETAH_INTERNAL void __cilkrts_shutdown(global_state *g) {
-    CILK_ASSERT(NULL == exception_reducer.exn);
+    CILK_ASSERT_NULL(exception_reducer.exn);
     // If the workers are still running, stop them now.
     if (g->workers_started)
         __cilkrts_stop_workers(g);

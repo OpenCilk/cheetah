@@ -98,7 +98,7 @@ get_exception_reducer_or_null(__cilkrts_worker *w) {
 
     struct bucket *b = find_hyperobject(table, (uintptr_t)key);
     if (b) {
-        CILK_ASSERT(key == (void *)b->key);
+        CILK_ASSERT_POINTER_EQUAL(key, (void *)b->key);
         // Return the existing view.
         return (struct closure_exception *)(b->value.view);
     }
@@ -109,7 +109,7 @@ get_exception_reducer_or_null(__cilkrts_worker *w) {
 // Destroy the current view of the exception-reducer state.
 void clear_exception_reducer(__cilkrts_worker *w,
                              struct closure_exception *exn_r) {
-    CILK_ASSERT(exn_r->throwing_fiber == NULL);
+    CILK_ASSERT_NULL(exn_r->throwing_fiber);
     free(exn_r);
     internal_reducer_remove(w, &exception_reducer);
 }

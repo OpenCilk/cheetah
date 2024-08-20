@@ -87,6 +87,12 @@ CHEETAH_INTERNAL extern const char *const __cilkrts_assertion_failed;
          ? (void)0                                                             \
          : cilkrts_bug(__cilkrts_assertion_failed, __FILE__, __LINE__, #ex))
 
+#define CILK_ASSERT_NULL(P)                                                    \
+    ({ void *_t = (P); __builtin_expect(!_t, 1)                                \
+         ? (void)0                                                             \
+         : cilkrts_bug("%s: %d: cilk_assertion failed: %s (%p) == NULL",       \
+                       __FILE__, __LINE__, #P, _t);})
+
 #define CILK_ASSERT_POINTER_EQUAL(P1, P2)                                      \
     ({ void *_t1 = (P1), *_t2 = (P2); __builtin_expect(_t1 == _t2, 1)          \
          ? (void)0                                                             \
@@ -115,6 +121,7 @@ CHEETAH_INTERNAL extern const char *const __cilkrts_assertion_failed;
 
 #else
 #define CILK_ASSERT(ex)
+#define CILK_ASSERT_NULL(ex)
 #define CILK_ASSERT_POINTER_EQUAL(P1, P2)
 #define CILK_ASSERT_INDEX_ZERO(LEFT, I, RIGHT, FMT)
 #define CILK_ASSERT_LE(A, B, FMT)

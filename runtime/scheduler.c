@@ -258,14 +258,14 @@ void Cilk_set_return(__cilkrts_worker *const w) {
     CILK_ASSERT(t->child_ht == (hyper_table *)NULL &&
                        t->right_ht == (hyper_table *)NULL);
     CILK_ASSERT(t->call_parent);
-    CILK_ASSERT(t->spawn_parent == NULL);
+    CILK_ASSERT_NULL(t->spawn_parent);
     CILK_ASSERT((t->frame->flags & CILK_FRAME_DETACHED) == 0);
 
     Closure *call_parent = t->call_parent;
     Closure *t1 = deque_xtract_bottom(deques, self, self);
 
     USE_UNUSED(t1);
-    CILK_ASSERT(t == t1);
+    CILK_ASSERT_POINTER_EQUAL(t, t1);
     CILK_ASSERT(__cilkrts_stolen(t->frame));
 
     deque_add_bottom(deques, call_parent, self, self);
@@ -274,10 +274,10 @@ void Cilk_set_return(__cilkrts_worker *const w) {
     Closure_unlock(self, t);
 
     Closure_lock(self, call_parent);
-    CILK_ASSERT(call_parent->fiber == t->fiber);
+    CILK_ASSERT_POINTER_EQUAL(call_parent->fiber, t->fiber);
     t->fiber = NULL;
     if (USE_EXTENSION) {
-        CILK_ASSERT(call_parent->ext_fiber == t->ext_fiber);
+        CILK_ASSERT_POINTER_EQUAL(call_parent->ext_fiber, t->ext_fiber);
         t->ext_fiber = NULL;
     }
 
@@ -363,7 +363,7 @@ static Closure *Closure_return(__cilkrts_worker *const w, worker_id self,
     Closure_assert_alienation(self, child);
 
     CILK_ASSERT(child->has_cilk_callee == 0);
-    CILK_ASSERT(child->call_parent == NULL);
+    CILK_ASSERT_NULL(child->call_parent);
     CILK_ASSERT(parent != NULL);
 
     cilkrts_alert(RETURN, "(Closure_return) child %p, parent %p",
@@ -516,7 +516,7 @@ static Closure *return_value(__cilkrts_worker *const w, worker_id self,
 
     Closure *res = NULL;
     CILK_ASSERT(t->status == CLOSURE_RETURNING);
-    CILK_ASSERT(t->call_parent == NULL);
+    CILK_ASSERT_NULL(t->call_parent);
 
     if (t->call_parent == NULL) {
         res = Closure_return(w, self, t);
@@ -674,7 +674,7 @@ static void setup_closures_in_stacklet(__cilkrts_worker *const w,
     void *extension = USE_EXTENSION ? youngest->extension : NULL;
     oldest = oldest_non_stolen_frame_in_stacklet(youngest);
 
-    CILK_ASSERT(youngest == youngest_cl->frame);
+    CILK_ASSERT_POINTER_EQUAL(youngest, youngest_cl->frame);
     CILK_ASSERT(__cilkrts_stolen(youngest));
 
     CILK_ASSERT((oldest_cl->frame == NULL && oldest != youngest) ||
@@ -761,7 +761,7 @@ static Closure *promote_child(__cilkrts_stack_frame **head, ReadyDeque *deques,
 
     CILK_ASSERT(cl->status == CLOSURE_RUNNING);
     CILK_ASSERT(cl->owner_ready_deque == pn);
-    CILK_ASSERT(cl->next_ready == NULL);
+    CILK_ASSERT_NULL(cl->next_ready);
 
     /* cl may have a call parent: it might be promoted as its containing
      * stacklet is stolen, and it's call parent is promoted into full and
@@ -966,7 +966,7 @@ static Closure *extract_top_spawning_closure(__cilkrts_stack_frame **head,
         // is simply cl (i.e., there is only one frame in the stacklet),
         // so we didn't set res in promote_child.
         res = deque_xtract_top(deques, self, victim_id);
-        CILK_ASSERT(cl == res);
+        CILK_ASSERT_POINTER_EQUAL(cl, res);
     }
 
     res->fiber = cilk_fiber_allocate_from_pool(w);
@@ -1121,7 +1121,7 @@ void promote_own_deque(__cilkrts_worker *w) {
             // unfortunately this function releases both locks
             Closure *res = extract_top_spawning_closure(head, deques, w, w, cl, self, self);
             CILK_ASSERT(res);
-            CILK_ASSERT(res->fiber == NULL);
+            CILK_ASSERT_NULL(res->fiber);
 
             // ANGE: if cl is not the spawning parent, then
             // there is more frames in the stacklet to promote
@@ -1162,7 +1162,7 @@ void longjmp_to_user_code(__cilkrts_worker *w, Closure *t) {
         // the personality function.  __cilkrts_throwing(sf) is true only when
         // the personality function is syncing sf.
         if (!__cilkrts_throwing(sf)) {
-            CILK_ASSERT(t->orig_rsp == NULL);
+            CILK_ASSERT_NULL(t->orig_rsp);
             CILK_ASSERT((sf->flags & CILK_FRAME_LAST) ||
                                in_fiber(fiber, (char *)FP(sf)));
             CILK_ASSERT(in_fiber(fiber, (char *)SP(sf)));
@@ -1180,7 +1180,7 @@ void longjmp_to_user_code(__cilkrts_worker *w, Closure *t) {
         } else {
             void *new_rsp = sysdep_reset_stack_for_resume(fiber, sf);
             USE_UNUSED(new_rsp);
-            CILK_ASSERT(SP(sf) == new_rsp);
+            CILK_ASSERT_POINTER_EQUAL(SP(sf), new_rsp);
             if (USE_EXTENSION) {
                 w->extension = sf->extension;
                 w->ext_stack = sysdep_get_stack_start(t->ext_fiber);
@@ -1241,7 +1241,7 @@ int Cilk_sync(__cilkrts_worker *const w, __cilkrts_stack_frame *frame) {
 
     // each sync is executed only once; since we occupy user_ht only
     // when sync fails, the user_ht should remain NULL at this point.
-    CILK_ASSERT(t->user_ht == (hyper_table *)NULL);
+    CILK_ASSERT_NULL(t->user_ht);
 
     if (Closure_has_children(t)) {
         cilkrts_alert(SYNC, "(Cilk_sync) Closure %p has outstanding children",
@@ -1400,7 +1400,7 @@ void do_what_it_says_boss(__cilkrts_worker *w, Closure *t) {
 
 void worker_scheduler(__cilkrts_worker *w) {
     Closure *t = NULL;
-    CILK_ASSERT(w == __cilkrts_get_tls_worker());
+    CILK_ASSERT_POINTER_EQUAL(w, __cilkrts_get_tls_worker());
 
     CILK_START_TIMING(w, INTERVAL_SCHED);
     worker_change_state(w, WORKER_SCHED);
