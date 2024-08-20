@@ -196,12 +196,12 @@ static inline void Closure_set_frame(Closure *cl, __cilkrts_stack_frame *sf) {
 static inline void double_link_children(Closure *left, Closure *right) {
 
     if (left) {
-        CILK_ASSERT(left->right_sib == (Closure *)NULL);
+        CILK_ASSERT_NULL(left->right_sib);
         left->right_sib = right;
     }
 
     if (right) {
-        CILK_ASSERT(right->left_sib == (Closure *)NULL);
+        CILK_ASSERT_NULL(right->left_sib);
         right->left_sib = left;
     }
 }
@@ -211,11 +211,11 @@ static inline void double_link_children(Closure *left, Closure *right) {
 static inline void unlink_child(Closure *cl) {
 
     if (cl->left_sib) {
-        CILK_ASSERT(cl->left_sib->right_sib == cl);
+        CILK_ASSERT_POINTER_EQUAL(cl->left_sib->right_sib, cl);
         cl->left_sib->right_sib = cl->right_sib;
     }
     if (cl->right_sib) {
-        CILK_ASSERT(cl->right_sib->left_sib == cl);
+        CILK_ASSERT_POINTER_EQUAL(cl->right_sib->left_sib, cl);
         cl->right_sib->left_sib = cl->left_sib;
     }
     // used only for error checking
@@ -270,17 +270,17 @@ void Closure_remove_child(worker_id self, Closure *parent, Closure *child) {
     (void)self; // unused if assertions disabled
 
     CILK_ASSERT(child);
-    CILK_ASSERT(parent == child->spawn_parent);
+    CILK_ASSERT_POINTER_EQUAL(parent, child->spawn_parent);
 
     Closure_assert_ownership(self, parent);
     Closure_assert_ownership(self, child);
 
     if (child == parent->right_most_child) {
-        CILK_ASSERT(child->right_sib == (Closure *)NULL);
+        CILK_ASSERT_NULL(child->right_sib);
         parent->right_most_child = child->left_sib;
     }
 
-    CILK_ASSERT(child->right_ht == (hyper_table *)NULL);
+    CILK_ASSERT_NULL(child->right_ht);
 
     unlink_child(child);
 }
@@ -298,7 +298,7 @@ void Closure_remove_child(worker_id self, Closure *parent, Closure *child) {
 static inline
 void Closure_add_temp_callee(Closure *caller, Closure *callee) {
     CILK_ASSERT(!(caller->has_cilk_callee));
-    CILK_ASSERT(callee->spawn_parent == NULL);
+    CILK_ASSERT_NULL(callee->spawn_parent);
 
     callee->call_parent = caller;
     caller->has_cilk_callee = true;
@@ -309,8 +309,8 @@ void Closure_add_callee(Closure *caller, Closure *callee) {
     // ANGE: instead of checking has_cilk_callee, we just check if callee is
     // NULL, because we might have set the has_cilk_callee in
     // Closure_add_tmp_callee to prevent the closure from being resumed.
-    CILK_ASSERT(caller->callee == NULL);
-    CILK_ASSERT(callee->spawn_parent == NULL);
+    CILK_ASSERT_NULL(caller->callee);
+    CILK_ASSERT_NULL(callee->spawn_parent);
     CILK_ASSERT((callee->frame->flags & CILK_FRAME_DETACHED) == 0);
 
     callee->call_parent = caller;
@@ -345,7 +345,7 @@ static inline void Closure_suspend_victim(struct ReadyDeque *deques,
     Closure_change_status(cl, CLOSURE_RUNNING, CLOSURE_SUSPENDED);
 
     cl1 = deque_xtract_bottom(deques, thief_id, victim_id);
-    CILK_ASSERT(cl == cl1);
+    CILK_ASSERT_POINTER_EQUAL(cl, cl1);
     USE_UNUSED(cl1);
 }
 
@@ -367,7 +367,7 @@ static inline void Closure_suspend(struct ReadyDeque *deques, worker_id self,
 
     cl1 = deque_xtract_bottom(deques, self, self);
 
-    CILK_ASSERT(cl == cl1);
+    CILK_ASSERT_POINTER_EQUAL(cl, cl1);
     USE_UNUSED(cl1);
 }
 
@@ -377,13 +377,13 @@ static inline void Closure_clean(Closure *t) {
     (void)t;  // unused if assertions disabled
 
     // sanity checks
-    CILK_ASSERT(t->left_sib == (Closure *)NULL);
-    CILK_ASSERT(t->right_sib == (Closure *)NULL);
-    CILK_ASSERT(t->right_most_child == (Closure *)NULL);
+    CILK_ASSERT_NULL(t->left_sib);
+    CILK_ASSERT_NULL(t->right_sib);
+    CILK_ASSERT_NULL(t->right_most_child);
 
-    CILK_ASSERT(t->user_ht == (hyper_table *)NULL);
-    CILK_ASSERT(t->child_ht == (hyper_table *)NULL);
-    CILK_ASSERT(t->right_ht == (hyper_table *)NULL);
+    CILK_ASSERT_NULL(t->user_ht);
+    CILK_ASSERT_NULL(t->child_ht);
+    CILK_ASSERT_NULL(t->right_ht);
 }
 
 /* ANGE: destroy the closure and internally free it (put back to global

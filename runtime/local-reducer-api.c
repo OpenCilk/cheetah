@@ -49,7 +49,7 @@ void *internal_reducer_lookup(__cilkrts_worker *w, void *key, size_t size,
     struct local_hyper_table *table = get_local_hyper_table(w);
     struct bucket *b = find_hyperobject(table, (uintptr_t)key);
     if (__builtin_expect(!!b, true)) {
-        CILK_ASSERT(key == (void *)b->key);
+        CILK_ASSERT_POINTER_EQUAL(key, (void *)b->key);
         // Return the existing view.
         return b->value.view;
     }
