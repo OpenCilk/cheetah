@@ -212,10 +212,10 @@ static void setup_for_sync(__cilkrts_worker *w, worker_id self, Closure *t) {
 }
 
 static void resume_boss(__cilkrts_worker *w, worker_id self, Closure *t) {
-    CILK_ASSERT(t->status == CLOSURE_SUSPENDED);
-    CILK_ASSERT(!Closure_has_children(t));
     // TODO: This should not be on any worker's deque
     Closure_lock(self, t);
+    CILK_ASSERT_INTEGER_EQUAL(t->status, CLOSURE_SUSPENDED);
+    CILK_ASSERT(!Closure_has_children(t));
     setup_for_sync(w, self, t);
     Closure_set_status(t, CLOSURE_RUNNING);
     Closure_unlock(self, t);
@@ -1431,6 +1431,7 @@ void do_what_it_says_boss(__cilkrts_worker *w, Closure *t) {
     CILK_STOP_TIMING(w, INTERVAL_SCHED);
     worker_change_state(w, WORKER_IDLE);
     worker_scheduler(w);
+    cilkrts_bug("boss worker exited scheduling loop");
 }
 
 void worker_scheduler(__cilkrts_worker *w) {
@@ -1483,10 +1484,16 @@ void worker_scheduler(__cilkrts_worker *w) {
             CILK_START_TIMING(w, INTERVAL_SCHED);
             CILK_START_TIMING(w, INTERVAL_IDLE);
 
-            if (rts->activate_boss) {
+            if (is_boss && rts->activate_boss) {
                 t = rts->root_closure;
                 resume_boss(w, self, t);
                 rts->activate_boss = false;
+                /* bookkeeping */
+                fails = maybe_reengage_workers
+                  (rts, self, nworkers, w, fails,
+                   &sample_threshold, &inefficient_history, &efficient_history,
+                   sentinel_count_history, &sentinel_count_history_tail,
+                   &recent_sentinel_count);
                 break;
             }
 
@@ -1662,9 +1669,6 @@ void worker_scheduler(__cilkrts_worker *w) {
 
     CILK_STOP_TIMING(w, INTERVAL_SCHED);
     worker_change_state(w, WORKER_IDLE);
-    if (is_boss) {
-        __builtin_longjmp(rts->boss_ctx, 1);
-    }
 }
 
 void *scheduler_thread_proc(void *arg) {

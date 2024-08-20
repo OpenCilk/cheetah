@@ -467,13 +467,12 @@ handle_failed_steal_attempts(global_state *const rts, worker_id self,
 
 #endif
             if (is_boss) {
-                if (fails % NAP_THRESHOLD == 0 && !rts->activate_boss) {
-                    // The boss thread should never disengage or
-                    // sleep for a long time.
+                if (fails % NAP_THRESHOLD == 0) {
+                    // The boss thread should never disengage.  Sleep instead.
                     const struct timespec sleeptime = {
                         .tv_sec = 0,
-                        .tv_nsec = 1000
-                    };
+                        .tv_nsec =
+                            (fails > SLEEP_THRESHOLD) ? SLEEP_NSEC : NAP_NSEC};
                     nanosleep(&sleeptime, NULL);
                 }
             } else {

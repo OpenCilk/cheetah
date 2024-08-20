@@ -99,6 +99,12 @@ CHEETAH_INTERNAL extern const char *const __cilkrts_assertion_failed;
          : cilkrts_bug("%s: %d: cilk_assertion failed: %s (%p) == %s (%p)",    \
                        __FILE__, __LINE__, #P1, _t1, #P2, _t2);})
 
+#define CILK_ASSERT_INTEGER_EQUAL(I1, I2)                                      \
+    ({ long _t1 = (I1), _t2 = (I2); __builtin_expect(_t1 == _t2, 1)            \
+         ? (void)0                                                             \
+         : cilkrts_bug("%s: %d: cilk_assertion failed: %s (%ld) == %s (%ld)",  \
+                       __FILE__, __LINE__, #I1, _t1, #I2, _t2);})
+
 #define CILK_ASSERT_INDEX_ZERO(LEFT, I, RIGHT, FMT)                            \
     (__builtin_expect(!(LEFT[I] RIGHT), 1)                                     \
          ? (void)0                                                             \

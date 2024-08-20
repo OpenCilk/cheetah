@@ -63,8 +63,7 @@ struct global_state {
 
     // These fields are accessed exclusively by the boss thread.
 
-    jmpbuf boss_ctx __attribute__((aligned(CILK_CACHE_LINE)));
-    void *orig_rsp;
+    void *orig_rsp __attribute__((aligned(CILK_CACHE_LINE)));
     bool workers_started;
 
     // These fields are shared between the boss thread and a couple workers.

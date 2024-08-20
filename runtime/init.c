@@ -564,17 +564,9 @@ void __cilkrts_internal_invoke_cilkified_root(__cilkrts_stack_frame *sf) {
         __cilkrts_start_workers(g);
     }
 
-    if (__builtin_setjmp(g->boss_ctx) == 0) {
-        CILK_SWITCH_TIMING(w, INTERVAL_CILKIFY_ENTER, INTERVAL_SCHED);
-        do_what_it_says_boss(w, root_closure);
-    } else {
-        // The stack on which
-        // __cilkrts_internal_invoke_cilkified_root() was called may
-        // be corrupted at this point, so we call this helper method,
-        // marked noinline, to ensure the compiler does not try to use
-        // any data from the stack.
-        boss_wait_helper();
-    }
+    // XXX Temporary
+    CILK_SWITCH_TIMING(w, INTERVAL_CILKIFY_ENTER, INTERVAL_SCHED);
+    do_what_it_says_boss(w, root_closure);
 }
 
 // Finish the execution of a Cilkified region.  Executed by the boss worker.
