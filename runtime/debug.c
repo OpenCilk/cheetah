@@ -132,12 +132,13 @@ static int parse_alert_level_env(const char *const alert_env) {
         }
     }
 
-    set_alert_level(new_alert_lvl);
+    return new_alert_lvl;
 }
 
 void set_alert_level_from_str(const char *const alert_env) {
     if (alert_env) {
         int new_alert_lvl = parse_alert_level_env(alert_env);
+        set_alert_level(new_alert_lvl);
     }
 }
 
