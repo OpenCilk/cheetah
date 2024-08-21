@@ -99,30 +99,20 @@ static void swap_worker_with_target(global_state *g, worker_id self,
     worker_to_index[self] = target_index;
 }
 
+// These functions return the old value
+
 __attribute__((always_inline)) static inline uint64_t
 add_to_sentinels(global_state *const rts, int32_t val) {
+    // val is sign extended to 64 bits
     return atomic_fetch_add_explicit(&rts->disengaged_sentinel, val,
                                      memory_order_release);
 }
 
 __attribute__((always_inline)) static inline uint64_t
 add_to_disengaged(global_state *const rts, int32_t val) {
-    while (true) {
-        uint64_t disengaged_sentinel = atomic_load_explicit(
-            &rts->disengaged_sentinel, memory_order_relaxed);
-        uint32_t disengaged = GET_DISENGAGED(disengaged_sentinel);
-        uint32_t sentinel = GET_SENTINEL(disengaged_sentinel);
-        uint64_t new_disengaged_sentinel =
-            DISENGAGED_SENTINEL(disengaged + val, sentinel);
-
-        if (atomic_compare_exchange_strong_explicit(
-                &rts->disengaged_sentinel, &disengaged_sentinel,
-                new_disengaged_sentinel, memory_order_release,
-                memory_order_acquire))
-            return disengaged_sentinel;
-
-        busy_loop_pause();
-    }
+    return atomic_fetch_add_explicit(&rts->disengaged_sentinel,
+                                     DISENGAGED_SENTINEL(val, 0),
+                                     memory_order_acquire);
 }
 
 #if ENABLE_THIEF_SLEEP
@@ -149,6 +139,8 @@ static bool try_to_disengage_thief(global_state *g, worker_id self,
     // with parallel calls to reengage thieves, calls to reengage thieves, and
     // updates to the number of sentinel workers.
     // First atomically update the number of disengaged workers.
+    // The compare and exchange fails if the sentinel or disenaged
+    // count has changed.
     if (atomic_compare_exchange_strong_explicit(
             &g->disengaged_sentinel, &disengaged_sentinel,
             new_disengaged_sentinel, memory_order_release,
@@ -168,31 +160,18 @@ static bool try_to_disengage_thief(global_state *g, worker_id self,
         cilk_mutex_lock(&g->index_lock);
 
         // Decrement the number of disengaged workers.
-        while (true) {
-            // Atomically decrement the number of disengaged workers.
-            uint64_t disengaged_sentinel = atomic_load_explicit(
-                &g->disengaged_sentinel, memory_order_relaxed);
-            uint32_t disengaged = GET_DISENGAGED(disengaged_sentinel);
-            uint32_t sentinel = GET_SENTINEL(disengaged_sentinel);
-            new_disengaged_sentinel =
-                DISENGAGED_SENTINEL(disengaged - 1, sentinel + 1);
+        uint64_t disengaged_sentinel =
+            atomic_fetch_add(&g->disengaged_sentinel,
+                             DISENGAGED_SENTINEL(-1, 1));
 
-            if (atomic_compare_exchange_strong_explicit(
-                    &g->disengaged_sentinel, &disengaged_sentinel,
-                    new_disengaged_sentinel, memory_order_release,
-                    memory_order_acquire)) {
-                // Update the index structure.
-                last_index = nworkers - GET_DISENGAGED(disengaged_sentinel);
-                if (worker_to_index[self] > last_index) {
-                    swap_worker_with_target(g, self, last_index);
-                }
-
-                // Release the lock on the index structure.
-                cilk_mutex_unlock(&g->index_lock);
-                return true;
-            }
-            busy_loop_pause();
+        last_index = nworkers - GET_DISENGAGED(disengaged_sentinel);
+        if (worker_to_index[self] > last_index) {
+            swap_worker_with_target(g, self, last_index);
         }
+
+        // Release the lock on the index structure.
+        cilk_mutex_unlock(&g->index_lock);
+        return true;
     } else {
         // Release the lock on the index structure.
         cilk_mutex_unlock(&g->index_lock);
