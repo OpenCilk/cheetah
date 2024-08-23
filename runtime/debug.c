@@ -4,6 +4,7 @@
 
 #include <assert.h>
 #include <ctype.h>
+#include <search.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -22,120 +23,113 @@ static size_t alert_log_size = 0, alert_log_offset = 0;
 static char *alert_log = NULL;
 
 #define ALERT_STR_BUF_LEN 16
-static const char *const ALERT_NONE_STR =      "none";
-static const char *const ALERT_FIBER_STR =     "fiber";
-static const char *const ALERT_MEMORY_STR =    "memory";
-static const char *const ALERT_SYNC_STR =      "sync";
-static const char *const ALERT_SCHED_STR =     "sched";
-static const char *const ALERT_STEAL_STR =     "steal";
-static const char *const ALERT_RETURN_STR =    "return";
-static const char *const ALERT_EXCEPT_STR =    "except";
-static const char *const ALERT_CFRAME_STR =    "cframe";
-static const char *const ALERT_REDUCE_STR =    "reduce";
-static const char *const ALERT_REDUCE_ID_STR = "reduce_id";
-static const char *const ALERT_BOOT_STR =      "boot";
-static const char *const ALERT_START_STR =     "start";
-static const char *const ALERT_CLOSURE_STR =   "closure";
-static const char *const ALERT_NOBUF_STR =     "nobuf";
 
-static int parse_alert_level_str(const char *const alert_str) {
-    if (strcmp(ALERT_NONE_STR, alert_str) == 0) {
-        return ALERT_NONE;
-    } else if (strcmp(ALERT_FIBER_STR, alert_str) == 0) {
-        return ALERT_FIBER;
-    } else if (strcmp(ALERT_MEMORY_STR, alert_str) == 0) {
-        return ALERT_MEMORY;
-    } else if (strcmp(ALERT_SYNC_STR, alert_str) == 0) {
-        return ALERT_SYNC;
-    } else if (strcmp(ALERT_SCHED_STR, alert_str) == 0) {
-        return ALERT_SCHED;
-    } else if (strcmp(ALERT_STEAL_STR, alert_str) == 0) {
-        return ALERT_STEAL;
-    } else if (strcmp(ALERT_RETURN_STR, alert_str) == 0) {
-        return ALERT_RETURN;
-    } else if (strcmp(ALERT_EXCEPT_STR, alert_str) == 0) {
-        return ALERT_EXCEPT;
-    } else if (strcmp(ALERT_CFRAME_STR, alert_str) == 0) {
-        return ALERT_CFRAME;
-    } else if (strcmp(ALERT_REDUCE_STR, alert_str) == 0) {
-        return ALERT_REDUCE;
-    } else if (strcmp(ALERT_REDUCE_ID_STR, alert_str) == 0) {
-        return ALERT_REDUCE_ID;
-    } else if (strcmp(ALERT_BOOT_STR, alert_str) == 0) {
-        return ALERT_BOOT;
-    } else if (strcmp(ALERT_START_STR, alert_str) == 0) {
-        return ALERT_START;
-    } else if (strcmp(ALERT_CLOSURE_STR, alert_str) == 0) {
-        return ALERT_CLOSURE;
-    } else if (strcmp(ALERT_NOBUF_STR, alert_str) == 0) {
-        return ALERT_NOBUF;
+typedef struct __alert_level_t {
+    const char *const name;
+    const int mask_value;
+} alert_level_t;
+
+static const alert_level_t alert_table[] = {
+    {"none", ALERT_NONE},
+    {"fiber", ALERT_FIBER},
+    {"memory", ALERT_MEMORY},
+    {"sync", ALERT_SYNC},
+    {"sched", ALERT_SCHED},
+    {"steal", ALERT_STEAL},
+    {"return", ALERT_RETURN},
+    {"except", ALERT_EXCEPT},
+    {"cframe", ALERT_CFRAME},
+    {"reduce", ALERT_REDUCE},
+    {"reduce_id", ALERT_REDUCE_ID},
+    {"boot", ALERT_BOOT},
+    {"start", ALERT_START},
+    {"closure", ALERT_CLOSURE},
+    // Must be last in the table
+    {"nobuf", ALERT_NOBUF},
+};
+
+static int alert_name_comparison(const void *a, const void *b) {
+    const alert_level_t *ala = (const alert_level_t*)a;
+    const alert_level_t *alb = (const alert_level_t*)b;
+
+    return strcmp(ala->name, alb->name);
+}
+
+static size_t get_alert_table_size() {
+    size_t s = 0;
+
+    for (s = 0; alert_table[s].mask_value != ALERT_NOBUF; ++s) {
+        // no-op
     }
 
+    return s;
+}
+
+static int parse_alert_level_str(const char *const alert_str) {
+    char alert_str_lowered[512];
+    // save 1 for the null terminator
+    size_t max_str_len = sizeof(alert_str_lowered) - 1;
+
+    size_t which_alert;
+    size_t table_size = get_alert_table_size();
+    size_t alert_len = strlen(alert_str);
+
+    size_t i;
+    for (i = 0; i < alert_len && i < max_str_len; ++i) {
+        alert_str_lowered[i] = tolower(alert_str[i]);
+    }
+    alert_str_lowered[i] = '\0';
+
+    alert_level_t search_key = { .name = alert_str, .mask_value = ALERT_NONE };
+
+    // The table is small, and performance isn't critical for loading
+    // debug options, so use linear search (lfind)
+    alert_level_t *table_element =
+        (alert_level_t*)lfind(&search_key, alert_table, &table_size,
+                              sizeof(search_key), alert_name_comparison
+        );
+
+    if (table_element != NULL) {
+        return table_element->mask_value;
+    }
+    
     fprintf(stderr, "Invalid CILK_ALERT value: %s\n", alert_str);
 
     return ALERT_NONE;
 }
 
-static int parse_alert_level_env(const char *const alert_env) {
-    int new_alert_lvl = 0;
-    char curr_alert[ALERT_STR_BUF_LEN + 1];
+static int parse_alert_level_env(char *alert_env) {
+    int new_alert_lvl = ALERT_NONE;
 
-    size_t buf_str_len = 0;
+    size_t env_len = strlen(alert_env);
 
-    // We only allow numbers for backwards compatibility, so
-    // only allow numbers if they are the only thing passed to
-    // CILK_ALERT
-    bool numbers_allowed = true;
-    bool invalid = false;
+    char *alert_str = strtok(alert_env, ",");
 
-    for (size_t i = 0; i < strlen(alert_env); ++i) {
-        if (alert_env[i] == ',') {
-            curr_alert[buf_str_len] = '\0';
-            numbers_allowed = false;
-            if (invalid) {
-                fputc('\n', stderr);
-                invalid = false;
-            } else {
-                new_alert_lvl |= parse_alert_level_str(curr_alert);
-            }
-            buf_str_len = 0;
-        } else if (buf_str_len < ALERT_STR_BUF_LEN) {
-            curr_alert[buf_str_len++] = tolower(alert_env[i]);
-        } else {
-            curr_alert[buf_str_len] = '\0';
-            fprintf(stderr, "%s%s%c",
-                    // Only print the prefix the first time we get here.
-                    invalid ? "" : "Invalid CILK_ALERT value: ",
-                    curr_alert,
-                    alert_env[i]);
-            curr_alert[0] = '\0';
-            invalid = true;
-        }
-    }
-
-    if (invalid) {
-        fputc('\n', stderr);
-        buf_str_len = 0;
-    }
-
-    if (buf_str_len > 0) {
-        curr_alert[buf_str_len] = '\0';
-
-        if (numbers_allowed) {
+    if (alert_str) {
+        if (strlen(alert_str) == env_len) {
+            // Can be a number
             char **tol_end = &alert_env;
             new_alert_lvl = strtol(alert_env, tol_end, 0);
             if (new_alert_lvl == 0 && (**tol_end != '\0' || *tol_end == alert_env)) {
-                new_alert_lvl |= parse_alert_level_str(curr_alert);
+                new_alert_lvl |= parse_alert_level_str(alert_str);
             }
         } else {
-            new_alert_lvl |= parse_alert_level_str(curr_alert);
+            while (alert_str != NULL) {
+                new_alert_lvl |= parse_alert_level_str(alert_str);
+                char *new_alert_str = strtok(NULL, ",");
+                // add back the delimiter that was removed by strtok;
+                // must be after the above strtok to avoid a segfault
+                // on some implementations of strtok
+                alert_str[strlen(alert_str)] = ',';
+                alert_str = new_alert_str;
+            }
         }
     }
 
     return new_alert_lvl;
 }
 
-void set_alert_level_from_str(const char *const alert_env) {
+void set_alert_level_from_str(char *alert_env) {
     if (alert_env) {
         int new_alert_lvl = parse_alert_level_env(alert_env);
         set_alert_level(new_alert_lvl);
