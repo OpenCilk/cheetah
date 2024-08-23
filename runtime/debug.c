@@ -117,14 +117,18 @@ static int parse_alert_level_env(char *alert_env) {
             while (alert_str != NULL) {
                 new_alert_lvl |= parse_alert_level_str(alert_str);
                 char *new_alert_str = strtok(NULL, ",");
-                // add back the delimiter that was removed by strtok;
-                // must be after the above strtok to avoid a segfault
-                // on some implementations of strtok
+                // Do this after reading the next pointer to avoid
+                // (1) branching (if last string) and (2) segfaulting
+                // in strtok due to overwriting the null terminator.
                 alert_str[strlen(alert_str)] = ',';
                 alert_str = new_alert_str;
             }
         }
     }
+
+    // We may have overwritten NULL with , above;
+    // fix it here
+    alert_env[env_len] = '\0';
 
     return new_alert_lvl;
 }
