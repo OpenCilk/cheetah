@@ -22,11 +22,9 @@ CHEETAH_INTERNAL unsigned int debug_level = 0;
 static size_t alert_log_size = 0, alert_log_offset = 0;
 static char *alert_log = NULL;
 
-#define ALERT_STR_BUF_LEN 16
-
 typedef struct __alert_level_t {
-    const char *const name;
-    const int mask_value;
+    char const *name;
+    int mask_value;
 } alert_level_t;
 
 static const alert_level_t alert_table[] = {
@@ -44,7 +42,6 @@ static const alert_level_t alert_table[] = {
     {"boot", ALERT_BOOT},
     {"start", ALERT_START},
     {"closure", ALERT_CLOSURE},
-    // Must be last in the table
     {"nobuf", ALERT_NOBUF},
 };
 
@@ -52,33 +49,12 @@ static int alert_name_comparison(const void *a, const void *b) {
     const alert_level_t *ala = (const alert_level_t*)a;
     const alert_level_t *alb = (const alert_level_t*)b;
 
-    return strcmp(ala->name, alb->name);
-}
-
-static size_t get_alert_table_size() {
-    size_t s = 0;
-
-    for (s = 0; alert_table[s].mask_value != ALERT_NOBUF; ++s) {
-        // no-op
-    }
-
-    return s;
+    return strcasecmp(ala->name, alb->name);
 }
 
 static int parse_alert_level_str(const char *const alert_str) {
-    char alert_str_lowered[512];
-    // save 1 for the null terminator
-    size_t max_str_len = sizeof(alert_str_lowered) - 1;
 
-    size_t which_alert;
-    size_t table_size = get_alert_table_size();
-    size_t alert_len = strlen(alert_str);
-
-    size_t i;
-    for (i = 0; i < alert_len && i < max_str_len; ++i) {
-        alert_str_lowered[i] = tolower(alert_str[i]);
-    }
-    alert_str_lowered[i] = '\0';
+    size_t table_size = sizeof alert_table / sizeof alert_table[0];
 
     alert_level_t search_key = { .name = alert_str, .mask_value = ALERT_NONE };
 
@@ -100,29 +76,14 @@ static int parse_alert_level_str(const char *const alert_str) {
 
 static int parse_alert_level_env(char *alert_env) {
     int new_alert_lvl = ALERT_NONE;
+    char *alert_str;
 
-    size_t env_len = strlen(alert_env);
-
-    char *alert_str = strtok(alert_env, ",");
-
-    if (alert_str) {
-        if (strlen(alert_str) == env_len) {
-            // Can be a number
-            char **tol_end = &alert_env;
-            new_alert_lvl = strtol(alert_env, tol_end, 0);
-            if (new_alert_lvl == 0 && (**tol_end != '\0' || *tol_end == alert_env)) {
-                new_alert_lvl |= parse_alert_level_str(alert_str);
-            }
+    for (alert_str = strtok(alert_env, ","); alert_str;
+         alert_str = strtok(NULL, ",")) {
+        if (isdigit(alert_str[0])) {
+            new_alert_lvl |= strtol(alert_str, NULL, 0);
         } else {
-            while (alert_str != NULL) {
-                new_alert_lvl |= parse_alert_level_str(alert_str);
-                char *new_alert_str = strtok(NULL, ",");
-                // add back the delimiter that was removed by strtok;
-                // must be after the above strtok to avoid a segfault
-                // on some implementations of strtok
-                alert_str[strlen(alert_str)] = ',';
-                alert_str = new_alert_str;
-            }
+            new_alert_lvl |= parse_alert_level_str(alert_str);
         }
     }
 
