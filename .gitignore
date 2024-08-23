@@ -1,6 +1,7 @@
 # Exes
 handcomp_test/*
 !handcomp_test/*.*
+!handcomp_test/include
 
 # Emacs backups
 *~
