@@ -3,7 +3,6 @@
 #include "global.h"
 
 #include <assert.h>
-#include <ctype.h>
 #include <search.h>
 #include <stdarg.h>
 #include <stdio.h>
