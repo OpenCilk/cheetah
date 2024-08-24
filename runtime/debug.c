@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 
 #if ALERT_LVL & (ALERT_CFRAME|ALERT_RETURN)
 unsigned int alert_level = 0;
@@ -22,11 +23,9 @@ CHEETAH_INTERNAL unsigned int debug_level = 0;
 static size_t alert_log_size = 0, alert_log_offset = 0;
 static char *alert_log = NULL;
 
-#define ALERT_STR_BUF_LEN 16
-
 typedef struct __alert_level_t {
-    const char *const name;
-    const int mask_value;
+    const char *name;
+    int mask_value;
 } alert_level_t;
 
 static const alert_level_t alert_table[] = {
@@ -44,7 +43,6 @@ static const alert_level_t alert_table[] = {
     {"boot", ALERT_BOOT},
     {"start", ALERT_START},
     {"closure", ALERT_CLOSURE},
-    // Must be last in the table
     {"nobuf", ALERT_NOBUF},
 };
 
@@ -52,35 +50,14 @@ static int alert_name_comparison(const void *a, const void *b) {
     const alert_level_t *ala = (const alert_level_t*)a;
     const alert_level_t *alb = (const alert_level_t*)b;
 
-    return strcmp(ala->name, alb->name);
-}
-
-static size_t get_alert_table_size() {
-    size_t s = 0;
-
-    for (s = 0; alert_table[s].mask_value != ALERT_NOBUF; ++s) {
-        // no-op
-    }
-
-    return s;
+    // TODO: If Windows, use _stricmp
+    return strcasecmp(ala->name, alb->name);
 }
 
 static int parse_alert_level_str(const char *const alert_str) {
-    char alert_str_lowered[512];
-    // save 1 for the null terminator
-    size_t max_str_len = sizeof(alert_str_lowered) - 1;
+    size_t table_size = sizeof(alert_table) / sizeof(alert_table[0]);
 
-    size_t which_alert;
-    size_t table_size = get_alert_table_size();
-    size_t alert_len = strlen(alert_str);
-
-    size_t i;
-    for (i = 0; i < alert_len && i < max_str_len; ++i) {
-        alert_str_lowered[i] = tolower(alert_str[i]);
-    }
-    alert_str_lowered[i] = '\0';
-
-    alert_level_t search_key = { .name = alert_str, .mask_value = ALERT_NONE };
+    const alert_level_t search_key = { .name = alert_str, .mask_value = ALERT_NONE };
 
     // The table is small, and performance isn't critical for loading
     // debug options, so use linear search (lfind)
@@ -114,14 +91,8 @@ static int parse_alert_level_env(char *alert_env) {
                 new_alert_lvl |= parse_alert_level_str(alert_str);
             }
         } else {
-            while (alert_str != NULL) {
+            for (; alert_str != NULL; alert_str = strtok(NULL, ",")) {
                 new_alert_lvl |= parse_alert_level_str(alert_str);
-                char *new_alert_str = strtok(NULL, ",");
-                // Do this after reading the next pointer to avoid
-                // (1) branching (if last string) and (2) segfaulting
-                // in strtok due to overwriting the null terminator.
-                alert_str[strlen(alert_str)] = ',';
-                alert_str = new_alert_str;
             }
         }
     }
@@ -133,10 +104,12 @@ static int parse_alert_level_env(char *alert_env) {
     return new_alert_lvl;
 }
 
-void set_alert_level_from_str(char *alert_env) {
+void set_alert_level_from_str(const char *const alert_env) {
     if (alert_env) {
-        int new_alert_lvl = parse_alert_level_env(alert_env);
+        char *alert_env_cpy = strdup(alert_env);
+        int new_alert_lvl = parse_alert_level_env(alert_env_cpy);
         set_alert_level(new_alert_lvl);
+        free(alert_env_cpy);
     }
 }
 
