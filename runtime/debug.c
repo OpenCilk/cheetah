@@ -90,7 +90,7 @@ static int parse_alert_level_env(char *alert_env) {
                 new_alert_lvl |= parse_alert_level_str(alert_str);
             }
         } else {
-            for (; alert_str != NULL; alert_str = strtok(NULL, ",")) {
+            for (; alert_str; alert_str = strtok(NULL, ",")) {
                 new_alert_lvl |= parse_alert_level_str(alert_str);
             }
         }
