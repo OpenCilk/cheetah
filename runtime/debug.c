@@ -96,10 +96,6 @@ static int parse_alert_level_env(char *alert_env) {
         }
     }
 
-    // We may have overwritten NULL with , above;
-    // fix it here
-    alert_env[env_len] = '\0';
-
     return new_alert_lvl;
 }
 
