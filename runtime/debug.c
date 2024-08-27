@@ -21,11 +21,20 @@ CHEETAH_INTERNAL unsigned int debug_level = 0;
 static size_t alert_log_size = 0, alert_log_offset = 0;
 static char *alert_log = NULL;
 
+/**
+ * Represents a usable alert level with a human-readable
+ * <code>name<\code> and the corresponding
+ * <code>mask_value<\code> used by the runtime.
+ **/
 typedef struct __alert_level_t {
     const char *name;
     int mask_value;
 } alert_level_t;
 
+/**
+ * A table relating a human-readable alert level name to
+ * the corresponding bitfield value used by the runtime.
+ **/
 static const alert_level_t alert_table[] = {
     {"none", ALERT_NONE},
     {"fiber", ALERT_FIBER},
