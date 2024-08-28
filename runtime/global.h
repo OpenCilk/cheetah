@@ -17,7 +17,7 @@
 #include "types.h"
 #include "worker.h"
 
-extern unsigned cilkg_nproc;
+extern unsigned __cilkrts_nproc;
 
 struct __cilkrts_worker;
 struct Closure;

@@ -30,7 +30,7 @@ _Alignas(__cilkrts_stack_frame)
 size_t __cilkrts_stack_frame_align = __alignof__(__cilkrts_stack_frame);
 
 __attribute__((always_inline)) unsigned __cilkrts_get_nworkers(void) {
-    return cilkg_nproc;
+    return __cilkrts_nproc;
 }
 
 // Internal method to get the Cilk worker ID.  Intended for debugging purposes.
@@ -376,7 +376,7 @@ __cilk_helper_epilogue_exn(__cilkrts_stack_frame *sf,
 ///     grainsize = min(2048, ceil(n / (8 * nworkers)))
 #define __cilkrts_grainsize_fn_impl(NAME, INT_T)                               \
     __attribute__((always_inline)) INT_T NAME(INT_T n) {                       \
-        INT_T small_loop_grainsize = n / (8 * cilkg_nproc);                    \
+        INT_T small_loop_grainsize = n / (8 * __cilkrts_nproc);                \
         if (small_loop_grainsize <= 1)                                         \
             return 1;                                                          \
         INT_T large_loop_grainsize = 2048;                                     \
@@ -389,7 +389,7 @@ __cilk_helper_epilogue_exn(__cilkrts_stack_frame *sf,
 
 __attribute__((always_inline)) uint8_t
 __cilkrts_cilk_for_grainsize_8(uint8_t n) {
-    uint8_t small_loop_grainsize = n / (8 * cilkg_nproc);
+    uint8_t small_loop_grainsize = n / (8 * __cilkrts_nproc);
     if (small_loop_grainsize <= 1)
         return 1;
     return small_loop_grainsize;
