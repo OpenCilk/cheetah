@@ -36,7 +36,8 @@ __cilkrts_worker default_worker = {.self = 0,
 CHEETAH_INTERNAL
 local_state default_worker_local_state;
 
-unsigned cilkg_nproc = 0;
+// A global used to calculate grain size.
+unsigned __cilkrts_nproc = 0;
 
 static void set_alert_debug_level() {
     /* Only the bits also set in ALERT_LVL are used. */
@@ -163,7 +164,7 @@ global_state *global_state_init(int argc, char *argv[]) {
     unsigned active_size = g->options.nproc;
     CILK_ASSERT(active_size > 0);
     g->nworkers = active_size;
-    cilkg_nproc = active_size;
+    __cilkrts_nproc = active_size;
 
     g->workers_started = false;
     g->root_closure_initialized = false;
