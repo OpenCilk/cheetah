@@ -7,7 +7,8 @@ OBJS = $(patsubst %.c,%.o,$(SRCS))
 DEFINES = $(ABI_DEF)
 
 TESTS   = cilksort fib mm_dac nqueens
-OPTIONS = $(OPT) $(ARCH) $(DBG) -Wall $(DEFINES) -fno-omit-frame-pointer
+INCLUDES = -I../include/
+OPTIONS = $(OPT) $(ARCH) $(DBG) -Wall $(DEFINES) $(INCLUDES) -fno-omit-frame-pointer
 # dynamic linking
 # RTS_DLIBS = -L../runtime -Wl,-rpath -Wl,../runtime -lopencilk
 # RTS_LIBS = ../runtime/$(RTS_LIB).so
