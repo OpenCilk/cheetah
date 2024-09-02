@@ -1,0 +1,46 @@
+name: Hand-compiled tests
+
+permissions:
+  contents: read
+
+on:
+  workflow_dispatch:
+  push:
+  pull_request:
+
+concurrency:
+  # Skip intermediate builds: always.
+  # Cancel intermediate builds: only if it is a pull request build.
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ startsWith(github.ref, 'refs/pull/') }}
+
+jobs:
+  handcomp_test:
+    runs-on: ${{ matrix.os }}
+    container:
+      image: ${{(startsWith(matrix.os, 'ubuntu') && 'ghcr.io/llvm/ci-ubuntu-22.04:latest') || null}}
+      volumes:
+        - /mnt/:/mnt/
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+    steps:
+    - name: checkout
+      uses: actions/checkout@v4
+    - name: Setup OpenCilk compiler
+      id: build-opencilk
+      uses: OpenCilk/actions/build-opencilk-project@main
+      with:
+        projects: clang
+        os_list: '${{ matrix.os }}'
+    - name: make
+      shell: bash
+      run: |
+        opencilkdir=${{ steps.build-opencilk.outputs.opencilk-builddir }}
+        COMPILER_BASE=$opencilkdir/bin/ make
+    - name: make check
+      shell: bash
+      run:
+        opencilkdir=${{ steps.build-opencilk.outputs.opencilk-builddir }}
+        COMPILER_BASE=$opencilkdir/bin/ make -C handcomp_test check
