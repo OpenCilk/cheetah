@@ -45,12 +45,17 @@ unsigned __cilkrts_get_worker_number(void) {
     return 0;
 }
 
-void *__cilkrts_reducer_lookup(void *key, size_t size,
-                               void *identity_ptr, void *reduce_ptr) {
+void *__cilkrts_reducer_lookup_in_frame(struct __cilkrts_stack_frame *frame,
+                                        void *key, size_t size,
+                                        void *identity_ptr, void *reduce_ptr) {
     // If we're outside a cilkified region, then the key is the view.
-    if (__cilkrts_need_to_cilkify)
-        return key;
-    struct local_hyper_table *table = get_hyper_table();
+    // The null test will normally be optimized out.
+    __cilkrts_worker *w;
+    if (frame)
+      w = frame->fh->worker; // Never null
+    else if (!(w = __cilkrts_get_tls_worker()))
+      return key;
+    struct local_hyper_table *table = get_local_hyper_table(w);
     struct bucket *b = find_hyperobject(table, (uintptr_t)key);
     if (__builtin_expect(!!b, true)) {
         // Return the existing view.
