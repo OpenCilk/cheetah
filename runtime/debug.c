@@ -125,7 +125,7 @@ static int parse_alert_level_csv(const char *const alert_csv) {
 
     // strtok modifies the passed in string, so copy alert_csv and use
     // the copy instead
-    char *alert_csv_cpy = malloc(csv_len + 1);
+    char *alert_csv_cpy = strdup(alert_csv);
     if (!alert_csv_cpy) {
         // Non-critical error, so just print a warning
         fprintf(stderr, "Cilk: unable to copy CILK_ALERT settings (%s)\n",
@@ -133,7 +133,6 @@ static int parse_alert_level_csv(const char *const alert_csv) {
                );
         return alert_level;
     }
-    strcpy(alert_csv_cpy, alert_csv);
 
     char *alert_str = strtok(alert_csv_cpy, ",");
 
