@@ -441,44 +441,6 @@ static void __cilkrts_stop_workers(global_state *g) {
     g->workers_started = false;
 }
 
-// Block until signaled the Cilkified region is done.  Executed by the Cilkfying
-// thread.
-static inline void wait_until_cilk_done(global_state *g) {
-    wait_while_cilkified(g);
-}
-
-// Helper method to make the boss thread wait for the cilkified region
-// to complete.
-static inline __attribute__((noinline)) void boss_wait_helper(void) {
-    // The setjmp/longjmp to and from user code can invalidate the
-    // function arguments and local variables in this function.  Get
-    // fresh copies of these arguments from the runtime's global
-    // state.
-    global_state *g = __cilkrts_tls_worker->g;
-    __cilkrts_stack_frame *sf = g->root_closure->frame;
-    CILK_BOSS_START_TIMING(g);
-
-    // Wait until the cilkified region is done executing.
-    wait_until_cilk_done(g);
-
-    __cilkrts_need_to_cilkify = true;
-
-    // At this point, some Cilk worker must have completed the
-    // Cilkified region and executed uncilkify at the end of the Cilk
-    // function.  The longjmp will therefore jump to the end of the
-    // Cilk function.  We need only restore the stack pointer to its
-    // original value on the Cilkifying thread's stack.
-
-    CILK_BOSS_STOP_TIMING(g);
-
-    // Restore the boss's original rsp, so the boss completes the Cilk
-    // function on its original stack.
-    SP(sf) = g->orig_rsp;
-    sysdep_restore_fp_state(sf);
-    sanitizer_start_switch_fiber(NULL);
-    __builtin_longjmp(sf->ctx, 1);
-}
-
 // Setup runtime structures to start a new Cilkified region.  Executed by the
 // Cilkifying thread in cilkify().
 void __cilkrts_internal_invoke_cilkified_root(__cilkrts_stack_frame *sf) {
