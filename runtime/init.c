@@ -441,44 +441,6 @@ static void __cilkrts_stop_workers(global_state *g) {
     g->workers_started = false;
 }
 
-// Block until signaled the Cilkified region is done.  Executed by the Cilkfying
-// thread.
-static inline void wait_until_cilk_done(global_state *g) {
-    wait_while_cilkified(g);
-}
-
-// Helper method to make the boss thread wait for the cilkified region
-// to complete.
-static inline __attribute__((noinline)) void boss_wait_helper(void) {
-    // The setjmp/longjmp to and from user code can invalidate the
-    // function arguments and local variables in this function.  Get
-    // fresh copies of these arguments from the runtime's global
-    // state.
-    global_state *g = __cilkrts_tls_worker->g;
-    __cilkrts_stack_frame *sf = g->root_closure->frame;
-    CILK_BOSS_START_TIMING(g);
-
-    // Wait until the cilkified region is done executing.
-    wait_until_cilk_done(g);
-
-    __cilkrts_need_to_cilkify = true;
-
-    // At this point, some Cilk worker must have completed the
-    // Cilkified region and executed uncilkify at the end of the Cilk
-    // function.  The longjmp will therefore jump to the end of the
-    // Cilk function.  We need only restore the stack pointer to its
-    // original value on the Cilkifying thread's stack.
-
-    CILK_BOSS_STOP_TIMING(g);
-
-    // Restore the boss's original rsp, so the boss completes the Cilk
-    // function on its original stack.
-    SP(sf) = g->orig_rsp;
-    sysdep_restore_fp_state(sf);
-    sanitizer_start_switch_fiber(NULL);
-    __builtin_longjmp(sf->ctx, 1);
-}
-
 // Setup runtime structures to start a new Cilkified region.  Executed by the
 // Cilkifying thread in cilkify().
 void __cilkrts_internal_invoke_cilkified_root(__cilkrts_stack_frame *sf) {
@@ -564,28 +526,21 @@ void __cilkrts_internal_invoke_cilkified_root(__cilkrts_stack_frame *sf) {
         __cilkrts_start_workers(g);
     }
 
-    if (__builtin_setjmp(g->boss_ctx) == 0) {
-        CILK_SWITCH_TIMING(w, INTERVAL_CILKIFY_ENTER, INTERVAL_SCHED);
-        do_what_it_says_boss(w, root_closure);
-    } else {
-        // The stack on which
-        // __cilkrts_internal_invoke_cilkified_root() was called may
-        // be corrupted at this point, so we call this helper method,
-        // marked noinline, to ensure the compiler does not try to use
-        // any data from the stack.
-        boss_wait_helper();
-    }
+    // XXX Temporary
+    CILK_SWITCH_TIMING(w, INTERVAL_CILKIFY_ENTER, INTERVAL_SCHED);
+    do_what_it_says_boss(w, root_closure);
 }
 
-// Finish the execution of a Cilkified region.  Executed by a worker in g.
+// Finish the execution of a Cilkified region.  Executed by the boss worker.
 void __cilkrts_internal_exit_cilkified_root(global_state *g,
                                             __cilkrts_stack_frame *sf) {
     __cilkrts_worker *w = __cilkrts_get_tls_worker();
     CILK_ASSERT(w->l->state == WORKER_RUN);
     CILK_SWITCH_TIMING(w, INTERVAL_WORK, INTERVAL_CILKIFY_EXIT);
 
-    worker_id self = w->self;
-    const bool is_boss = (0 == self);
+    CILK_ASSERT(w->self == 0);
+
+    worker_id self = 0;
     ReadyDeque *deques = g->deques;
 
     // Mark the computation as done.  Also "sleep" the workers: update global
@@ -595,16 +550,6 @@ void __cilkrts_internal_exit_cilkified_root(global_state *g,
 
     atomic_store_explicit(&g->done, 1, memory_order_release);
     /* wake_all_disengaged(g); */
-
-    if (!is_boss) {
-        w->l->exiting = true;
-        __cilkrts_worker **workers = g->workers;
-        __cilkrts_worker *w0 = workers[0];
-        w0->hyper_table = w->hyper_table;
-        w->hyper_table = NULL;
-        w0->extension = w->extension;
-        w->extension = NULL;
-    }
 
     // Clear this worker's deque.  Nobody can successfully steal from this deque
     // at this point, because head == tail, but we still want any subsequent
@@ -625,25 +570,19 @@ void __cilkrts_internal_exit_cilkified_root(global_state *g,
     sf->flags = 0;
 
     CILK_STOP_TIMING(w, INTERVAL_CILKIFY_EXIT);
-    if (is_boss) {
-        // We finished the computation on the boss thread.  No need to jump to
-        // the runtime in this case; just return normally.
-        local_state *l = w->l;
-        atomic_store_explicit(&g->cilkified, 0, memory_order_relaxed);
-        l->state = WORKER_IDLE;
-        __cilkrts_need_to_cilkify = true;
+    // We finished the computation on the boss thread.  No need to jump to
+    // the runtime in this case; just return normally.
+    local_state *l = w->l;
+    atomic_store_explicit(&g->cilkified, 0, memory_order_relaxed);
+    l->state = WORKER_IDLE;
+    __cilkrts_need_to_cilkify = true;
 
-        // Restore the boss's original rsp, so the boss completes the Cilk
-        // function on its original stack.
-        SP(sf) = g->orig_rsp;
-        sysdep_restore_fp_state(sf);
-        sanitizer_start_switch_fiber(NULL);
-        __builtin_longjmp(sf->ctx, 1);
-    } else {
-        // done; go back to runtime
-        CILK_START_TIMING(w, INTERVAL_WORK);
-        longjmp_to_runtime(w);
-    }
+    // Restore the boss's original rsp, so the boss completes the Cilk
+    // function on its original stack.
+    SP(sf) = g->orig_rsp;
+    sysdep_restore_fp_state(sf);
+    sanitizer_start_switch_fiber(NULL);
+    __builtin_longjmp(sf->ctx, 1);
 }
 
 static void global_state_terminate(global_state *g) {
