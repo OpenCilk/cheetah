@@ -3,6 +3,7 @@
 #include "global.h"
 
 #include <assert.h>
+#include <search.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -19,6 +20,156 @@ CHEETAH_INTERNAL unsigned int debug_level = 0;
    and written to stderr in batches of about 5,000 bytes. */
 static size_t alert_log_size = 0, alert_log_offset = 0;
 static char *alert_log = NULL;
+
+/**
+ * Represents a usable alert level with a human-readable
+ * <code>name<\code> and the corresponding
+ * <code>mask_value<\code> used by the runtime.
+ **/
+typedef struct __alert_level_t {
+    const char *name;
+    int mask_value;
+} alert_level_t;
+
+/**
+ * A table relating a human-readable alert level name to
+ * the corresponding bitfield value used by the runtime.
+ **/
+static const alert_level_t alert_table[] = {
+    {"none", ALERT_NONE},
+    {"fiber", ALERT_FIBER},
+    {"memory", ALERT_MEMORY},
+    {"sync", ALERT_SYNC},
+    {"sched", ALERT_SCHED},
+    {"steal", ALERT_STEAL},
+    {"return", ALERT_RETURN},
+    {"except", ALERT_EXCEPT},
+    {"cframe", ALERT_CFRAME},
+    {"reduce", ALERT_REDUCE},
+    {"reduce_id", ALERT_REDUCE_ID},
+    {"boot", ALERT_BOOT},
+    {"start", ALERT_START},
+    {"closure", ALERT_CLOSURE},
+    {"nobuf", ALERT_NOBUF},
+};
+
+/**
+ * Compare the <code>name<\code> of the <code>alert_level_t<\code> pointed to by
+ * <code>left<code> to the <code>name<\code> of the <code>alert_level_t<\code>
+ * pointed to by <code>right<\code>, ignoring case.
+ *
+ * @param left   <code>alert_level_t<\code> to compare
+ * @param right  <code>alert_level_t<\code> to compare
+ *
+ * @return       Ignoring case, returns negative if left->name < right->name,
+ *               0 if they are equal, or positive if left->name > right->name
+ **/
+static int alert_name_comparison(const void *left, const void *right) {
+    const alert_level_t *al_left = (const alert_level_t*)left;
+    const alert_level_t *al_right = (const alert_level_t*)right;
+
+    // TODO: If Windows, use _stricmp
+    return strcasecmp(al_left->name, al_right->name);
+}
+
+/**
+ * Parse an alert level represented by a string into the proper bitmask value.
+ * If the string is not represented in <code>alert_table<\code>, then prints
+ * an error and returns ALERT_NONE.
+ *
+ * @param alert_str  A C string to attempt to parse
+ *
+ * @return           The bitmask corresponding to <code>alert_str<\code>, if in
+ *                   <code>alert_table<\code>, else ALERT_NONE.
+ **/
+static int parse_alert_level_str(const char *const alert_str) {
+    size_t table_size = sizeof(alert_table) / sizeof(alert_table[0]);
+
+    const alert_level_t search_key = { .name = alert_str, .mask_value = ALERT_NONE };
+
+    // The table is small, and performance isn't critical for loading
+    // debug options, so use linear search (lfind)
+    alert_level_t *table_element =
+        (alert_level_t*)lfind(&search_key, alert_table, &table_size,
+                              sizeof(search_key), alert_name_comparison
+        );
+
+    if (table_element != NULL) {
+        return table_element->mask_value;
+    }
+    
+    fprintf(stderr, "Invalid CILK_ALERT value: %s\n", alert_str);
+
+    return ALERT_NONE;
+}
+
+/**
+ * Parse a CSV line representing which alert levels should be enabled, and
+ * return the bitmask representing all of the passed in options. If the CSV line
+ * is a single number, then treat that number as the bitmask.
+ * <code>alert_csv<\code> is copied, as <code>strtok<\code> is used, and it
+ * modifies its arguments.
+ *
+ * @param alert_csv  A C string that is either a comma-separated list of alert
+ *                   level names -or- a single number.
+ *
+ * @return           The bitmask representing the passed in
+ *                   <code>alert_csv<\code>. If <code>alert_csv<\code> cannot
+ *                   be copied, then returns the current
+ *                   <code>alert_level<\code> value.
+ **/
+static int parse_alert_level_csv(const char *const alert_csv) {
+    int new_alert_lvl = ALERT_NONE;
+
+    size_t csv_len = strlen(alert_csv);
+
+    // strtok modifies the passed in string, so copy alert_csv and use
+    // the copy instead
+    char *alert_csv_cpy = strdup(alert_csv);
+    if (!alert_csv_cpy) {
+        // Non-critical error, so just print a warning
+        fprintf(stderr, "Cilk: unable to copy CILK_ALERT settings (%s)\n",
+                strerror(errno)
+               );
+        return alert_level;
+    }
+
+    char *alert_str = strtok(alert_csv_cpy, ",");
+
+    if (alert_str) {
+        if (strlen(alert_str) == csv_len) {
+            // Can be a number, as there is no other option in the string
+            char *tol_end = alert_csv_cpy;
+            new_alert_lvl = strtol(alert_csv_cpy, &tol_end, 0);
+            if (new_alert_lvl == 0 && (*tol_end != '\0' || tol_end == alert_csv_cpy)) {
+                new_alert_lvl |= parse_alert_level_str(alert_str);
+            }
+        } else {
+            for (; alert_str; alert_str = strtok(NULL, ",")) {
+                new_alert_lvl |= parse_alert_level_str(alert_str);
+            }
+        }
+    }
+
+    free(alert_csv_cpy);
+
+    return new_alert_lvl;
+}
+
+/**
+ * Parse a CSV line representing which alert levels should be enabled, and
+ * and set the current <code>alert_level<\code> bitamsk based on the result.
+ * If the passed in C string is NULL, then no change is made.
+ *
+ * @param alert_csv  A C string that is either a comma-separated list of alert
+ *                   level names -or- a single number.
+ **/
+void set_alert_level_from_str(const char *const alert_csv) {
+    if (alert_csv) {
+        int new_alert_lvl = parse_alert_level_csv(alert_csv);
+        set_alert_level(new_alert_lvl);
+    }
+}
 
 void set_alert_level(unsigned int level) {
     alert_level = level;
