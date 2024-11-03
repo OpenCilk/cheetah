@@ -457,7 +457,8 @@ function(add_cheetah_bitcode name)
         set(output_name_${libname} ${libname}${CHEETAH_OS_SUFFIX})
         set(sources_${libname} ${LIB_SOURCES})
         list(APPEND libnames ${libname})
-        set(extra_cflags_${libname} ${DARWIN_${os}_CFLAGS} "-arch" ${arch} ${LIB_CFLAGS})
+        set(extra_cflags_${libname} ${DARWIN_${os}_CFLAGS} ${LIB_CFLAGS})
+        set(${libname}_arch ${arch})
         get_cheetah_output_dir(${CHEETAH_DEFAULT_TARGET_ARCH} output_dir_${libname})
         get_cheetah_install_dir(${CHEETAH_DEFAULT_TARGET_ARCH} install_dir_${libname})
       endforeach()
@@ -509,6 +510,10 @@ function(add_cheetah_bitcode name)
     target_compile_options(${libname}_compile PUBLIC "$<$<CONFIG:RELEASE>:${CHEETAH_RELEASE_OPTIONS}>")
     set_property(TARGET ${libname}_compile APPEND PROPERTY
       COMPILE_DEFINITIONS ${LIB_DEFS})
+    if (APPLE)
+      set_target_properties(${libname}_compile PROPERTIES
+        OSX_ARCHITECTURES "${${libname}_arch}")
+    endif()
     set(output_file_${libname} lib${output_name_${libname}}.bc)
     add_custom_command(
       OUTPUT ${output_dir_${libname}}/${output_file_${libname}}
