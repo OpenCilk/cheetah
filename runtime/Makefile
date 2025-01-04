@@ -8,7 +8,7 @@ REDUCER_DEF = -DREDUCER_MODULE
 RESOURCE_DIR=$(realpath ..)
 MAIN = $(RTS_LIBDIR)/$(RTS_LIB)
 BITCODE_ABI = $(MAIN)-abi.bc
-SRCS = $(filter-out pedigree_ext.c, $(filter-out $(PEDIGREE_LIB_SRC).c, $(filter-out $(PERSON_C_SRC).c, $(filter-out $(PERSON_CPP_SRC).c, $(wildcard *.c)))))
+SRCS = $(filter-out pedigree_ext.c $(PEDIGREE_LIB_SRC).c $(PERSON_C_SRC).c $(PERSON_CPP_SRC).cpp, $(wildcard *.c))
 HDRS = $(wildcard *.h)
 OBJS = $(patsubst %.c,./build/%.o,$(SRCS))
 INCLUDES = -I../include/
@@ -27,25 +27,25 @@ PEDIGREE_LIB_SRC = pedigree_lib
 all: build $(RTS_LIBDIR) $(MAIN).a $(MAIN).so $(PERSON_C).a $(PERSON_C).so $(PERSON_CPP).a $(PERSON_CPP).so $(BITCODE_ABI)
 
 $(MAIN).a: $(OBJS)
-	ar rcs $@ $^
+	$(AR) rcs $@ $^
 
 $(MAIN).so: $(OBJS)
-	$(CC) -shared -o $@ $^ -lpthread
+	$(CC) -shared -o $@ $^
 
 $(PERSON_C).a: build/$(PERSON_C_SRC).o
-	ar rcs $@ $^
+	$(AR) rcs $@ $^
 
 $(PERSON_C).so: build/$(PERSON_C_SRC).o
-	$(CC) -shared -o $@ $^
+	$(CC) -shared -o $@ $^ -L$(RTS_LIBDIR) -lopencilk
 
 $(PERSON_CPP).a: build/$(PERSON_CPP_SRC).o
-	ar rcs $@ $^
+	$(AR) rcs $@ $^
 
 $(PERSON_CPP).so: ./build/$(PERSON_CPP_SRC).o
-	$(CC) -shared -o $@ $^
+	$(CXX) -shared -o $@ $^ -L$(RTS_LIBDIR) -lopencilk
 
 $(PEDIGREE_LIB).a: build/$(PEDIGREE_LIB_SRC).o
-	ar rcs $@ $^
+	$(AR) rcs $@ $^
 
 $(PEDIGREE_LIB).so: ./build/$(PEDIGREE_LIB_SRC).o
 	$(CC) -shared -o $@ $^
@@ -59,8 +59,11 @@ $(RTS_LIBDIR):
 build/%.o: %.c $(HDRS)
 	$(CC) -c $(OPTIONS) -o $@ $<
 
+build/%.o: %.cpp $(HDRS)
+	$(CXX) -c $(OPTIONS) -o $@ $<
+
 build/cilk2c_inlined.bc: cilk2c_inlined.c $(HDRS)
-	$(CC) -O3 -DCHEETAH_API="" -DCHEETAH_INTERNAL_NORETURN='__attribute__((noreturn))' -DCHEETAH_INTERNAL="" -DCILK_DEBUG=0 -c -emit-llvm $(INCLUDES) -gdwarf-4 -g -o $@ $<
+	$(CC) $(OPT) -DCHEETAH_API="" -DCHEETAH_INTERNAL_NORETURN='__attribute__((noreturn))' -DCHEETAH_INTERNAL="" -DCILK_DEBUG=0 -c -emit-llvm $(INCLUDES) -gdwarf-4 -g -o $@ $<
 
 $(BITCODE_ABI) : build/cilk2c_inlined.bc
 	cp $< $@

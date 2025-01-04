@@ -1,4 +1,4 @@
-#include <stdint.h>
+#include <cstdint>
 #include <unwind.h>
 
 typedef _Unwind_Reason_Code (*__personality_routine)(
@@ -6,6 +6,7 @@ typedef _Unwind_Reason_Code (*__personality_routine)(
     struct _Unwind_Exception *exception_object,
     struct _Unwind_Context *context);
 
+extern "C" {
 _Unwind_Reason_Code __gxx_personality_v0(int version, _Unwind_Action actions,
                                          uint64_t exception_class,
                                          struct _Unwind_Exception *ue_header,
@@ -29,4 +30,5 @@ _Unwind_Reason_Code __cilk_personality_v0(int version, _Unwind_Action actions,
                                           struct _Unwind_Context *context) {
     return __cilk_personality_cpp_v0(version, actions, exception_class,
                                      ue_header, context);
+}
 }
