@@ -358,7 +358,7 @@ function(add_cheetah_runtime name type)
         if (NEED_EXPLICIT_ADHOC_CODESIGN)
           add_custom_command(TARGET ${libname}
             POST_BUILD
-            COMMAND codesign --sign - $<TARGET_FILE:${libname}>
+            COMMAND codesign --sign - -f $<TARGET_FILE:${libname}>
             WORKING_DIRECTORY ${CHEETAH_OUTPUT_LIBRARY_DIR}
           )
         endif()
