@@ -118,7 +118,7 @@ static void parse_rts_environment(global_state *g) {
     if (g->options.nproc == 0) {
         // use the number of cores online right now
         int available_cores = 0;
-#ifdef CPU_SETSIZE
+#if defined(CPU_SETSIZE) && !defined(ANDROID)
         cpu_set_t process_mask;
         // get the mask from the parent thread (master thread)
         int err = pthread_getaffinity_np(pthread_self(), sizeof(process_mask),
