@@ -8,6 +8,8 @@ CXX=$(COMPILER_BASE)clang++
 LINK_CC=$(CC)
 LLVM_LINK=$(COMPILER_BASE)llvm-link
 LLVM_CONFIG=$(COMPILER_BASE)llvm-config
+AR=ar
+#AR=$(COMPILER_BASE)llvm-ar
 #
 ABI_DEF?=-DOPENCILK_ABI
 # If use cheetah
@@ -20,7 +22,8 @@ RTS_PEDIGREE_LIB?=libopencilk-pedigrees
 # All runtime libraries and associated files will be placed in
 # `/oath/to/cheetah/lib/<target-triple>`, so that the compiler can easily find
 # all of those files using the flag --opencilk-resource-dir=/path/to/cheetah.
-RTS_LIBDIR_NAME?=lib/$(shell $(LLVM_CONFIG) --host-target)
+TARGET?=$(shell $(LLVM_CONFIG) --host-target)
+RTS_LIBDIR_NAME?=lib/$(TARGET)
 RESOURCE_DIR?=$(CONFIG_DIR)
 RTS_LIBDIR?=$(RESOURCE_DIR)/$(RTS_LIBDIR_NAME)
 RTS_OPT?=-fopencilk --opencilk-resource-dir=$(RESOURCE_DIR)

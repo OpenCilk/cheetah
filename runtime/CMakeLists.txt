@@ -31,7 +31,7 @@ set(CHEETAH_PERSONALITY_C_SOURCES
 )
 
 set(CHEETAH_PERSONALITY_CPP_SOURCES
-  personality-cpp.c
+  personality-cpp.cpp
 )
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
