@@ -371,6 +371,16 @@ __cilk_helper_epilogue_exn(__cilkrts_stack_frame *sf,
     __cilkrts_pause_frame(sf, parent, exn, spawner);
 }
 
+// Internal helper function to ensure the __cilkrts_stack_frame type is present
+// in the bitcode file.  Does not end up in compiled Cilk code nor the OpenCilk
+// runtime library.
+CHEETAH_INTERNAL __cilkrts_stack_frame
+__internal_preserve_stack_frame_type_helper(void) {
+    __cilkrts_stack_frame sf;
+    __cilkrts_enter_frame(&sf);
+    return sf;
+}
+
 /// Computes a grainsize for a cilk_for loop, using the following equation:
 ///
 ///     grainsize = min(2048, ceil(n / (8 * nworkers)))
