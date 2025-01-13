@@ -64,8 +64,8 @@ public:
 
 template<typename Char, typename Traits = std::char_traits<Char>>
   using ostream_reducer = ostream_view<Char, Traits>
-    _Hyperobject(&ostream_view<char, std::char_traits<char>>::identity,
-                 &ostream_view<char, std::char_traits<char>>::reduce);
+    _Hyperobject(&ostream_view<Char, std::char_traits<Char>>::identity,
+                 &ostream_view<Char, std::char_traits<Char>>::reduce);
 
 } // namespace cilk
 
