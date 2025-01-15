@@ -152,7 +152,7 @@ void dump_memory_state(FILE *out, global_state *g) {
     dump_buckets(out, &g->im_desc);
     for (unsigned int i = 0; i < g->nworkers; i++) {
         __cilkrts_worker *w = g->workers[i];
-        if (!w)
+        if (!w || !w->l)
             continue;
         fprintf(out, "Worker %u:\n", i);
         dump_buckets(out, &w->l->im_desc);
