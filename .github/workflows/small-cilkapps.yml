@@ -34,6 +34,7 @@ jobs:
       uses: OpenCilk/actions/build-opencilk-project@main
       with:
         projects: clang
+        extra_cmake_args: -DLLVM_TARGETS_TO_BUILD=host
         os_list: '${{ matrix.os }}'
     - name: Build cheetah
       id: build-cheetah
