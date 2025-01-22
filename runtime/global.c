@@ -57,14 +57,16 @@ static global_state *global_state_allocate() {
     cilk_mutex_init(&g->index_lock);
     cilk_mutex_init(&g->print_lock);
 
-    atomic_store_explicit(&g->cilkified_futex, 0, memory_order_relaxed);
+    atomic_store_explicit(&g->cilkified, 0, memory_order_relaxed);
 
+#if !USE_FUTEX
     // TODO: Convert to cilk_* equivalents
     pthread_mutex_init(&g->cilkified_lock, NULL);
     pthread_cond_init(&g->cilkified_cond_var, NULL);
 
     pthread_mutex_init(&g->disengaged_lock, NULL);
     pthread_cond_init(&g->disengaged_cond_var, NULL);
+#endif
 
     return g;
 }

@@ -69,15 +69,14 @@ struct global_state {
 
     // These fields are shared between the boss thread and a couple workers.
 
-    // NOTE: We can probably update the runtime system so that, when it uses
-    // cilkified_futex, it does not also use the cilkified field.  But the
-    // cilkified field is helpful for debugging, and it seems unlikely that this
-    // optimization would improve performance.
-    _Atomic uint32_t cilkified_futex __attribute__((aligned(CILK_CACHE_LINE)));
-    atomic_bool cilkified;
+#if USE_FUTEX
+    futex_t cilkified __attribute__((aligned(CILK_CACHE_LINE)));
+#else
+    futex_t cilkified;
 
     pthread_mutex_t cilkified_lock;
     pthread_cond_t cilkified_cond_var;
+#endif
 
     // These fields are shared among all workers in the work-stealing loop.
 
@@ -98,10 +97,11 @@ struct global_state {
 #define GET_SENTINEL(D) ((D) & 0xffffffff)
 #define DISENGAGED_SENTINEL(A, B) (((uint64_t)(A) << 32) | (uint32_t)(B))
 
-    _Atomic uint32_t disengaged_thieves_futex __attribute__((aligned(CILK_CACHE_LINE)));
-
+    futex_t disengaged_thieves __attribute__((aligned(CILK_CACHE_LINE)));
+#if !USE_FUTEX
     pthread_mutex_t disengaged_lock;
     pthread_cond_t disengaged_cond_var;
+#endif
 
     cilk_mutex print_lock; // global lock for printing messages
 

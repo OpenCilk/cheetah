@@ -312,7 +312,7 @@ maybe_reengage_workers(global_state *const rts, worker_id self,
         if (request == 0 && counts.sentinels == 0 &&
             counts.active < (int32_t)nworkers) {
             int32_t current_request = atomic_load_explicit(
-                &rts->disengaged_thieves_futex, memory_order_relaxed);
+                &rts->disengaged_thieves, memory_order_relaxed);
             if (current_request < ((counts.active + 3) / 4)) {
                 request = ((counts.active + 3) / 4) - current_request;
                 WHEN_SCHED_STATS(w->l->stats.onesen_rqsts += request);

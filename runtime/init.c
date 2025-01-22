@@ -659,6 +659,7 @@ static void global_state_deinit(global_state *g) {
     cilk_internal_malloc_global_destroy(g); // internal malloc last
     cilk_mutex_destroy(&(g->print_lock));
     cilk_mutex_destroy(&(g->index_lock));
+#if !USE_FUTEX
     // TODO: Convert to cilk_* equivalents
     pthread_mutex_destroy(&g->cilkified_lock);
     pthread_cond_destroy(&g->cilkified_cond_var);
@@ -666,6 +667,7 @@ static void global_state_deinit(global_state *g) {
     /* pthread_cond_destroy(&g->start_thieves_cond_var); */
     pthread_mutex_destroy(&g->disengaged_lock);
     pthread_cond_destroy(&g->disengaged_cond_var);
+#endif
     free(g->worker_args);
     g->worker_args = NULL;
     free(g->workers);

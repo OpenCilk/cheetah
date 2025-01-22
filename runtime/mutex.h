@@ -9,8 +9,27 @@ typedef union cilk_mutex cilk_mutex;
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdint.h>
 
 #include "rts-config.h"
+
+// Linux uses uint32_t.  OpenBSD copies Linux.
+// FreeBSD uses long.
+// Other systems don't use the futex interface and can pick either.
+
+#ifdef __FreeBSD__
+typedef long futex_val_t;
+#define FUTEX_MAX LONG_MAX
+#define USE_FUTEX 1
+#else
+typedef uint32_t futex_val_t;
+#define FUTEX_MAX 0x7fffffff
+#if defined __linux__ || defined __OpenBSD__
+#define USE_FUTEX 1
+#endif
+#endif
+
+typedef _Atomic futex_val_t futex_t;
 
 #ifndef __APPLE__
 #define USE_SPINLOCK 1
@@ -85,4 +104,29 @@ static inline void cilk_mutex_destroy(cilk_mutex *lock) {
     pthread_mutex_destroy(&(lock->posix));
 #endif
 }
-#endif
+
+#if USE_FUTEX
+// Wait for *obj to be unequal to val.
+extern void cond_wait(futex_t *obj, futex_val_t val);
+// Set *obj = val and wake up one waiter.
+extern void cond_post(futex_t *obj, futex_val_t val);
+// Set *obj = val and wake up all waiters.
+extern void cond_broadcast(futex_t *obj, futex_val_t val);
+// Wake up COUNT waiters.  The value has already been updated.
+extern void cond_wake_some(futex_t *obj, int count);
+#else
+extern void cond_wait(futex_t *obj, futex_val_t val,
+                      pthread_cond_t *cond,
+                      pthread_mutex_t *mutex);
+extern void cond_post(futex_t *obj, futex_val_t val,
+                      pthread_cond_t *cond,
+                      pthread_mutex_t *mutex);
+extern void cond_broadcast(futex_t *obj, futex_val_t val,
+                           pthread_cond_t *cond,
+                           pthread_mutex_t *mutex);
+// This function is called with the lock held.
+extern void cond_wake_some_locked(futex_t *obj, futex_val_t val,
+                                  pthread_cond_t *cond, int count);
+#endif // USE_FUTEX
+#endif // _CILK_MUTEX_H
+

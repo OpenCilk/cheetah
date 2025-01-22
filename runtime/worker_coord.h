@@ -7,68 +7,10 @@
 #include <stdatomic.h>
 #include <stdint.h>
 #include <limits.h>
-
-#ifdef __linux__
-#include <errno.h>
-#include <linux/futex.h>
-#include <sys/syscall.h>
-#include <unistd.h>
-#endif
+#include <err.h>
 
 #include "global.h"
-
-#define USER_USE_FUTEX 1
-#ifdef __linux__
-#define USE_FUTEX USER_USE_FUTEX
-#else
-#define USE_FUTEX 0
-#endif
-
-#if USE_FUTEX
-//=========================================================
-// Primitive futex operations.
-//=========================================================
-#define errExit(msg)                                                           \
-    do {                                                                       \
-        perror(msg);                                                           \
-        exit(EXIT_FAILURE);                                                    \
-    } while (false)
-
-// Convenience wrapper for futex syscall.
-static inline long futex(_Atomic uint32_t *uaddr, int futex_op, uint32_t val,
-                         const struct timespec *timeout, uint32_t *uaddr2,
-                         uint32_t val3) {
-    return syscall(SYS_futex, uaddr, futex_op, val, timeout, uaddr2, val3);
-}
-
-// Wait for the futex pointed to by `futexp` to become 1.
-static inline void fwait(_Atomic uint32_t *futexp) {
-    // We don't worry about spurious wakeups here, since we ensure that all
-    // calls to fwait are contained in their own loops that effectively check
-    // for spurious wakeups.
-    long s = futex(futexp, FUTEX_WAIT_PRIVATE, 0, NULL, NULL, 0);
-    if (__builtin_expect(s == -1 && errno != EAGAIN, false))
-        errExit("futex-FUTEX_WAIT");
-}
-
-// Set the futex pointed to by `futexp` to 1, and wake up 1 thread waiting on
-// that futex.
-static inline void fpost(_Atomic uint32_t *futexp) {
-    atomic_store_explicit(futexp, 1, memory_order_release);
-    long s = futex(futexp, FUTEX_WAKE_PRIVATE, 1, NULL, NULL, 0);
-    if (s == -1)
-        errExit("futex-FUTEX_WAKE");
-}
-
-// Set the futex pointed to by `futexp` to 1, and wake up all threads waiting on
-// that futex.
-static inline void fbroadcast(_Atomic uint32_t *futexp) {
-    atomic_store_explicit(futexp, 1, memory_order_release);
-    long s = futex(futexp, FUTEX_WAKE_PRIVATE, INT_MAX, NULL, NULL, 0);
-    if (s == -1)
-        errExit("futex-FUTEX_WAKE");
-}
-#endif
+#include "mutex.h"
 
 //=========================================================
 // Common internal interface for managing execution of workers.
@@ -98,22 +40,15 @@ __attribute__((always_inline)) static inline void busy_pause(void) {
 static inline void set_cilkified(global_state *g) {
     // Set g->cilkified = 1, indicating that the execution is now cilkified.
     atomic_store_explicit(&g->cilkified, 1, memory_order_release);
-#if USE_FUTEX
-    atomic_store_explicit(&g->cilkified_futex, 0, memory_order_release);
-#endif
 }
 
 // Mark the computation as no longer cilkified and signal the thread that
 // originally cilkified the execution.
 static inline void signal_uncilkified(global_state *g) {
 #if USE_FUTEX
-    atomic_store_explicit(&g->cilkified, 0, memory_order_release);
-    fpost(&g->cilkified_futex);
+    cond_post(&g->cilkified, 0);
 #else
-    pthread_mutex_lock(&(g->cilkified_lock));
-    atomic_store_explicit(&g->cilkified, 0, memory_order_release);
-    pthread_cond_signal(&g->cilkified_cond_var);
-    pthread_mutex_unlock(&(g->cilkified_lock));
+    cond_post(&g->cilkified, 0, &g->cilkified_cond_var, &g->cilkified_lock);
 #endif
 }
 
@@ -121,30 +56,16 @@ static inline void signal_uncilkified(global_state *g) {
 // region.
 static inline void wait_while_cilkified(global_state *g) {
     unsigned int fail = 0;
-    while (fail++ < BUSY_LOOP_SPIN) {
+    do {
         if (!atomic_load_explicit(&g->cilkified, memory_order_acquire)) {
             return;
         }
         busy_pause();
-    }
+    } while (fail++ < BUSY_LOOP_SPIN);
 #if USE_FUTEX
-    while (atomic_load_explicit(&g->cilkified, memory_order_acquire)) {
-        fwait(&g->cilkified_futex);
-    }
+    cond_wait(&g->cilkified, 1); // Wait as long as cilkified == 1.
 #else
-    // TODO: Convert pthread_mutex_lock, pthread_mutex_unlock, and
-    // pthread_cond_wait to cilk_* equivalents.
-    pthread_mutex_lock(&(g->cilkified_lock));
-
-    // There may be a *very unlikely* scenario where the Cilk computation has
-    // already been completed before even starting to wait.  In that case, do
-    // not wait and continue directly.  Also handle spurious wakeups with a
-    // 'while' instead of an 'if'.
-    while (atomic_load_explicit(&g->cilkified, memory_order_acquire)) {
-        pthread_cond_wait(&(g->cilkified_cond_var), &(g->cilkified_lock));
-    }
-
-    pthread_mutex_unlock(&(g->cilkified_lock));
+    cond_wait(&g->cilkified, 1, &g->cilkified_cond_var, &g->cilkified_lock);
 #endif
 }
 
@@ -157,8 +78,7 @@ static inline void reset_disengaged_var(global_state *g) {
 #if !USE_FUTEX
     pthread_mutex_lock(&g->disengaged_lock);
 #endif
-    atomic_store_explicit(&g->disengaged_thieves_futex, 0,
-                          memory_order_release);
+    atomic_store_explicit(&g->disengaged_thieves, 0, memory_order_release);
 #if !USE_FUTEX
     pthread_mutex_unlock(&g->disengaged_lock);
 #endif
@@ -177,56 +97,51 @@ static inline void request_more_thieves(global_state *g, uint32_t count) {
     // This step synchronizes with concurrent calls to request_more_thieves and
     // concurrent calls to try_to_disengage_thief.
     while (true) {
-        uint32_t disengaged_thieves_futex = atomic_load_explicit(
-            &g->disengaged_thieves_futex, memory_order_acquire);
+        futex_val_t disengaged_thieves = atomic_load_explicit(
+            &g->disengaged_thieves, memory_order_acquire);
 
-        int32_t max_to_wake = max_requests - disengaged_thieves_futex;
+        int32_t max_to_wake = max_requests - disengaged_thieves;
         if (max_to_wake <= 0)
             return;
         uint64_t to_wake = max_to_wake < (int32_t)count ? max_to_wake : count;
 
         if (atomic_compare_exchange_strong_explicit(
-                &g->disengaged_thieves_futex, &disengaged_thieves_futex,
-                disengaged_thieves_futex + to_wake, memory_order_release,
+                &g->disengaged_thieves, &disengaged_thieves,
+                disengaged_thieves + to_wake, memory_order_release,
                 memory_order_relaxed)) {
             // We successfully updated the futex.  Wake the thief threads
             // waiting on this futex.
-            long s = futex(&g->disengaged_thieves_futex, FUTEX_WAKE_PRIVATE,
-                           to_wake, NULL, NULL, 0);
-            if (s == -1)
-                errExit("futex-FUTEX_WAKE");
+            cond_wake_some(&g->disengaged_thieves, to_wake);
             return;
         }
     }
 #else
     pthread_mutex_lock(&g->disengaged_lock);
-    uint32_t disengaged_thieves_futex = atomic_load_explicit(
-        &g->disengaged_thieves_futex, memory_order_acquire);
+    uint32_t disengaged_thieves = atomic_load_explicit(
+        &g->disengaged_thieves, memory_order_acquire);
 
-    int32_t max_to_wake = max_requests - disengaged_thieves_futex;
+    int32_t max_to_wake = max_requests - disengaged_thieves;
     if (max_to_wake <= 0) {
         pthread_mutex_unlock(&g->disengaged_lock);
         return;
     }
     uint32_t to_wake = max_to_wake < (int32_t)count ? max_to_wake : count;
-    atomic_store_explicit(&g->disengaged_thieves_futex,
-                          disengaged_thieves_futex + to_wake,
-                          memory_order_release);
-    while (to_wake-- > 0) {
-        pthread_cond_signal(&g->disengaged_cond_var);
-    }
+    cond_wake_some_locked(&g->disengaged_thieves,
+                          disengaged_thieves + to_wake,
+                          &g->cilkified_cond_var, to_wake);
     pthread_mutex_unlock(&g->disengaged_lock);
 #endif
 }
 
 #if USE_FUTEX
-static inline uint32_t thief_disengage_futex(_Atomic uint32_t *futexp) {
+static inline uint32_t thief_disengage_futex(futex_t *cilkified,
+                                             futex_t *futexp) {
     // This step synchronizes with calls to request_more_thieves.
     while (true) {
         // Decrement the futex when woken up.  The loop and compare-exchange are
         // designed to handle cases where multiple threads waiting on the futex
         // were woken up and where there may be spurious wakeups.
-        uint32_t val;
+        futex_val_t val;
         while ((val = atomic_load_explicit(futexp, memory_order_relaxed)) > 0) {
             if (atomic_compare_exchange_weak_explicit(futexp, &val, val - 1,
                                                       memory_order_release,
@@ -236,10 +151,13 @@ static inline uint32_t thief_disengage_futex(_Atomic uint32_t *futexp) {
             busy_loop_pause();
         }
 
-        // Wait on the futex.
-        long s = futex(futexp, FUTEX_WAIT_PRIVATE, 0, NULL, NULL, 0);
-        if (__builtin_expect(s == -1 && errno != EAGAIN, false))
-            errExit("futex-FUTEX_WAIT");
+        // The futex was 0 when the loop above terminated.
+        // Possibly it is 0 because Cilk is over.
+        // XXX Is there still a race here?
+        if (!atomic_load_explicit(cilkified, memory_order_acquire))
+            return 0;
+
+        cond_wait(futexp, 0);
     }
 }
 #else
@@ -261,9 +179,9 @@ static inline uint32_t thief_disengage_cond_var(_Atomic uint32_t *count,
 #endif
 static inline uint32_t thief_disengage(global_state *g) {
 #if USE_FUTEX
-    return thief_disengage_futex(&g->disengaged_thieves_futex);
+    return thief_disengage_futex(&g->cilkified, &g->disengaged_thieves);
 #else
-    return thief_disengage_cond_var(&g->disengaged_thieves_futex,
+    return thief_disengage_cond_var(&g->disengaged_thieves,
                                     &g->disengaged_lock,
                                     &g->disengaged_cond_var);
 #endif
@@ -272,18 +190,10 @@ static inline uint32_t thief_disengage(global_state *g) {
 // Signal to all disengaged thief threads to resume work-stealing.
 static inline void wake_all_disengaged(global_state *g) {
 #if USE_FUTEX
-    atomic_store_explicit(&g->disengaged_thieves_futex, INT_MAX,
-                          memory_order_release);
-    long s = futex(&g->disengaged_thieves_futex, FUTEX_WAKE_PRIVATE, INT_MAX,
-                   NULL, NULL, 0);
-    if (s == -1)
-        errExit("futex-FUTEX_WAKE");
+    cond_broadcast(&g->disengaged_thieves, FUTEX_MAX);
 #else
-    pthread_mutex_lock(&g->disengaged_lock);
-    atomic_store_explicit(&g->disengaged_thieves_futex, INT_MAX,
-                          memory_order_release);
-    pthread_cond_broadcast(&g->disengaged_cond_var);
-    pthread_mutex_unlock(&g->disengaged_lock);
+    cond_broadcast(&g->disengaged_thieves, FUTEX_MAX,
+                   &g->disengaged_cond_var, &g->disengaged_lock);
 #endif
 }
 
@@ -304,8 +214,8 @@ static inline uint32_t thief_wait(global_state *g) {
 // already, update the global state to indicate that this worker is engaged in
 // work stealing.
 static inline bool thief_should_wait(global_state *g) {
-    _Atomic uint32_t *futexp = &g->disengaged_thieves_futex;
-    uint32_t val = atomic_load_explicit(futexp, memory_order_relaxed);
+    futex_t *futexp = &g->disengaged_thieves;
+    futex_val_t val = atomic_load_explicit(futexp, memory_order_relaxed);
 #if USE_FUTEX
     while (val > 0) {
         if (atomic_compare_exchange_weak_explicit(futexp, &val, val - 1,
@@ -337,18 +247,10 @@ static inline bool thief_should_wait(global_state *g) {
 // g->terminate == 1).
 static inline void wake_thieves(global_state *g) {
 #if USE_FUTEX
-    atomic_store_explicit(&g->disengaged_thieves_futex, g->nworkers - 1,
-                          memory_order_release);
-    long s = futex(&g->disengaged_thieves_futex, FUTEX_WAKE_PRIVATE, INT_MAX,
-                   NULL, NULL, 0);
-    if (s == -1)
-        errExit("futex-FUTEX_WAKE");
+    cond_broadcast(&g->disengaged_thieves, g->nworkers - 1);
 #else
-    pthread_mutex_lock(&g->disengaged_lock);
-    atomic_store_explicit(&g->disengaged_thieves_futex, g->nworkers - 1,
-                          memory_order_release);
-    pthread_cond_broadcast(&g->disengaged_cond_var);
-    pthread_mutex_unlock(&g->disengaged_lock);
+    cond_broadcast(&g->disengaged_thieves, g->nworkers - 1,
+                   &g->disengaged_cond_var, &g->disengaged_lock);
 #endif
 }
 
