@@ -7,6 +7,7 @@
 #include <time.h>
 
 #include "cilk-internal.h"
+#include "efficiency.h"
 #include "global.h"
 #include "rts-config.h"
 #include "sched_stats.h"
@@ -38,12 +39,6 @@
 // Number of attempted steals the thief should do each time it copies the
 // worker state.  ATTEMPTS must divide SENTINEL_THRESHOLD.
 #define ATTEMPTS 4
-
-// Information for histories of efficient and inefficient worker-count samples
-// and for sentinel counts.
-typedef uint32_t history_t;
-#define HISTORY_LENGTH 32
-#define SENTINEL_COUNT_HISTORY 4
 
 // Amount of history that must be efficient/inefficient to reengage/disengage
 // workers.
@@ -199,7 +194,7 @@ get_worker_counts(uint64_t disengaged_sentinel, unsigned int nworkers) {
 
 // Check if the given worker counts are inefficient, i.e., if active <
 // sentinels.
-__attribute__((const, always_inline)) static inline history_t
+__attribute__((const, always_inline)) static inline history_sample_t
 is_inefficient(worker_counts counts) {
     return counts.sentinels > 1 && counts.active >= 1 &&
            counts.active * AS_RATIO < counts.sentinels * 1;
@@ -207,7 +202,7 @@ is_inefficient(worker_counts counts) {
 
 // Check if the given worker counts are efficient, i.e., if active >= 2 *
 // sentinels.
-__attribute__((const, always_inline)) static inline history_t
+__attribute__((const, always_inline)) static inline history_sample_t
 is_efficient(worker_counts counts) {
     return (counts.active * 1 >= counts.sentinels * AS_RATIO) ||
            (counts.sentinels <= 1);
@@ -232,8 +227,8 @@ maybe_reengage_workers(global_state *const rts, worker_id self,
                        unsigned int nworkers, __cilkrts_worker *const w,
                        unsigned int fails,
                        unsigned int *const sample_threshold,
-                       history_t *const inefficient_history,
-                       history_t *const efficient_history,
+                       history_sample_t *const inefficient_history,
+                       history_sample_t *const efficient_history,
                        unsigned int *const sentinel_count_history,
                        unsigned int *const sentinel_count_history_tail,
                        unsigned int *const recent_sentinel_count) {
@@ -251,17 +246,17 @@ maybe_reengage_workers(global_state *const rts, worker_id self,
             get_worker_counts(disengaged_sentinel - 1, nworkers);
         CILK_ASSERT(counts.active >= 1);
 
-        history_t my_efficient_history = *efficient_history;
-        history_t my_inefficient_history = *inefficient_history;
+        history_sample_t my_efficient_history = *efficient_history;
+        history_sample_t my_inefficient_history = *inefficient_history;
         unsigned int my_sentinel_count = *recent_sentinel_count;
         if (fails >= *sample_threshold) {
             // Update the inefficient history.
-            history_t curr_ineff = is_inefficient(counts);
+            history_sample_t curr_ineff = is_inefficient(counts);
             my_inefficient_history = (my_inefficient_history >> 1) |
                                      (curr_ineff << (HISTORY_LENGTH - 1));
 
             // Update the efficient history.
-            history_t curr_eff = is_efficient(counts);
+            history_sample_t curr_eff = is_efficient(counts);
             my_efficient_history = (my_efficient_history >> 1) |
                                    (curr_eff << (HISTORY_LENGTH - 1));
 
@@ -377,8 +372,8 @@ handle_failed_steal_attempts(global_state *const rts, worker_id self,
                              __cilkrts_worker *const w,
                              unsigned int fails,
                              unsigned int *const sample_threshold,
-                             history_t *const inefficient_history,
-                             history_t *const efficient_history,
+                             history_sample_t *const inefficient_history,
+                             history_sample_t *const efficient_history,
                              unsigned int *const sentinel_count_history,
                              unsigned int *const sentinel_count_history_tail,
                              unsigned int *const recent_sentinel_count) {
@@ -428,16 +423,16 @@ handle_failed_steal_attempts(global_state *const rts, worker_id self,
             *sentinel_count_history_tail = (tail + 1) % SENTINEL_COUNT_HISTORY;
 
             // Update the efficient history.
-            history_t curr_eff = is_efficient(counts);
-            history_t my_efficient_history = *efficient_history;
+            history_sample_t curr_eff = is_efficient(counts);
+            history_sample_t my_efficient_history = *efficient_history;
             my_efficient_history = (my_efficient_history >> 1) |
                                    (curr_eff << (HISTORY_LENGTH - 1));
             int32_t eff_steps = __builtin_popcount(my_efficient_history);
             *efficient_history = my_efficient_history;
 
             // Update the inefficient history.
-            history_t curr_ineff = is_inefficient(counts);
-            history_t my_inefficient_history = *inefficient_history;
+            history_sample_t curr_ineff = is_inefficient(counts);
+            history_sample_t my_inefficient_history = *inefficient_history;
             my_inefficient_history = (my_inefficient_history >> 1) |
                                      (curr_ineff << (HISTORY_LENGTH - 1));
             int32_t ineff_steps =
@@ -547,8 +542,8 @@ static unsigned int go_to_sleep_maybe(global_state *const rts, worker_id self,
                                       __cilkrts_worker *const w,
                                       Closure *const t, unsigned int fails,
                                       unsigned int *const sample_threshold,
-                                      history_t *const inefficient_history,
-                                      history_t *const efficient_history,
+                                      history_sample_t *const inefficient_history,
+                                      history_sample_t *const efficient_history,
                                       unsigned int *const sentinel_count_history,
                                       unsigned int *const sentinel_count_history_tail,
                                       unsigned int *const recent_sentinel_count) {

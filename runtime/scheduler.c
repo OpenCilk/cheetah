@@ -1380,6 +1380,8 @@ static void do_what_it_says(ReadyDeque *deques, __cilkrts_worker *w,
     } while (t);
 }
 
+inline void boss_scheduler(__cilkrts_worker *w);
+
 // Thin wrapper around do_what_it_says to allow the boss thread to execute the
 // Cilk computation until it would enter the work-stealing loop.
 void do_what_it_says_boss(__cilkrts_worker *w, Closure *t) {
@@ -1395,18 +1397,79 @@ void do_what_it_says_boss(__cilkrts_worker *w, Closure *t) {
 
     CILK_STOP_TIMING(w, INTERVAL_SCHED);
     worker_change_state(w, WORKER_IDLE);
-    worker_scheduler(w);
+    boss_scheduler(w);
 }
 
-void worker_scheduler(__cilkrts_worker *w) {
-    Closure *t = NULL;
-    CILK_ASSERT_POINTER_EQUAL(w, __cilkrts_get_tls_worker());
+inline void boss_scheduler(__cilkrts_worker *w) {
+    global_state *const rts = w->g;
 
     CILK_START_TIMING(w, INTERVAL_SCHED);
     worker_change_state(w, WORKER_SCHED);
+
+    history_t history = {
+        .inefficient_history = 0,
+        .efficient_history = 0,
+        .sentinel_count_history_tail = 0,
+        .recent_sentinel_count = SENTINEL_COUNT_HISTORY,
+        .fails = init_fails(w->l->wake_val, rts),
+        .sample_threshold = SENTINEL_THRESHOLD,
+        .sentinel_count_history = { 1 },
+    };
+
+    worker_scheduler(w, &history);
+
+#if ENABLE_THIEF_SLEEP
+    reset_fails(rts, history.fails);
+#endif
+    CILK_STOP_TIMING(w, INTERVAL_SCHED);
+    worker_change_state(w, WORKER_IDLE);
+    __builtin_longjmp(rts->boss_ctx, 1);
+}
+
+void non_boss_scheduler(__cilkrts_worker *w) {
+    CILK_START_TIMING(w, INTERVAL_SCHED);
+    worker_change_state(w, WORKER_SCHED);
+    global_state *const rts = w->g;
+    history_t history = {
+        .inefficient_history = 0,
+        .efficient_history = 0,
+        .sentinel_count_history_tail = 0,
+        .recent_sentinel_count = SENTINEL_COUNT_HISTORY,
+        .fails = init_fails(w->l->wake_val, rts),
+        .sample_threshold = SENTINEL_THRESHOLD,
+        .sentinel_count_history = { 1 },
+    };
+
+    while (!rts->terminate) {
+        worker_scheduler(w, &history);
+
+       // If it appears the computation is done, busy-wait for a while
+       // before exiting the work-stealing loop, in case another cilkified
+       // region is started soon.
+       unsigned int busy_fail = 0;
+       while (busy_fail++ < BUSY_LOOP_SPIN &&
+              atomic_load_explicit(&rts->done, memory_order_relaxed)) {
+           busy_pause();
+       }
+       if (thief_should_wait(rts)) {
+           break;
+       }
+    }
+
+#if ENABLE_THIEF_SLEEP
+    reset_fails(rts, history.fails);
+#endif
+
+    CILK_STOP_TIMING(w, INTERVAL_SCHED);
+    worker_change_state(w, WORKER_IDLE);
+}
+
+void worker_scheduler(__cilkrts_worker *w, history_t *const history) {
+    Closure *t = NULL;
+    CILK_ASSERT_POINTER_EQUAL(w, __cilkrts_get_tls_worker());
+
     global_state *rts = w->g;
     worker_id self = w->self;
-    const bool is_boss = (0 == self);
 
     // Get this worker's local_state pointer, to avoid rereading it
     // unnecessarily during the work-stealing loop.  This optimization helps
@@ -1419,213 +1482,193 @@ void worker_scheduler(__cilkrts_worker *w) {
     unsigned int nworkers = rts->nworkers;
 
     // Initialize count of consecutive failed steal attempts.
-    unsigned int fails = init_fails(l->wake_val, rts);
-    unsigned int sample_threshold = SENTINEL_THRESHOLD;
+    unsigned int fails = history->fails;
+    unsigned int sample_threshold = history->sample_threshold;
     // Local history information of the state of the system, for sentinel
     // workers to use to determine when to disengage and how many workers to
     // reengage.
-    history_t inefficient_history = 0;
-    history_t efficient_history = 0;
-    unsigned int sentinel_count_history[SENTINEL_COUNT_HISTORY] = { 1 };
-    unsigned int sentinel_count_history_tail = 0;
-    unsigned int recent_sentinel_count = SENTINEL_COUNT_HISTORY;
+    history_sample_t inefficient_history = history->inefficient_history;
+    history_sample_t efficient_history = history->efficient_history;
+
+    unsigned int sentinel_count_history_tail = history->sentinel_count_history_tail;
+    unsigned int recent_sentinel_count = history->recent_sentinel_count;
 
     // Get pointers to the local and global copies of the index-to-worker map.
     worker_id *index_to_worker = rts->index_to_worker;
     __cilkrts_worker **workers = rts->workers;
     ReadyDeque *deques = rts->deques;
 
-    while (!is_boss && !rts->terminate) {
-        while (!atomic_load_explicit(&rts->done, memory_order_acquire)) {
-            /* A worker entering the steal loop must have saved its reducer map into
-               the frame to which it belongs. */
-            CILK_ASSERT(!w->hyper_table ||
-                               (is_boss && atomic_load_explicit(
-                                               &rts->done, memory_order_acquire)));
+    while (!atomic_load_explicit(&rts->done, memory_order_acquire)) {
+        /* A worker entering the steal loop must have saved its reducer map into
+           the frame to which it belongs. */
+        CILK_ASSERT(!w->hyper_table ||
+                           (self == 0 && atomic_load_explicit(
+                                           &rts->done, memory_order_acquire)));
 
-            CILK_STOP_TIMING(w, INTERVAL_SCHED);
+        CILK_STOP_TIMING(w, INTERVAL_SCHED);
 
-            while (!t && !atomic_load_explicit(&rts->done, memory_order_acquire)) {
-                CILK_START_TIMING(w, INTERVAL_SCHED);
-                CILK_START_TIMING(w, INTERVAL_IDLE);
+        while (!t && !atomic_load_explicit(&rts->done, memory_order_acquire)) {
+            CILK_START_TIMING(w, INTERVAL_SCHED);
+            CILK_START_TIMING(w, INTERVAL_IDLE);
 #if ENABLE_THIEF_SLEEP
-                // Get the set of workers we can steal from and a local copy of the
-                // index-to-worker map.  We'll attempt a few steals using these
-                // local copies to minimize memory traffic.
-                uint64_t disengaged_sentinel = atomic_load_explicit(
-                    &rts->disengaged_sentinel, memory_order_relaxed);
-                uint32_t disengaged = GET_DISENGAGED(disengaged_sentinel);
-                uint32_t stealable = nworkers - disengaged;
-                __attribute__((unused))
-                uint32_t sentinel = recent_sentinel_count / SENTINEL_COUNT_HISTORY;
-    
-                if (__builtin_expect(stealable == 1, false))
-                    // If this worker detects only 1 stealable worker, then its the
-                    // only worker in the work-stealing loop.
-                    continue;
+            // Get the set of workers we can steal from and a local copy of the
+            // index-to-worker map.  We'll attempt a few steals using these
+            // local copies to minimize memory traffic.
+            uint64_t disengaged_sentinel = atomic_load_explicit(
+                &rts->disengaged_sentinel, memory_order_relaxed);
+            uint32_t disengaged = GET_DISENGAGED(disengaged_sentinel);
+            uint32_t stealable = nworkers - disengaged;
+            __attribute__((unused))
+            uint32_t sentinel = recent_sentinel_count / SENTINEL_COUNT_HISTORY;
+
+            if (__builtin_expect(stealable == 1, false))
+                // If this worker detects only 1 stealable worker, then its the
+                // only worker in the work-stealing loop.
+                continue;
 
 #else // ENABLE_THIEF_SLEEP
-                uint32_t stealable = nworkers;
-                __attribute__((unused))
-                uint32_t sentinel = nworkers / 2;
+            uint32_t stealable = nworkers;
+            __attribute__((unused))
+            uint32_t sentinel = nworkers / 2;
 #endif // ENABLE_THIEF_SLEEP
 #ifndef __APPLE__
-                uint32_t lg_sentinel = sentinel == 0 ? 1
-                                                     : (8 * sizeof(sentinel)) -
-                                                           __builtin_clz(sentinel);
-                uint32_t sentinel_div_lg_sentinel =
-                    sentinel == 0 ? 1
-                                  : (sentinel >> (8 * sizeof(lg_sentinel) -
-                                                  __builtin_clz(lg_sentinel)));
+            uint32_t lg_sentinel = sentinel == 0 ? 1
+                                                 : (8 * sizeof(sentinel)) -
+                                                       __builtin_clz(sentinel);
+            uint32_t sentinel_div_lg_sentinel =
+                sentinel == 0 ? 1
+                              : (sentinel >> (8 * sizeof(lg_sentinel) -
+                                              __builtin_clz(lg_sentinel)));
 #endif
-                const unsigned int NAP_THRESHOLD = SENTINEL_THRESHOLD * 64;
+            const unsigned int NAP_THRESHOLD = SENTINEL_THRESHOLD * 64;
 
 #if !defined(__aarch64__) && !defined(__APPLE__)
-                uint64_t start = __builtin_readcyclecounter();
+            uint64_t start = __builtin_readcyclecounter();
 #endif // !defined(__aarch64__) && !defined(__APPLE__)
-                int attempt = ATTEMPTS;
-                do {
-                    // Choose a random victim not equal to self.
-                    worker_id victim =
-                            index_to_worker[get_rand(rand_state) % stealable];
+            int attempt = ATTEMPTS;
+            do {
+                // Choose a random victim not equal to self.
+                worker_id victim =
+                        index_to_worker[get_rand(rand_state) % stealable];
+                rand_state = update_rand_state(rand_state);
+                while (victim == self) {
+                    victim = index_to_worker[get_rand(rand_state) % stealable];
                     rand_state = update_rand_state(rand_state);
-                    while (victim == self) {
-                        victim = index_to_worker[get_rand(rand_state) % stealable];
-                        rand_state = update_rand_state(rand_state);
-                    }
-                    // Attempt to steal from that victim.
-                    t = Closure_steal(workers, deques, w, self, victim);
-                    if (!t) {
-                        // Pause inside this busy loop.
-                        busy_loop_pause();
-                    }
-                } while (!t && --attempt > 0);
+                }
+                // Attempt to steal from that victim.
+                t = Closure_steal(workers, deques, w, self, victim);
+                if (!t) {
+                    // Pause inside this busy loop.
+                    busy_loop_pause();
+                }
+            } while (!t && --attempt > 0);
 
 #if SCHED_STATS
-                if (t) { // steal successful
-                    WHEN_SCHED_STATS(w->l->stats.steals++);
-                    CILK_STOP_TIMING(w, INTERVAL_SCHED);
-                    CILK_DROP_TIMING(w, INTERVAL_IDLE);
-                } else { // steal unsuccessful
-                    CILK_STOP_TIMING(w, INTERVAL_IDLE);
-                    CILK_DROP_TIMING(w, INTERVAL_SCHED);
-                }
+            if (t) { // steal successful
+                WHEN_SCHED_STATS(w->l->stats.steals++);
+                CILK_STOP_TIMING(w, INTERVAL_SCHED);
+                CILK_DROP_TIMING(w, INTERVAL_IDLE);
+            } else { // steal unsuccessful
+                CILK_STOP_TIMING(w, INTERVAL_IDLE);
+                CILK_DROP_TIMING(w, INTERVAL_SCHED);
+            }
 #endif
 
-                fails = go_to_sleep_maybe(
-                    rts, self, nworkers, NAP_THRESHOLD, w, t, fails,
-                    &sample_threshold, &inefficient_history, &efficient_history,
-                    sentinel_count_history, &sentinel_count_history_tail,
-                    &recent_sentinel_count);
-    
-                if (!t) {
-                    // Add some delay to the time a worker takes between steal
-                    // attempts.  On a variety of systems, this delay seems to
-                    // improve parallel performance of Cilk computations where
-                    // workers spend a signficant amount of time stealing.
-                    //
-                    // The computation for the delay is heuristic, based on the
-                    // following:
-                    // - Incorporate some delay for each steal attempt.
-                    // - Increase the delay for workers who fail a lot of steal
-                    //   attempts, and allow successful thieves to steal more
-                    //   frequently.
-                    // - Increase the delay based on the number of thieves failing
-                    //   lots of steal attempts.  In this case, we use the number S
-                    //   of sentinels and increase the delay by approximately S/lg
-                    //   S, which seems to work better than a linear increase in
-                    //   practice.
+            fails = go_to_sleep_maybe(
+                rts, self, nworkers, NAP_THRESHOLD, w, t, fails,
+                &sample_threshold, &inefficient_history, &efficient_history,
+                history->sentinel_count_history, &sentinel_count_history_tail,
+                &recent_sentinel_count);
+
+            if (!t) {
+                // Add some delay to the time a worker takes between steal
+                // attempts.  On a variety of systems, this delay seems to
+                // improve parallel performance of Cilk computations where
+                // workers spend a signficant amount of time stealing.
+                //
+                // The computation for the delay is heuristic, based on the
+                // following:
+                // - Incorporate some delay for each steal attempt.
+                // - Increase the delay for workers who fail a lot of steal
+                //   attempts, and allow successful thieves to steal more
+                //   frequently.
+                // - Increase the delay based on the number of thieves failing
+                //   lots of steal attempts.  In this case, we use the number S
+                //   of sentinels and increase the delay by approximately S/lg
+                //   S, which seems to work better than a linear increase in
+                //   practice.
 #ifndef __APPLE__
 #ifndef __aarch64__
-                    uint64_t stop = 450 * ATTEMPTS;
-                    if (fails > stealable)
-                        stop += 650 * ATTEMPTS;
-                    stop *= sentinel_div_lg_sentinel;
-                    // On x86-64, the latency of a pause instruction varies between
-                    // microarchitectures.  We use the cycle counter to delay by a
-                    // certain amount of time, regardless of the latency of pause.
-                    while ((__builtin_readcyclecounter() - start) < stop) {
-                        busy_pause();
-                    }
+                uint64_t stop = 450 * ATTEMPTS;
+                if (fails > stealable)
+                    stop += 650 * ATTEMPTS;
+                stop *= sentinel_div_lg_sentinel;
+                // On x86-64, the latency of a pause instruction varies between
+                // microarchitectures.  We use the cycle counter to delay by a
+                // certain amount of time, regardless of the latency of pause.
+                while ((__builtin_readcyclecounter() - start) < stop) {
+                    busy_pause();
+                }
 #else
-                    int pause_count = 200 * ATTEMPTS;
-                    if (fails > stealable)
-                        pause_count += 50 * ATTEMPTS;
-                    pause_count *= sentinel_div_lg_sentinel;
-                    // On arm64, we can't necessarily read the cycle counter without
-                    // a kernel patch.  Instead, we just perform some number of
-                    // pause instructions.
-                    for (int i = 0; i < pause_count; ++i)
-                        busy_pause();
+                int pause_count = 200 * ATTEMPTS;
+                if (fails > stealable)
+                    pause_count += 50 * ATTEMPTS;
+                pause_count *= sentinel_div_lg_sentinel;
+                // On arm64, we can't necessarily read the cycle counter without
+                // a kernel patch.  Instead, we just perform some number of
+                // pause instructions.
+                for (int i = 0; i < pause_count; ++i)
+                    busy_pause();
 #endif // __aarch64__
 #endif // __APPLE__
-                }
-            }
-            CILK_START_TIMING(w, INTERVAL_SCHED);
-            // If one Cilkified region stops and another one starts, then a worker
-            // can reach this point with t == NULL and w->g->done == false.  Check
-            // that t is not NULL before calling do_what_it_says.
-            if (t) {
-#if ENABLE_THIEF_SLEEP
-                const unsigned int MIN_FAILS = 2 * ATTEMPTS;
-                uint64_t start, end;
-                // Executing do_what_it_says involves some minimum amount of work,
-                // which can be used to amortize the cost of some failed steal
-                // attempts.  Therefore, avoid measuring the elapsed cycles if we
-                // haven't failed many steal attempts.
-                if (fails > MIN_FAILS) {
-                    start = gettime_fast();
-                }
-#endif // ENABLE_THIEF_SLEEP
-                do_what_it_says(deques, w, self, t);
-#if ENABLE_THIEF_SLEEP
-                if (fails > MIN_FAILS) {
-                    end = gettime_fast();
-                    uint64_t elapsed = end - start;
-                    // Decrement the count of failed steal attempts based on the
-                    // amount of work done.
-                    fails = decrease_fails_by_work(rts, fails, elapsed,
-                                                   &sample_threshold);
-                    if (fails < SENTINEL_THRESHOLD) {
-                        inefficient_history = 0;
-                        efficient_history = 0;
-                    }
-                } else {
-                    fails = 0;
-                    sample_threshold = SENTINEL_THRESHOLD;
-                }
-#endif // ENABLE_THIEF_SLEEP
-                t = NULL;
             }
         }
+        CILK_START_TIMING(w, INTERVAL_SCHED);
+        // If one Cilkified region stops and another one starts, then a worker
+        // can reach this point with t == NULL and w->g->done == false.  Check
+        // that t is not NULL before calling do_what_it_says.
+        if (t) {
+#if ENABLE_THIEF_SLEEP
+            const unsigned int MIN_FAILS = 2 * ATTEMPTS;
+            uint64_t start, end;
+            // Executing do_what_it_says involves some minimum amount of work,
+            // which can be used to amortize the cost of some failed steal
+            // attempts.  Therefore, avoid measuring the elapsed cycles if we
+            // haven't failed many steal attempts.
+            if (fails > MIN_FAILS) {
+                start = gettime_fast();
+            }
+#endif // ENABLE_THIEF_SLEEP
+            do_what_it_says(deques, w, self, t);
+#if ENABLE_THIEF_SLEEP
+            if (fails > MIN_FAILS) {
+                end = gettime_fast();
+                uint64_t elapsed = end - start;
+                // Decrement the count of failed steal attempts based on the
+                // amount of work done.
+                fails = decrease_fails_by_work(rts, fails, elapsed,
+                                               &sample_threshold);
+                if (fails < SENTINEL_THRESHOLD) {
+                    inefficient_history = 0;
+                    efficient_history = 0;
+                }
+            } else {
+                fails = 0;
+                sample_threshold = SENTINEL_THRESHOLD;
+            }
+#endif // ENABLE_THIEF_SLEEP
+            t = NULL;
+        }
+    }
     
-        if (!is_boss &&
-                   atomic_load_explicit(&rts->done, memory_order_relaxed)) {
-            // If it appears the computation is done, busy-wait for a while
-            // before exiting the work-stealing loop, in case another cilkified
-            // region is started soon.
-            unsigned int busy_fail = 0;
-            while (busy_fail++ < BUSY_LOOP_SPIN &&
-                   atomic_load_explicit(&rts->done, memory_order_relaxed)) {
-                busy_pause();
-            }
-            if (thief_should_wait(rts)) {
-                break;
-            }
-        }
-    }
-
-    // Reset the fail count.
-#if ENABLE_THIEF_SLEEP
-    reset_fails(rts, fails);
-#endif
     l->rand_next = rand_state;
+    history->fails = fails;
+    history->sample_threshold = sample_threshold;
+    history->inefficient_history = inefficient_history;
+    history->efficient_history = efficient_history;
 
-    CILK_STOP_TIMING(w, INTERVAL_SCHED);
-    worker_change_state(w, WORKER_IDLE);
-    if (is_boss) {
-        __builtin_longjmp(rts->boss_ctx, 1);
-    }
+    history->sentinel_count_history_tail = sentinel_count_history_tail;
+    history->recent_sentinel_count = recent_sentinel_count;
 }
 
 void *scheduler_thread_proc(void *arg) {
@@ -1675,7 +1718,7 @@ void *scheduler_thread_proc(void *arg) {
         // Such operations, for example might have updated the left-most view of
         // a reducer.
         if (!atomic_load_explicit(&rts->done, memory_order_acquire)) {
-            worker_scheduler(w);
+            non_boss_scheduler(w);
         }
 
         CILK_START_TIMING(w, INTERVAL_SLEEP_UNCILK);
