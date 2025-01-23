@@ -1380,7 +1380,7 @@ static void do_what_it_says(ReadyDeque *deques, __cilkrts_worker *w,
     } while (t);
 }
 
-inline void boss_scheduler(__cilkrts_worker *w);
+static inline void boss_scheduler(__cilkrts_worker *w);
 
 // Thin wrapper around do_what_it_says to allow the boss thread to execute the
 // Cilk computation until it would enter the work-stealing loop.
@@ -1400,7 +1400,7 @@ void do_what_it_says_boss(__cilkrts_worker *w, Closure *t) {
     boss_scheduler(w);
 }
 
-inline void boss_scheduler(__cilkrts_worker *w) {
+static inline void boss_scheduler(__cilkrts_worker *w) {
     global_state *const rts = w->g;
 
     CILK_START_TIMING(w, INTERVAL_SCHED);
@@ -1426,7 +1426,7 @@ inline void boss_scheduler(__cilkrts_worker *w) {
     __builtin_longjmp(rts->boss_ctx, 1);
 }
 
-void non_boss_scheduler(__cilkrts_worker *w) {
+static inline void non_boss_scheduler(__cilkrts_worker *w) {
     CILK_START_TIMING(w, INTERVAL_SCHED);
     worker_change_state(w, WORKER_SCHED);
     global_state *const rts = w->g;
