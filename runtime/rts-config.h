@@ -3,7 +3,7 @@
 
 /* Functions defined in the library and visible outside the library. */
 #ifndef CHEETAH_API
-#if defined __BSD__ || defined __linux__ /* really, if using ELF */
+#ifdef __ELF__
 #define CHEETAH_API __attribute((visibility("protected")))
 #else
 #define CHEETAH_API
