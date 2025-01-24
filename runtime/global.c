@@ -172,6 +172,8 @@ global_state *global_state_init(int argc, char *argv[]) {
     atomic_store_explicit(&g->cilkified, 0, memory_order_relaxed);
     atomic_store_explicit(&g->disengaged_sentinel, 0, memory_order_relaxed);
 
+    g->activate_boss = false;
+
     g->terminate = false;
 
     g->worker_args =

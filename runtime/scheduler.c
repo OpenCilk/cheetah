@@ -211,6 +211,16 @@ static void setup_for_sync(__cilkrts_worker *w, worker_id self, Closure *t) {
     t->orig_rsp = NULL; // unset once we have sync-ed
 }
 
+static void resume_boss(__cilkrts_worker *w, worker_id self, Closure *t) {
+    // TODO: This should not be on any worker's deque
+    Closure_lock(self, t);
+    CILK_ASSERT_INTEGER_EQUAL(t->status, CLOSURE_SUSPENDED);
+    CILK_ASSERT(!Closure_has_children(t));
+    setup_for_sync(w, self, t);
+    Closure_set_status(t, CLOSURE_RUNNING);
+    Closure_unlock(self, t);
+}
+
 // ==============================================
 // TLS related functions
 // ==============================================
@@ -295,31 +305,44 @@ static Closure *provably_good_steal_maybe(__cilkrts_worker *const w,
 
     Closure_assert_ownership(self, parent);
     local_state *l = w->l;
+    global_state *g = w->g;
     // cilkrts_alert(STEAL, "(provably_good_steal_maybe) cl %p",
     //               (void *)parent);
-    CILK_ASSERT(!l->provably_good_steal);
 
-    if (!Closure_has_children(parent) && parent->status == CLOSURE_SUSPENDED) {
-        // cilkrts_alert(STEAL | ALERT_SYNC,
-        //      "(provably_good_steal_maybe) completing a sync");
+    if (Closure_has_children(parent))
+        return NULL;
 
-        CILK_ASSERT(parent->frame != NULL);
+    if (parent->status != CLOSURE_SUSPENDED)
+        return NULL;
 
-        /* do a provably-good steal; this is *really* simple */
-        l->provably_good_steal = true;
-
-        setup_for_sync(w, self, parent);
-        CILK_ASSERT(parent->owner_ready_deque == NO_WORKER);
-        Closure_make_ready(parent);
-
-        cilkrts_alert(STEAL | ALERT_SYNC,
-                      "(provably_good_steal_maybe) returned %p",
-                      (void *)parent);
-
-        return parent;
+    /* Only the cilkifying worker can run the cilkifying frame synced. */
+    if (parent == g->root_closure && w->self != 0) {
+        __cilkrts_stack_frame *sf = parent->frame;
+        CILK_ASSERT(sf);
+        if (sf->flags & CILK_FRAME_LAST) {
+            g->activate_boss = true;
+            return NULL;
+        }
     }
 
-    return NULL;
+    // cilkrts_alert(STEAL | ALERT_SYNC,
+    //      "(provably_good_steal_maybe) completing a sync");
+
+    CILK_ASSERT(parent->frame != NULL);
+
+    /* do a provably-good steal; this is *really* simple */
+    CILK_ASSERT(!l->provably_good_steal);
+    l->provably_good_steal = true;
+
+    setup_for_sync(w, self, parent);
+    CILK_ASSERT(parent->owner_ready_deque == NO_WORKER);
+    Closure_make_ready(parent);
+
+    cilkrts_alert(STEAL | ALERT_SYNC,
+                  "(provably_good_steal_maybe) returned %p",
+                  (void *)parent);
+
+    return parent;
 }
 
 /***
@@ -1224,7 +1247,8 @@ int Cilk_sync(__cilkrts_worker *const w, __cilkrts_stack_frame *frame) {
     int res = SYNC_READY;
 
     //----- EVENT_CILK_SYNC
-    ReadyDeque *deques = w->g->deques;
+    global_state *g = w->g;
+    ReadyDeque *deques = g->deques;
     worker_id self = w->self;
 
     deque_lock_self(deques, self);
@@ -1246,6 +1270,20 @@ int Cilk_sync(__cilkrts_worker *const w, __cilkrts_stack_frame *frame) {
     if (Closure_has_children(t)) {
         cilkrts_alert(SYNC, "(Cilk_sync) Closure %p has outstanding children",
                       (void *)t);
+        res = SYNC_NOT_READY;
+    } else if (self != 0 && t == g->root_closure && (t->frame->flags & CILK_FRAME_LAST)) {
+        cilkrts_alert(SYNC, "(Cilk_sync) Closure %p needs to run on boss",
+                      (void *)t);
+        g->activate_boss = true;
+        res = SYNC_NOT_READY;
+    } else {
+        cilkrts_alert(SYNC, "(Cilk_sync) closure %p sync successfully",
+                      (void *)t);
+        res = SYNC_READY;
+    }
+
+    if (res == SYNC_NOT_READY) {
+        // XXX not in the root closure case?
         if (t->fiber) {
             cilk_fiber_deallocate_to_pool(w, t->fiber);
         }
@@ -1263,10 +1301,7 @@ int Cilk_sync(__cilkrts_worker *const w, __cilkrts_stack_frame *frame) {
 
         Closure_suspend(deques, self, t);
         t->user_ht = ht; /* set this after state change to suspended */
-        res = SYNC_NOT_READY;
     } else {
-        cilkrts_alert(SYNC, "(Cilk_sync) closure %p sync successfully",
-                      (void *)t);
         setup_for_sync(w, self, t);
     }
 
@@ -1396,6 +1431,7 @@ void do_what_it_says_boss(__cilkrts_worker *w, Closure *t) {
     CILK_STOP_TIMING(w, INTERVAL_SCHED);
     worker_change_state(w, WORKER_IDLE);
     worker_scheduler(w);
+    cilkrts_bug("boss worker exited scheduling loop");
 }
 
 void worker_scheduler(__cilkrts_worker *w) {
@@ -1447,6 +1483,20 @@ void worker_scheduler(__cilkrts_worker *w) {
         while (!t && !atomic_load_explicit(&rts->done, memory_order_acquire)) {
             CILK_START_TIMING(w, INTERVAL_SCHED);
             CILK_START_TIMING(w, INTERVAL_IDLE);
+
+            if (is_boss && rts->activate_boss) {
+                t = rts->root_closure;
+                resume_boss(w, self, t);
+                rts->activate_boss = false;
+                /* bookkeeping */
+                fails = maybe_reengage_workers
+                  (rts, self, nworkers, w, fails,
+                   &sample_threshold, &inefficient_history, &efficient_history,
+                   sentinel_count_history, &sentinel_count_history_tail,
+                   &recent_sentinel_count);
+                break;
+            }
+
 #if ENABLE_THIEF_SLEEP
             // Get the set of workers we can steal from and a local copy of the
             // index-to-worker map.  We'll attempt a few steals using these
@@ -1469,10 +1519,10 @@ void worker_scheduler(__cilkrts_worker *w) {
             uint32_t sentinel = nworkers / 2;
 #endif // ENABLE_THIEF_SLEEP
 #ifndef __APPLE__
-            uint32_t lg_sentinel = sentinel == 0 ? 1
+            const uint32_t lg_sentinel = sentinel == 0 ? 1
                                                  : (8 * sizeof(sentinel)) -
                                                        __builtin_clz(sentinel);
-            uint32_t sentinel_div_lg_sentinel =
+            const uint32_t sentinel_div_lg_sentinel =
                 sentinel == 0 ? 1
                               : (sentinel >> (8 * sizeof(lg_sentinel) -
                                               __builtin_clz(lg_sentinel)));
@@ -1619,9 +1669,6 @@ void worker_scheduler(__cilkrts_worker *w) {
 
     CILK_STOP_TIMING(w, INTERVAL_SCHED);
     worker_change_state(w, WORKER_IDLE);
-    if (is_boss) {
-        __builtin_longjmp(rts->boss_ctx, 1);
-    }
 }
 
 void *scheduler_thread_proc(void *arg) {

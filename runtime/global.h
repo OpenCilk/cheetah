@@ -63,8 +63,7 @@ struct global_state {
 
     // These fields are accessed exclusively by the boss thread.
 
-    jmpbuf boss_ctx __attribute__((aligned(CILK_CACHE_LINE)));
-    void *orig_rsp;
+    void *orig_rsp __attribute__((aligned(CILK_CACHE_LINE)));
     bool workers_started;
 
     // These fields are shared between the boss thread and a couple workers.
@@ -75,6 +74,10 @@ struct global_state {
     // optimization would improve performance.
     _Atomic uint32_t cilkified_futex __attribute__((aligned(CILK_CACHE_LINE)));
     atomic_bool cilkified;
+    // Set to true by any worker to signal that the cilkifying function
+    // needs to run on the original worker.  The cilkifying closure should
+    // be locked when this is set.
+    bool activate_boss;
 
     pthread_mutex_t cilkified_lock;
     pthread_cond_t cilkified_cond_var;
