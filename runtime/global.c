@@ -168,7 +168,7 @@ global_state *global_state_init(int argc, char *argv[]) {
 
     g->workers_started = false;
     g->root_closure_initialized = false;
-    atomic_store_explicit(&g->done, 0, memory_order_relaxed);
+    atomic_store_explicit(&g->done, 1, memory_order_relaxed);
     atomic_store_explicit(&g->cilkified, 0, memory_order_relaxed);
     atomic_store_explicit(&g->disengaged_sentinel, 0, memory_order_relaxed);
 

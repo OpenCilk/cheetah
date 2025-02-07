@@ -556,7 +556,7 @@ void __cilkrts_internal_invoke_cilkified_root(__cilkrts_stack_frame *sf) {
     // occur, rather than all at once.  Initial testing of this approach did not
     // seem to perform well, however.  One possible reason why could be because
     // of the extra kernel interactions involved in waking workers gradually.
-    wake_thieves(g);
+    initiate_waking_thieves(g);
     /* request_more_thieves(g, g->nworkers); */
 
     // Start the workers if necessary

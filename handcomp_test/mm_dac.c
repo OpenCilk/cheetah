@@ -175,6 +175,10 @@ static int are_equal_matrices(const int *a, const int *b, int n) {
 }
 #endif
 
+static __attribute__((optnone)) clockmark_t get_timing() {
+    return ktiming_getmark();
+}
+
 static void test_mm(int n, int check) {
     clockmark_t begin, end;
     uint64_t running_time[TIMING_COUNT];
@@ -188,9 +192,11 @@ static void test_mm(int n, int check) {
 
     for(int i = 0; i < TIMING_COUNT; i++) {
         zero_matrix(C, n);
-        begin = ktiming_getmark();
+        //begin = ktiming_getmark();
+        begin = get_timing();
         mm_dac(C, A, B, n, n);
-        end = ktiming_getmark();
+        end = get_timing();
+        //end = ktiming_getmark();
         running_time[i] = ktiming_diff_nsec(&begin, &end);
     }
     print_runtime(running_time, TIMING_COUNT);
