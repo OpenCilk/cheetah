@@ -6,7 +6,7 @@ all : $(TESTS)
 
 # Hypertable tests
 
-HYPERTABLE_SOURCES=../runtime/local-hypertable.c ../runtime/debug.c
+HYPERTABLE_SOURCES=../runtime/local-hypertable.c ../runtime/debug.c mock-worker.c
 %-hypertable : %-hypertable.c $(HYPERTABLE_SOURCES) test-hypertable-common.h
 	$(CC) -o $@ $< $(HYPERTABLE_SOURCES) $(CFLAGS) $(MOCK_HASH_FLAG) -I./ $(LDFLAGS) $(LDLIBS)
 
