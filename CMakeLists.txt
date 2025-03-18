@@ -158,6 +158,8 @@ if (CHEETAH_USE_COMPILER_RT)
 endif()
 
 # Get warning flags
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wmissing-variable-declarations")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wmissing-variable-declarations")
 append_string_if(CHEETAH_HAS_WALL_FLAG -Wall CMAKE_C_FLAGS CMAKE_CXX_FLAGS)
 
 if (CHEETAH_ENABLE_WERROR)

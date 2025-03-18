@@ -33,8 +33,6 @@ __cilkrts_worker default_worker = {.self = 0,
                                    .exc = NULL,
                                    .head = NULL,
                                    .ltq_limit = NULL};
-CHEETAH_INTERNAL
-local_state default_worker_local_state;
 
 // A global used to calculate grain size.
 unsigned __cilkrts_nproc = 0;
