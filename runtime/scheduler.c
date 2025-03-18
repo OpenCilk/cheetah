@@ -239,11 +239,11 @@ static Closure *setup_call_parent_resumption(ReadyDeque *deques,
     return t;
 }
 
-void Cilk_set_return(__cilkrts_worker *const w) {
+void __cilkrts_set_return(__cilkrts_worker *const w) {
 
     Closure *t;
 
-    cilkrts_alert(RETURN, "(Cilk_set_return)");
+    cilkrts_alert(RETURN, "(set_return)");
     ReadyDeque *deques = w->g->deques;
     worker_id self = w->self;
 
@@ -539,7 +539,7 @@ static Closure *return_value(__cilkrts_worker *const w, worker_id self,
  *   2. Someone invokes signal_immediate_exception with the closure currently
  *   running on the worker's deque.  This is only possible with abort.
  */
-void Cilk_exception_handler(__cilkrts_worker *w, char *exn) {
+void __cilkrts_exception_handler(__cilkrts_worker *w, char *exn) {
 
     Closure *t;
     worker_id self = w->self;
@@ -551,7 +551,7 @@ void Cilk_exception_handler(__cilkrts_worker *w, char *exn) {
     CILK_ASSERT(t);
     Closure_lock(self, t);
 
-    cilkrts_alert(EXCEPT, "(Cilk_exception_handler) closure %p!", (void *)t);
+    cilkrts_alert(EXCEPT, "(exception_handler) closure %p!", (void *)t);
 
     /* Reset the E pointer. */
     reset_exception_pointer(w, self, t);
@@ -566,7 +566,7 @@ void Cilk_exception_handler(__cilkrts_worker *w, char *exn) {
     __cilkrts_stack_frame **tail =
         atomic_load_explicit(&w->tail, memory_order_relaxed);
     if (head > tail) {
-        cilkrts_alert(EXCEPT, "(Cilk_exception_handler) this is a steal!");
+        cilkrts_alert(EXCEPT, "(exception_handler) this is a steal!");
         if (NULL != exn) {
             // The spawned child is throwing an exception.  Save that exception
             // object for later processing.
@@ -1353,7 +1353,8 @@ static void do_what_it_says(ReadyDeque *deques, __cilkrts_worker *w,
                     l->returning = false;
                     // Attempt to get a closure from the bottom of our deque.
                     // We should already have the lock on the deque at this
-                    // point, as we jumped here from Cilk_exception_handler.
+                    // point, as we jumped here from
+                    // __cilkrts_exception_handler.
                     t = deque_xtract_bottom(deques, self, self);
                     deque_unlock_self(deques, self);
                 }

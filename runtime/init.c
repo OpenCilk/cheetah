@@ -35,7 +35,7 @@
 typedef cpuset_t cpu_set_t;
 #endif
 
-extern local_state default_worker_local_state;
+static local_state default_worker_local_state;
 
 static local_state *worker_local_init(local_state *l, global_state *g) {
     l->shadow_stack = (__cilkrts_stack_frame **)calloc(

@@ -7,12 +7,14 @@
 // Global variables local to the library.
 
 uint64_t __pedigree_dprng_seed = 0x8c679c168e6bf733ul;
-uint64_t __pedigree_dprng_m_X = 0;
+static uint64_t __pedigree_dprng_m_X = 0;
 CHEETAH_INTERNAL
-__pedigree_frame root_frame = {.pedigree = {.rank = 0, .parent = NULL},
-                               .rank = 0,
-                               .dprng_depth = 0,
-                               .dprng_dotproduct = 0};
+static __pedigree_frame root_frame = {
+  .pedigree = {.rank = 0, .parent = NULL},
+  .rank = 0,
+  .dprng_depth = 0,
+  .dprng_dotproduct = 0
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 // Initialization and deinitialization
