@@ -7,10 +7,11 @@ These instructions describe how to build the OpenCilk runtime system for Android
 
 ## Setup Android Studio and NDK
 
+> [!TIP]
+> Save the `clang-<version>` binary distributed with NDK before replacing it with the OpenCilk version, so you can restore it if anything goes wrong.
+    
 1. Install [Android Studio](https://developer.android.com/studio) with [NDK](https://developer.android.com/studio/projects/install-ndk) onto your system.
 2. Replace [NDK's copy of `clang-<version>`](https://developer.android.com/ndk/guides/other_build_systems#overview) with OpenCilk's `clang-<version>` binary.  For example, for NDK version 28, which includes a prebuilt LLVM toolchain based on LLVM 19, replace the `clang-19` binary in that NDK with OpenCilk's `clang-19` binary.
-    > [!TIP]
-    > Save the distributed `clang-<version>` binary in the NDK somewhere before replacing it with the OpenCilk version, so you can restore it if anything goes wrong.
 
 ## Build the runtime system
 
