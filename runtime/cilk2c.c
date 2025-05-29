@@ -12,13 +12,15 @@
 #include "rts-config.h"
 #include "scheduler.h"
 
-CHEETAH_INTERNAL
+CHEETAH_INTERNAL struct closure_exception exception_reducer;
+CHEETAH_INTERNAL struct cilkrts_callbacks cilkrts_callbacks;
+
 struct closure_exception exception_reducer = {.exn = NULL};
 
 extern void _Unwind_Resume(struct _Unwind_Exception *);
 extern _Unwind_Reason_Code _Unwind_RaiseException(struct _Unwind_Exception *);
 
-CHEETAH_INTERNAL struct cilkrts_callbacks cilkrts_callbacks = {
+struct cilkrts_callbacks cilkrts_callbacks = {
     0, 0, false, {NULL}, {NULL}};
 
 // Test if the Cilk runtime has been initialized.  This method is intended to
@@ -26,7 +28,7 @@ CHEETAH_INTERNAL struct cilkrts_callbacks cilkrts_callbacks = {
 int __cilkrts_is_initialized(void) { return NULL != default_cilkrts; }
 
 int __cilkrts_running_on_workers(void) {
-    return !__cilkrts_need_to_cilkify;
+    return !__cilkrts_status.need_to_cilkify;
 }
 
 // These callback-registration methods can run before the runtime system has
@@ -172,7 +174,7 @@ void __cilkrts_sync(__cilkrts_stack_frame *sf) {
 /// Methods for handling extensions
 
 void __cilkrts_register_extension(void *extension) {
-    __cilkrts_use_extension = true;
+    __cilkrts_status.use_extension = true;
     __cilkrts_worker *w = __cilkrts_get_tls_worker();
     w->extension = extension;
 }

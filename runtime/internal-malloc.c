@@ -10,7 +10,7 @@
 #include "global.h"
 #include "local.h"
 
-CHEETAH_INTERNAL int cheetah_page_shift = 0;
+int cheetah_page_shift = 0;
 
 #define MEM_LIST_SIZE 8U
 #define INTERNAL_MALLOC_CHUNK_SIZE (32 * 1024)

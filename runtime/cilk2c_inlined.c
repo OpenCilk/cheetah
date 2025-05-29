@@ -55,7 +55,7 @@ unsigned __cilkrts_get_worker_number(void) {
 void *__cilkrts_reducer_lookup(void *key, size_t size,
                                void *identity_ptr, void *reduce_ptr) {
     // If we're outside a cilkified region, then the key is the view.
-    if (__cilkrts_need_to_cilkify)
+    if (__cilkrts_status.need_to_cilkify)
         return key;
     struct local_hyper_table *table = get_hyper_table();
     struct bucket *b = find_hyperobject(table, (uintptr_t)key);
@@ -107,7 +107,7 @@ uncilkify(global_state *g, __cilkrts_stack_frame *sf) {
 __attribute__((always_inline,nothrow)) void
 __cilkrts_enter_frame(__cilkrts_stack_frame *sf) {
     sf->flags = 0;
-    if (__cilkrts_need_to_cilkify) {
+    if (__cilkrts_status.need_to_cilkify) {
         cilkify(sf);
     }
     cilkrts_alert(CFRAME, "__cilkrts_enter_frame %p", (void *)sf);
@@ -177,40 +177,36 @@ __cilkrts_detach(__cilkrts_stack_frame *sf, __cilkrts_stack_frame *parent) {
 }
 
 __attribute__((always_inline)) void __cilk_sync(__cilkrts_stack_frame *sf) {
-    if (sf->flags & CILK_FRAME_UNSYNCHED || USE_EXTENSION) {
-        if (sf->flags & CILK_FRAME_UNSYNCHED) {
-            if (__builtin_setjmp(sf->ctx) == 0) {
-                sysdep_save_fp_ctrl_state(sf);
-                __cilkrts_sync(sf);
-            } else {
-                sanitizer_finish_switch_fiber();
-                if (sf->flags & CILK_FRAME_EXCEPTION_PENDING) {
-                    __cilkrts_check_exception_raise(sf);
-                }
+    if (sf->flags & CILK_FRAME_UNSYNCHED) {
+        if (__builtin_setjmp(sf->ctx) == 0) {
+            sysdep_save_fp_ctrl_state(sf);
+            __cilkrts_sync(sf);
+        } else {
+            sanitizer_finish_switch_fiber();
+            if (sf->flags & CILK_FRAME_EXCEPTION_PENDING) {
+                __cilkrts_check_exception_raise(sf);
             }
         }
-        if (USE_EXTENSION) {
-            __cilkrts_worker *w = get_worker_from_stack(sf);
-            __cilkrts_extend_sync(&w->extension);
-        }
+    }
+    if (USE_EXTENSION) {
+        __cilkrts_worker *w = get_worker_from_stack(sf);
+        __cilkrts_extend_sync(&w->extension);
     }
 }
 
 __attribute__((always_inline)) void
 __cilk_sync_nothrow(__cilkrts_stack_frame *sf) {
-    if (sf->flags & CILK_FRAME_UNSYNCHED || USE_EXTENSION) {
-        if (sf->flags & CILK_FRAME_UNSYNCHED) {
-            if (__builtin_setjmp(sf->ctx) == 0) {
-                sysdep_save_fp_ctrl_state(sf);
-                __cilkrts_sync(sf);
-            } else {
-                sanitizer_finish_switch_fiber();
-            }
+    if (sf->flags & CILK_FRAME_UNSYNCHED) {
+        if (__builtin_setjmp(sf->ctx) == 0) {
+            sysdep_save_fp_ctrl_state(sf);
+            __cilkrts_sync(sf);
+        } else {
+            sanitizer_finish_switch_fiber();
         }
-        if (USE_EXTENSION) {
-            __cilkrts_worker *w = get_worker_from_stack(sf);
-            __cilkrts_extend_sync(&w->extension);
-        }
+    }
+    if (USE_EXTENSION) {
+        __cilkrts_worker *w = get_worker_from_stack(sf);
+        __cilkrts_extend_sync(&w->extension);
     }
 }
 
@@ -314,7 +310,7 @@ __cilk_helper_epilogue(__cilkrts_stack_frame *sf, __cilkrts_stack_frame *parent,
 
 __attribute__((always_inline))
 void __cilkrts_enter_landingpad(__cilkrts_stack_frame *sf, int32_t sel) {
-    if (__cilkrts_need_to_cilkify)
+    if (__cilkrts_status.need_to_cilkify)
         return;
 
     sf->fh->current_stack_frame = sf;

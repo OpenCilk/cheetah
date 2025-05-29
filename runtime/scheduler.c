@@ -33,12 +33,10 @@
 // Global and thread-local variables.
 // ==============================================
 
-// Boolean tracking whether the Cilk program is using an extension, e.g.,
-// pedigrees.
-bool __cilkrts_use_extension = false;
-
-// Boolean tracking whether the execution is currently in a cilkified region.
-bool __cilkrts_need_to_cilkify = true;
+struct __cilkrts_status __cilkrts_status = {
+    .need_to_cilkify = true,
+    .use_extension = false
+};
 
 // TLS pointer to the current worker structure.
 __thread __cilkrts_worker *__cilkrts_tls_worker = &default_worker;

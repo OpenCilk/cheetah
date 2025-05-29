@@ -1,21 +1,27 @@
 #ifndef _CONFIG_H
 #define _CONFIG_H
 
-/* Functions defined in the library and visible outside the library. */
-#ifndef CHEETAH_API
+#ifdef CHEETAH_API_CONSUMER
+
+#define CHEETAH_API extern
+#define CHEETAH_INTERNAL extern
+#define CHEETAH_INTERNAL_NORETURN extern __attribute__((noreturn, nothrow))
+
+#else  /* CHEETAH_API_CONSUMER */
+
+/* Functions defined in the library and visible outside the library.
+   On ELF systems the definitions can be marked protected.  */
 #ifdef __ELF__
-#define CHEETAH_API __attribute((visibility("protected")))
+#define CHEETAH_API extern __attribute__((visibility("protected")))
 #else
-#define CHEETAH_API
-#endif
+#define CHEETAH_API extern
 #endif
 /* Functions defined in the library and not visible outside the library. */
-#ifndef CHEETAH_INTERNAL
-#define CHEETAH_INTERNAL __attribute((visibility("hidden")))
-#endif
-#ifndef CHEETAH_INTERNAL_NORETURN
-#define CHEETAH_INTERNAL_NORETURN __attribute((noreturn, visibility("hidden")))
-#endif
+#define CHEETAH_INTERNAL extern __attribute__((visibility("hidden")))
+#define CHEETAH_INTERNAL_NORETURN \
+  extern __attribute__((noreturn, nothrow, visibility("hidden")))
+
+#endif /* CHEETAH_API_CONSUMER */
 
 #ifndef __CILKRTS_VERSION
 #define __CILKRTS_VERSION 0x0

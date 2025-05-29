@@ -9,12 +9,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-#if ALERT_LVL & (ALERT_CFRAME|ALERT_RETURN)
 unsigned int alert_level = 0;
-#else
-CHEETAH_INTERNAL unsigned int alert_level = 0;
-#endif
-CHEETAH_INTERNAL unsigned int debug_level = 0;
+unsigned int debug_level = 0;
 
 /* To reduce overhead of logging messages are accumulated into memory
    and written to stderr in batches of about 5,000 bytes. */

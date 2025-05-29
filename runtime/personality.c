@@ -206,7 +206,7 @@ _Unwind_Reason_Code __cilk_personality_internal(
     // If called from outside a Cilkified region --- i.e., after the personality
     // function leaves the last __cilkrts_stack_frame --- then just use
     // std_lib_personality.
-    if (__cilkrts_need_to_cilkify)
+    if (__cilkrts_status.need_to_cilkify)
         return std_lib_personality(version, actions, exception_class, ue_header,
                                    context);
 

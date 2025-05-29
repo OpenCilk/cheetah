@@ -35,7 +35,7 @@ struct __cilkrts_worker;
 #if ALERT_LVL & (ALERT_CFRAME|ALERT_RETURN)
 extern unsigned int alert_level;
 #else
-extern CHEETAH_INTERNAL unsigned int alert_level;
+CHEETAH_INTERNAL unsigned int alert_level;
 #endif
 #define ALERT_ENABLED(flag) (alert_level & (ALERT_LVL & ALERT_##flag))
 
@@ -47,7 +47,7 @@ extern CHEETAH_INTERNAL unsigned int alert_level;
 #define DEBUG_MEMORY_SLOW 0x02
 #define DEBUG_FIBER 0x04
 #define DEBUG_REDUCER 0x08
-extern CHEETAH_INTERNAL unsigned int debug_level;
+CHEETAH_INTERNAL unsigned int debug_level;
 #define DEBUG_ENABLED(flag) (debug_level & (DEBUG_LVL & DEBUG_##flag))
 #define DEBUG_ENABLED_STATIC(flag) (DEBUG_LVL & DEBUG_##flag)
 
@@ -81,7 +81,7 @@ cilkrts_alert(int lvl, const char *fmt, ...);
 #define WHEN_CILK_DEBUG(ex) ex
 
 /** Standard text for failed assertion */
-CHEETAH_INTERNAL extern const char *const __cilkrts_assertion_failed;
+CHEETAH_INTERNAL const char *const __cilkrts_assertion_failed;
 
 #define CILK_ASSERT(ex)                                                        \
     (__builtin_expect((ex) != 0, 1)                                            \

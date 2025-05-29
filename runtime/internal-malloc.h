@@ -7,7 +7,7 @@
 #include "rts-config.h"
 #include "types.h"
 
-CHEETAH_INTERNAL extern int cheetah_page_shift;
+CHEETAH_INTERNAL int cheetah_page_shift;
 
 enum im_tag {
     IM_UNCLASSIFIED,

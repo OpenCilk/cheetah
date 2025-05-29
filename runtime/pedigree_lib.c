@@ -8,7 +8,6 @@
 
 uint64_t __pedigree_dprng_seed = 0x8c679c168e6bf733ul;
 static uint64_t __pedigree_dprng_m_X = 0;
-CHEETAH_INTERNAL
 static __pedigree_frame root_frame = {
   .pedigree = {.rank = 0, .parent = NULL},
   .rank = 0,

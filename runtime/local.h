@@ -21,4 +21,6 @@ struct local_state {
     struct sched_stats stats;
 };
 
+CHEETAH_INTERNAL struct local_state default_worker_local_state;
+
 #endif /* _CILK_LOCAL_H */

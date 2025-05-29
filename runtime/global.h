@@ -116,8 +116,8 @@ struct global_state {
     struct global_sched_stats stats;
 };
 
-CHEETAH_INTERNAL extern global_state *default_cilkrts;
-CHEETAH_INTERNAL extern __cilkrts_worker default_worker;
+CHEETAH_INTERNAL global_state *default_cilkrts;
+CHEETAH_INTERNAL __cilkrts_worker default_worker;
 
 CHEETAH_INTERNAL
 __cilkrts_worker *__cilkrts_init_tls_worker(worker_id i, global_state *g);

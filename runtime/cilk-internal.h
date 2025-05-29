@@ -32,17 +32,22 @@ struct cilkrts_callbacks {
     void (*exit[MAX_CALLBACKS])(void);
 };
 
-extern CHEETAH_INTERNAL struct cilkrts_callbacks cilkrts_callbacks;
+CHEETAH_INTERNAL struct cilkrts_callbacks cilkrts_callbacks;
 
-extern bool __cilkrts_use_extension;
+struct __cilkrts_status {
+    bool need_to_cilkify;
+    bool use_extension;
+};
+
+extern struct __cilkrts_status __cilkrts_status;
+
 #if ENABLE_EXTENSION
-#define USE_EXTENSION __cilkrts_use_extension
+#define USE_EXTENSION __cilkrts_status.use_extension
 #else
 #define USE_EXTENSION false
 #endif
 extern __thread __cilkrts_worker *__cilkrts_tls_worker;
 extern __thread struct cilk_fiber *__cilkrts_current_fh;
-extern bool __cilkrts_need_to_cilkify;
 
 static inline __attribute__((always_inline)) __cilkrts_worker *
 __cilkrts_get_tls_worker(void) {
