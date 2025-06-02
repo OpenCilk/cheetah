@@ -24,6 +24,8 @@ struct global_state;
 typedef struct global_state global_state;
 typedef struct local_state local_state;
 
+#ifndef CHEETAH_API_CONSUMER
+
 struct cilkrts_callbacks {
     unsigned last_init;
     unsigned last_exit;
@@ -33,6 +35,8 @@ struct cilkrts_callbacks {
 };
 
 CHEETAH_INTERNAL struct cilkrts_callbacks cilkrts_callbacks;
+
+#endif
 
 struct __cilkrts_status {
     bool need_to_cilkify;
@@ -64,11 +68,15 @@ get_worker_from_stack(const __cilkrts_stack_frame *sf) {
     return sf->fh->worker;
 }
 
+#ifndef CHEETAH_API_CONSUMER
+
 CHEETAH_INTERNAL
 void *internal_reducer_lookup(__cilkrts_worker *w, void *key, size_t size,
                               void *identity_ptr, void *reduce_ptr);
 CHEETAH_INTERNAL
 void internal_reducer_remove(__cilkrts_worker *w, void *key);
+
+#endif
 
 void __cilkrts_register_extension(void *extension);
 void *__cilkrts_get_extension(void);

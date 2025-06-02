@@ -2,32 +2,24 @@
 // This file contains the compiler-runtime ABI.  This file is compiled to LLVM
 // bitcode, which the compiler then includes and inlines when it compiles a Cilk
 // program.
-// This file is also linked into the runtime library for use by
-// the exception personality function.
 // =============================================================================
 
 #include <stdatomic.h>
 #include <stdio.h>
 #include <unwind.h>
 
-#include "cilk-internal.h"
-#include "cilk2c_inlined.h"
+#include "rts-config.h"
 #include "cilk2c.h"
+#include "cilk2c_inlined.h"
 #include "debug.h"
 #include "fiber.h"
 #include "fiber-header.h"
 #include "frame.h"
-#include "global.h"
 #include "init.h"
 #include "local-reducer-api.h"
-#include "scheduler.h"
 
 #include "pedigree_ext.c"
 #include "worker.h"
-
-// Suppress -Wmissing-variable-declarations for this variable.
-_Alignas(__cilkrts_stack_frame)
-extern size_t __cilkrts_stack_frame_align;
 
 // This variable encodes the alignment of a __cilkrts_stack_frame, both in its
 // value and in its own alignment.  Because LLVM IR does not associate
@@ -104,7 +96,7 @@ uncilkify(global_state *g, __cilkrts_stack_frame *sf) {
 
 // Enter a new Cilk function, i.e., a function that contains a cilk_spawn.  This
 // function must be inlined for correctness.
-__attribute__((always_inline,nothrow)) void
+__attribute__((always_inline)) void
 __cilkrts_enter_frame(__cilkrts_stack_frame *sf) {
     sf->flags = 0;
     if (__cilkrts_status.need_to_cilkify) {
@@ -126,7 +118,7 @@ __cilkrts_enter_frame(__cilkrts_stack_frame *sf) {
 // This function initializes worker and stack_frame structures.  Because this
 // routine will always be executed by a Cilk worker, it is optimized compared to
 // its counterpart, __cilkrts_enter_frame.
-__attribute__((always_inline,nothrow)) void
+__attribute__((always_inline)) void
 __cilkrts_enter_frame_helper(__cilkrts_stack_frame *sf,
                              __cilkrts_stack_frame *parent, bool spawner) {
     cilkrts_alert(CFRAME, "__cilkrts_enter_frame_helper %p", (void *)sf);
@@ -142,7 +134,7 @@ __cilkrts_enter_frame_helper(__cilkrts_stack_frame *sf,
     }
 }
 
-__attribute__((always_inline,nothrow)) int
+__attribute__((always_inline)) int
 __cilk_prepare_spawn(__cilkrts_stack_frame *sf) {
     sysdep_save_fp_ctrl_state(sf);
     int res = __builtin_setjmp(sf->ctx);
@@ -154,7 +146,7 @@ __cilk_prepare_spawn(__cilkrts_stack_frame *sf) {
 
 // Detach the given Cilk stack frame, allowing other Cilk workers to steal the
 // parent frame.
-__attribute__((always_inline,nothrow)) void
+__attribute__((always_inline)) void
 __cilkrts_detach(__cilkrts_stack_frame *sf, __cilkrts_stack_frame *parent) {
     __cilkrts_worker *w = get_worker_from_stack(sf);
     cilkrts_alert(CFRAME, "__cilkrts_detach %p", (void *)sf);
@@ -241,11 +233,11 @@ __cilkrts_leave_frame(__cilkrts_stack_frame *sf) {
 
     CILK_ASSERT(!(flags & CILK_FRAME_DETACHED));
 
-    // A detached frame would never need to call set_return, which performs
-    // the return protocol of a full frame back to its parent when the full
-    // frame is called (not spawned).  A spawned full frame returning is done
-    // via a different protocol, which is triggered in
-    // __cilkrts_exception_handler.
+    // A detached frame would never need to call __cilkrts_set_return,
+    // which performs the return protocol of a full frame back to its
+    // parent when the full frame is called (not spawned).  A spawned
+    // full frame returning is done via a different protocol, which is
+    // triggered in __cilkrts_exception_handler.
     if (flags & CILK_FRAME_STOLEN) { // if this frame has a full frame
         cilkrts_alert(RETURN,
                       "__cilkrts_leave_frame parent is call_parent!");
@@ -292,8 +284,8 @@ __cilkrts_leave_frame_helper(__cilkrts_stack_frame *sf,
     sf->flags &= ~CILK_FRAME_DETACHED;
     if (__builtin_expect(exc > tail, false)) {
         __cilkrts_exception_handler(w, NULL);
-        // If Cilk_exception_handler returns this thread won the race and can
-        // return to the parent function.
+        // If __cilkrts_exception_handler returns this thread won the
+        // race and can return to the parent function.
     }
 }
 
