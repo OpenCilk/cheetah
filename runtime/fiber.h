@@ -1,7 +1,7 @@
 #ifndef _FIBER_H
 #define _FIBER_H
 
-#include "cilk-internal.h"
+#include "rts-config.h"
 #include "debug.h"
 #include "fiber-header.h"
 #include "frame.h"

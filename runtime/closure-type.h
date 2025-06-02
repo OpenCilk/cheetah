@@ -1,10 +1,11 @@
 #ifndef _CLOSURE_TYPE_H
 #define _CLOSURE_TYPE_H
 
-#include "cilk-internal.h"
-#include "fiber.h"
-#include "local-hypertable.h"
-#include "mutex.h"
+#include "rts-config.h"
+
+struct __cilkrts_fiber;
+struct __cilkrts_stack_frame;
+typedef struct local_hyper_table hyper_table;
 
 // Forward declaration
 typedef struct Closure Closure;

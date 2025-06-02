@@ -1,10 +1,11 @@
 #ifndef _CILK_INIT_H
 #define _CILK_INIT_H
 
-#include "cilk-internal.h"
+#include "frame.h"
+#include "global.h"
 
 // For invoke, the global state is implied.
-void __cilkrts_internal_invoke_cilkified_root(__cilkrts_stack_frame *sf);
+void __cilkrts_internal_invoke_cilkified_root(struct __cilkrts_stack_frame *sf);
 void __cilkrts_internal_exit_cilkified_root(global_state *g, __cilkrts_stack_frame *sf);
 
 // Used by Cilksan to set nworkers to 1 and force reduction

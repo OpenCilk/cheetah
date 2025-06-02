@@ -3,13 +3,10 @@
 
 // Includes
 #include <stdatomic.h>
-#include "debug.h"
-
-#include "cilk-internal.h"
-#include "fiber.h"
-#include "mutex.h"
 
 #include "closure-type.h"
+#include "debug.h"
+#include "rts-config.h"
 
 static inline const char *Closure_status_to_str(enum ClosureStatus status) {
     switch (status) {

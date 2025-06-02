@@ -26,6 +26,7 @@
 #include "global.h"
 #include "init.h"
 #include "local.h"
+#include "local-hypertable.h"
 #include "readydeque.h"
 #include "sched_stats.h"
 #include "scheduler.h"

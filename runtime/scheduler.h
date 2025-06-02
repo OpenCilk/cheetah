@@ -1,9 +1,9 @@
 #ifndef _RSCHED_H
 #define _RSCHED_H
 
-#include "cilk-internal.h"
 #include "closure.h"
 #include "efficiency.h"
+#include "worker.h"
 
 #define SYNC_READY 0
 #define SYNC_NOT_READY 1

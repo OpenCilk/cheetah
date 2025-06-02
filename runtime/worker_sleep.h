@@ -6,11 +6,11 @@
 #include <limits.h>
 #include <time.h>
 
-#include "cilk-internal.h"
 #include "efficiency.h"
 #include "global.h"
 #include "rts-config.h"
 #include "sched_stats.h"
+#include "worker.h"
 #include "worker_coord.h"
 
 #if defined(__APPLE__) && defined(__aarch64__)
