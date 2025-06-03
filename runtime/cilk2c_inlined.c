@@ -25,6 +25,7 @@
 // value and in its own alignment.  Because LLVM IR does not associate
 // alignments with types, this variable communicates the desired alignment to
 // the compiler instead.
+extern _Alignas(__cilkrts_stack_frame) size_t __cilkrts_stack_frame_align;
 _Alignas(__cilkrts_stack_frame)
 size_t __cilkrts_stack_frame_align = __alignof__(__cilkrts_stack_frame);
 
