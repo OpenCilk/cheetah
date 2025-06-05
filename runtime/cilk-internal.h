@@ -20,12 +20,6 @@ extern "C" {
 #include "types.h"
 #include "worker.h"
 
-#if defined __i386__ || defined __x86_64__
-#ifdef __SSE__
-#define CHEETAH_SAVE_MXCSR
-#endif
-#endif
-
 struct global_state;
 typedef struct global_state global_state;
 typedef struct local_state local_state;
