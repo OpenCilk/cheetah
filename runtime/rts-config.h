@@ -98,4 +98,10 @@ _Static_assert(MAX_NUM_PAGES_PER_STACK >= MIN_NUM_PAGES_PER_STACK, "Invalid Chee
 #define MAX_CALLBACKS 32 // Maximum number of init or exit callbacks
 #endif
 
+#if defined __i386__ || defined __x86_64__
+#ifdef __SSE__
+#define CHEETAH_SAVE_MXCSR
+#endif
+#endif
+
 #endif                   // _CONFIG_H
