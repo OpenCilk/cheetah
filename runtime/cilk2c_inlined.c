@@ -2,6 +2,8 @@
 // This file contains the compiler-runtime ABI.  This file is compiled to LLVM
 // bitcode, which the compiler then includes and inlines when it compiles a Cilk
 // program.
+// This file is also linked into the runtime library for use by
+// the exception personality function.
 // =============================================================================
 
 #include <stdatomic.h>
@@ -21,11 +23,14 @@
 #include "pedigree_ext.c"
 #include "worker.h"
 
+// Suppress -Wmissing-variable-declarations for this variable.
+_Alignas(__cilkrts_stack_frame)
+extern size_t __cilkrts_stack_frame_align;
+
 // This variable encodes the alignment of a __cilkrts_stack_frame, both in its
 // value and in its own alignment.  Because LLVM IR does not associate
 // alignments with types, this variable communicates the desired alignment to
 // the compiler instead.
-extern _Alignas(__cilkrts_stack_frame) size_t __cilkrts_stack_frame_align;
 _Alignas(__cilkrts_stack_frame)
 size_t __cilkrts_stack_frame_align = __alignof__(__cilkrts_stack_frame);
 
