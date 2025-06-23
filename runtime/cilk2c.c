@@ -74,6 +74,7 @@ void __cilkrts_check_exception_raise(__cilkrts_stack_frame *sf) {
 
     if (exn != NULL) {
         _Unwind_RaiseException((struct _Unwind_Exception *)exn); // noreturn
+        __builtin_unreachable();
     }
 
     return;
@@ -95,6 +96,7 @@ void __cilkrts_check_exception_resume(__cilkrts_stack_frame *sf) {
 
     if (exn != NULL) {
         _Unwind_Resume((struct _Unwind_Exception *)exn); // noreturn
+        __builtin_unreachable();
     }
 
     return;

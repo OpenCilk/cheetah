@@ -196,6 +196,7 @@ resume_from_last_frame(__cilkrts_worker *w, __cilkrts_stack_frame *sf,
     // Terminate the Cilkified region.
     uncilkify(w->g, sf);
     _Unwind_Resume(ue_header); // noreturn, although not marked as such
+    __builtin_unreachable();
 }
 
 _Unwind_Reason_Code __cilk_personality_internal(
@@ -269,6 +270,7 @@ _Unwind_Reason_Code __cilk_personality_internal(
             // work on macOS.
             sf->flags &= ~CILK_FRAME_EXCEPTION_PENDING;
             _Unwind_RaiseException(exn); // noreturn
+            __builtin_unreachable();
         }
 
         // Record whether this frame is detached, which indicates that it's a
