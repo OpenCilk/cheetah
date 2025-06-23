@@ -26,7 +26,7 @@ CHEETAH_INTERNAL struct cilkrts_callbacks cilkrts_callbacks = {
 int __cilkrts_is_initialized(void) { return NULL != default_cilkrts; }
 
 int __cilkrts_running_on_workers(void) {
-    return !__cilkrts_need_to_cilkify;
+    return !__cilkrts_status.need_to_cilkify;
 }
 
 // These callback-registration methods can run before the runtime system has
@@ -172,7 +172,7 @@ void __cilkrts_sync(__cilkrts_stack_frame *sf) {
 /// Methods for handling extensions
 
 void __cilkrts_register_extension(void *extension) {
-    __cilkrts_use_extension = true;
+    __cilkrts_status.use_extension = true;
     __cilkrts_worker *w = __cilkrts_get_tls_worker();
     w->extension = extension;
 }
