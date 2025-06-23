@@ -46,12 +46,19 @@ extern struct __cilkrts_status __cilkrts_status;
 #else
 #define USE_EXTENSION false
 #endif
-extern __thread __cilkrts_worker *__cilkrts_tls_worker;
-extern __thread struct cilk_fiber *__cilkrts_current_fh;
+
+struct __cilkrts_tls {
+    __cilkrts_worker *worker;
+    struct cilk_fiber *fh;
+};
+
+extern __thread struct __cilkrts_tls __cilkrts_tls;
+
+extern bool __cilkrts_need_to_cilkify;
 
 static inline __attribute__((always_inline)) __cilkrts_worker *
 __cilkrts_get_tls_worker(void) {
-    return __cilkrts_tls_worker;
+    return __cilkrts_tls.worker;
 }
 
 static inline __attribute__((always_inline)) __cilkrts_worker *

@@ -210,7 +210,7 @@ _Unwind_Reason_Code __cilk_personality_internal(
         return std_lib_personality(version, actions, exception_class, ue_header,
                                    context);
 
-    struct cilk_fiber *fh = __cilkrts_current_fh;
+    struct cilk_fiber *fh = __cilkrts_tls.fh;
     __cilkrts_worker *w = fh->worker;
     CILK_ASSERT_POINTER_EQUAL(w, __cilkrts_get_tls_worker());
     __cilkrts_stack_frame *sf = fh->current_stack_frame;

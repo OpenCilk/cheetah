@@ -454,7 +454,7 @@ static inline __attribute__((noinline)) void boss_wait_helper(void) {
     // function arguments and local variables in this function.  Get
     // fresh copies of these arguments from the runtime's global
     // state.
-    global_state *g = __cilkrts_tls_worker->g;
+    global_state *g = __cilkrts_tls.worker->g;
     __cilkrts_stack_frame *sf = g->root_closure->frame;
     CILK_BOSS_START_TIMING(g);
 

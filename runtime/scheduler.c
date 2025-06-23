@@ -38,16 +38,19 @@ struct __cilkrts_status __cilkrts_status = {
     .use_extension = false
 };
 
-// TLS pointer to the current worker structure.
-__thread __cilkrts_worker *__cilkrts_tls_worker = &default_worker;
+__thread struct __cilkrts_tls __cilkrts_tls = {
+  
+  // TLS pointer to the current worker structure.
+  .worker = &default_worker,
 
-// TLS pointer to the current fiber header.
-//
-// Although we could store the current fiber header in the worker, the code on
-// the work needs to access the current fiber header more frequently than the
-// worker itself.  Thus, it's notably faster to store a pointer to the current
-// fiber header itself in TLS.
-__thread struct cilk_fiber *__cilkrts_current_fh = NULL;
+  // TLS pointer to the current fiber header.
+  //
+  // Although we could store the current fiber header in the worker, the code on
+  // the work needs to access the current fiber header more frequently than the
+  // worker itself.  Thus, it's notably faster to store a pointer to the current
+  // fiber header itself in TLS.
+  .fh = NULL
+};
 
 // ==============================================
 // Misc. helper functions
@@ -151,7 +154,7 @@ static void setup_for_execution(__cilkrts_worker *w, Closure *t) {
 
     fh->current_stack_frame = sf;
     sf->fh = fh;
-    __cilkrts_current_fh = fh;
+    __cilkrts_tls.fh = fh;
 }
 
 // ANGE: When this is called, either a) a worker is about to pass a sync (though
@@ -192,7 +195,7 @@ static void setup_for_sync(__cilkrts_worker *w, worker_id self, Closure *t) {
     __cilkrts_set_synced(t->frame);
 
     struct cilk_fiber *fh = t->fiber;
-    __cilkrts_current_fh = fh;
+    __cilkrts_tls.fh = fh;
     t->frame->fh = fh;
     fh->worker = w;
     CILK_ASSERT_POINTER_EQUAL(fh->current_stack_frame, t->frame);
@@ -214,7 +217,7 @@ static void setup_for_sync(__cilkrts_worker *w, worker_id self, Closure *t) {
 // ==============================================
 
 CHEETAH_INTERNAL void __cilkrts_set_tls_worker(__cilkrts_worker *w) {
-    __cilkrts_tls_worker = w;
+    __cilkrts_tls.worker = w;
 }
 
 // ==============================================
@@ -1330,7 +1333,7 @@ static void do_what_it_says(ReadyDeque *deques, __cilkrts_worker *w,
                 w = w_save;
                 l = w->l;
                 self = w->self;
-                __cilkrts_current_fh = NULL;
+                __cilkrts_tls.fh = NULL;
                 CILK_ASSERT_POINTER_EQUAL(w, __cilkrts_get_tls_worker());
                 sanitizer_finish_switch_fiber();
                 worker_change_state(w, WORKER_SCHED);
