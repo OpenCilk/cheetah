@@ -25,7 +25,7 @@ struct __cilkrts_stack_frame {
     // Pointer to the fiber header of the worker currently executing with this
     // stack frame.
     //
-    // This pointer is redundant with the __cilkrts_current_fh TLS variable, but
+    // This pointer is redundant with the __cilkrts_tls.fh TLS variable, but
     // accessing TLS is expensive on some systems, such as macOS.  It is
     // therefore faster to use this variable when possible.
     struct cilk_fiber *fh;
