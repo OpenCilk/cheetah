@@ -1,0 +1,21 @@
+#ifndef _CILK_REDUCER_
+#define _CILK_REDUCER_
+
+#ifdef __cplusplus
+
+#include <functional>
+
+extern "C" void *__hyper_lookup(void const *, size_t,
+                                std::function<void(void *)> &,
+                                std::function<void(void *, void *)> &);
+
+void *__my_lookup(void const *, size_t, std::function<void(void *)> &,
+                  std::function<void(void *, void *)> &);
+
+#else // #ifdef __cplusplus
+
+void *__hyper_lookup(void const *, size_t, void *, void *);
+
+#endif // #ifdef __cplusplus
+
+#endif // _CILK_REDUCER_

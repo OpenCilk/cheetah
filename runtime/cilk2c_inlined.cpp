@@ -48,8 +48,11 @@ unsigned __cilkrts_get_worker_number(void) {
     return 0;
 }
 
+// void *__cilkrts_reducer_lookup(void *key, size_t size,
+//                                void *identity_ptr, void *reduce_ptr) {
 void *__cilkrts_reducer_lookup(void *key, size_t size,
-                               void *identity_ptr, void *reduce_ptr) {
+                               __cilk_identity_fn &identity_fn,
+                               __cilk_reduce_fn &reduce_fn) {
     // If we're outside a cilkified region, then the key is the view.
     if (__cilkrts_status.need_to_cilkify)
         return key;
@@ -60,9 +63,11 @@ void *__cilkrts_reducer_lookup(void *key, size_t size,
         return b->value.view;
     }
 
-    return __cilkrts_insert_new_view(table, (uintptr_t)key, size,
-                                     (__cilk_identity_fn)identity_ptr,
-                                     (__cilk_reduce_fn)reduce_ptr);
+    // return __cilkrts_insert_new_view(table, (uintptr_t)key, size,
+    //                                  (__cilk_identity_fn)identity_ptr,
+    //                                  (__cilk_reduce_fn)reduce_ptr);
+    return __cilkrts_insert_new_view(table, (uintptr_t)key, size, identity_fn,
+                                     reduce_fn);
 }
 
 // Begin a Cilkified region.  The routine runs on a Cilkifying thread to

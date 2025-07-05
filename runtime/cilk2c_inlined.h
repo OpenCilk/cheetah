@@ -78,18 +78,27 @@ void __cilk_sync(struct __cilkrts_stack_frame *sf);
 // exception that needs to be handled locally.
 void __cilk_sync_nothrow(struct __cilkrts_stack_frame *sf);
 
-void *__cilkrts_reducer_lookup(void *key, size_t size,
-                               void *id, void *reduce);
+// void *__cilkrts_reducer_lookup(void *key, size_t size,
+//                                void *id, void *reduce);
 
+void *__cilkrts_reducer_lookup(void *key, size_t size, __cilk_identity_fn &id,
+                               __cilk_reduce_fn &reduce);
+
+// void __cilkrts_reducer_register_32(void *key, uint32_t size,
+//                                    void (*id)(void *),
+//                                    void (*reduce)(void *, void *))
+//   __CILKRTS_NOTHROW;
 void __cilkrts_reducer_register_32(void *key, uint32_t size,
-                                   void (*id)(void *),
-                                   void (*reduce)(void *, void *))
-  __CILKRTS_NOTHROW;
+                                   __cilk_identity_fn &id,
+                                   __cilk_reduce_fn &reduce) __CILKRTS_NOTHROW;
 
+// void __cilkrts_reducer_register_64(void *key, uint64_t size,
+//                                    void (*id)(void *),
+//                                    void (*reduce)(void *, void *))
+//   __CILKRTS_NOTHROW;
 void __cilkrts_reducer_register_64(void *key, uint64_t size,
-                                   void (*id)(void *),
-                                   void (*reduce)(void *, void *))
-  __CILKRTS_NOTHROW;
+                                   __cilk_identity_fn &id,
+                                   __cilk_reduce_fn &reduce) __CILKRTS_NOTHROW;
 
 void __cilkrts_reducer_unregister(void *key) __CILKRTS_NOTHROW;
 

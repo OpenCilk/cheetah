@@ -226,7 +226,7 @@ static inline struct bucket *find_hyperobject(hyper_table *table,
 
 CHEETAH_API
 void *__cilkrts_insert_new_view(hyper_table *table, uintptr_t key, size_t size,
-                                __cilk_identity_fn identity,
-                                __cilk_reduce_fn reduce);
+                                __cilk_identity_fn &identity,
+                                __cilk_reduce_fn &reduce);
 
 #endif // _LOCAL_HYPERTABLE_H
