@@ -352,8 +352,8 @@ bool insert_hyperobject(hyper_table *table, struct bucket b) noexcept {
 }
 
 void *__cilkrts_insert_new_view(hyper_table *table, uintptr_t key, size_t size,
-                                __cilk_identity_fn identity,
-                                __cilk_reduce_fn reduce) {
+                                __cilk_identity_fn &identity,
+                                __cilk_reduce_fn &reduce) {
     // Create a new view and initialize it with the identity function.
     void *new_view = cilk_aligned_alloc(64, round_size_to_alignment(64, size));
     identity(new_view);
@@ -361,7 +361,7 @@ void *__cilkrts_insert_new_view(hyper_table *table, uintptr_t key, size_t size,
     struct bucket new_bucket = {
         .key = (uintptr_t)key,
         .hash = 0,
-        .value = {.view = new_view, .reduce_fn = reduce}};
+        .value = {.view = new_view, .reduce_fn = &reduce}};
     bool success = insert_hyperobject(table, new_bucket);
     assert(success);
     (void)success;
@@ -425,10 +425,10 @@ hyper_table *merge_two_hts(hyper_table *__restrict left,
             // when done.
             reducer_base dst_rb = dst_bucket->value;
             if (left_dst) {
-                dst_rb.reduce_fn(dst_rb.view, b.value.view);
+                (*dst_rb.reduce_fn)(dst_rb.view, b.value.view);
                 free(b.value.view);
             } else {
-                dst_rb.reduce_fn(b.value.view, dst_rb.view);
+                (*dst_rb.reduce_fn)(b.value.view, dst_rb.view);
                 free(dst_rb.view);
                 dst_bucket->value.view = b.value.view;
             }

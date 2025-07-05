@@ -20,7 +20,7 @@
 //   reducer_base is storing a pointer to the view or the view itself.
 typedef struct reducer_base {
     void *view;
-    __cilk_reduce_fn reduce_fn;
+    __cilk_reduce_fn *reduce_fn;
 } reducer_base;
 
 #endif /* _HYPEROBJECT_BASE */
