@@ -11,6 +11,7 @@
 #include <cilk/cilk_api.h>
 #include <cstdint>
 #include <cstring>
+#include <functional>
 #include <unwind.h>
 
 static struct closure_exception exception_reducer = {
@@ -85,10 +86,13 @@ static void reduce_exception_reducer(void *l, void *r) noexcept {
 // Get the current view of the exception-reducer state, creating a new view if
 // none exists.
 struct closure_exception *get_exception_reducer(__cilkrts_worker *w) noexcept {
+    std::function<void(void *)> init_exception_reducer_fn =
+        init_exception_reducer;
+    std::function<void(void *, void *)> reduce_exception_reducer_fn =
+        reduce_exception_reducer;
     return (struct closure_exception *)internal_reducer_lookup(
         w, static_cast<void *>(&exception_reducer), sizeof(exception_reducer),
-        reinterpret_cast<void *>(init_exception_reducer),
-        reinterpret_cast<void *>(reduce_exception_reducer));
+        init_exception_reducer_fn, reduce_exception_reducer_fn);
 }
 
 // Try to get the current view of the exception-reducer state, but return NULL
