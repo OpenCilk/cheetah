@@ -72,7 +72,8 @@ get_worker_from_stack(const __cilkrts_stack_frame *sf) {
 
 CHEETAH_INTERNAL
 void *internal_reducer_lookup(__cilkrts_worker *w, void *key, size_t size,
-                              void *identity_ptr, void *reduce_ptr);
+                              __cilk_identity_fn &identity_ptr,
+                              __cilk_reduce_fn &reduce_ptr);
 CHEETAH_INTERNAL
 void internal_reducer_remove(__cilkrts_worker *w, void *key);
 
