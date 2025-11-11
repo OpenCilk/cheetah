@@ -1,7 +1,6 @@
 #ifndef _CILK_API_H
 #define _CILK_API_H
 
-#include <functional>
 #include <stddef.h> /* size_t */
 
 #ifdef __cplusplus
@@ -29,18 +28,7 @@ void __cilkrts_dprand_set_seed(uint64_t seed) __CILKRTS_NOTHROW;
 void __cilkrts_init_dprng(void) __CILKRTS_NOTHROW;
 uint64_t __cilkrts_get_dprand(void) __CILKRTS_NOTHROW;
 
-// typedef void (*__cilk_identity_fn)(void *);
-// typedef void (*__cilk_reduce_fn)(void *, void *);
-typedef std::function<void(void *)> __cilk_identity_fn;
-typedef std::function<void(void *, void *)> __cilk_reduce_fn;
-
-// void *__cilkrts_reducer_lookup(void *key, size_t size, void *id, void *reduce);
-// __attribute__((deprecated))
-void *__cilkrts_reducer_lookup(void *key, size_t size, __cilk_identity_fn &id,
-                               __cilk_reduce_fn &reduce);
-__attribute__((deprecated))
-void __cilkrts_reducer_register(void *key, size_t size, __cilk_identity_fn &id,
-                                __cilk_reduce_fn &reduce)
+void __cilkrts_reducer_register_2(void *key, void (*reduce)(void *, void *))
   __CILKRTS_NOTHROW;
 
 __attribute__((deprecated))

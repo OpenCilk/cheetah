@@ -1,20 +1,15 @@
 #include "internal-malloc.h" /* only needed for new view allocation */
 #include "local-hypertable.h"
+
+#include "cilk/reducer"
+
+#include "debug.h"
+
 #include <cassert>
 #include <cstdint>
 #include <cstdlib>
 
-static void reducer_base_init(reducer_base *rb) {
-    rb->view = nullptr;
-    rb->reduce_fn = nullptr;
-}
-
 static void make_tombstone(uintptr_t *key) { *key = KEY_DELETED; }
-
-static void bucket_init(struct bucket *b) {
-    b->key = KEY_EMPTY;
-    reducer_base_init(&b->value);
-}
 
 // Constant used to determine the target maximum load factor.  The
 // table will aim for a maximum load factor of
@@ -46,17 +41,12 @@ static bool time_to_rebuild(int32_t ins_rm_count, int32_t capacity) {
 }
 
 struct bucket *hyper_table::bucket_array_create(int32_t array_size) {
-    struct bucket *buckets =
-        (struct bucket *)calloc(array_size, sizeof(struct bucket));
+    struct bucket *buckets = new bucket[array_size];
     if (array_size < MIN_HT_CAPACITY) {
-        for (int32_t i = 0; i < array_size; ++i) {
-            bucket_init(&buckets[i]);
-        }
         return buckets;
     }
     int32_t tombstone_idx = 0;
     for (int32_t i = 0; i < array_size; ++i) {
-        bucket_init(&buckets[i]);
         // Graveyard hashing: Insert tombstones at regular intervals.
         // TODO: Check if it's bad for the insertions to rebuild a
         // table to use these tombstones.
@@ -199,7 +189,6 @@ bool remove_hyperobject(hyper_table *table, uintptr_t key) noexcept {
 }
 
 bool insert_hyperobject(hyper_table *table, struct bucket b) noexcept {
-    assert(b.key != KEY_EMPTY && b.key != KEY_DELETED);
     int32_t capacity = table->capacity;
     struct bucket *buckets = table->buckets;
     if (capacity < MIN_HT_CAPACITY) {
@@ -260,7 +249,7 @@ bool insert_hyperobject(hyper_table *table, struct bucket b) noexcept {
         // Found the key?  Overwrite that bucket.
         // TODO: Reconsider what to do in this case.
         if (b.key == curr_key) {
-            buckets[i].value = b.value;
+            buckets[i].data = b.data;
             return true;
         }
 
@@ -351,9 +340,49 @@ bool insert_hyperobject(hyper_table *table, struct bucket b) noexcept {
     return false;
 }
 
-void *__cilkrts_insert_new_view(hyper_table *table, uintptr_t key, size_t size,
-                                __cilk_identity_fn &identity,
-                                __cilk_reduce_fn &reduce) {
+__reducer_base *__cilkrts_insert_new_view_0(hyper_table *table,
+                                            __reducer_base *key) {
+    // Create a new view and initialize it with the identity function.
+    size_t size = key->size();
+    void *new_view = cilk_aligned_alloc(64, round_size_to_alignment(64, size));
+    __reducer_base *base = key->identity(new_view);
+    // Insert the new view into the local hypertable.
+    struct bucket new_bucket = {
+        .key = (uintptr_t)key,
+        .hash = 0,
+        .data = { .view = new_view, .extra = base }
+    };
+    bool success = insert_hyperobject(table, new_bucket);
+    assert(success);
+    (void)success;
+    // Return the base class subobject of the new view.
+    return base;
+}
+
+void *__cilkrts_insert_new_view_1(hyper_table *table, uintptr_t key,
+                                  const __reducer_callbacks &callbacks) {
+    // Create a new view and initialize it with the identity function.
+    void *new_view =
+        cilk_aligned_alloc(64, round_size_to_alignment(64, callbacks.size));
+    callbacks.identity(new_view);
+    // Insert the new view into the local hypertable.
+    struct bucket new_bucket = {
+        .key = (uintptr_t)key,
+        .hash = 0,
+        // XXX check lifetime
+        .data = { .view = new_view, .extra = &callbacks.reduce }
+    };
+    bool success = insert_hyperobject(table, new_bucket);
+    assert(success);
+    (void)success;
+    // Return the new view.
+    return new_view;
+}
+
+void *__cilkrts_insert_new_view_2(hyper_table *table, uintptr_t key,
+                                  size_t size,
+                                  void (*identity)(void *),
+                                  void (*reduce)(void *, void *)) {
     // Create a new view and initialize it with the identity function.
     void *new_view = cilk_aligned_alloc(64, round_size_to_alignment(64, size));
     identity(new_view);
@@ -361,7 +390,8 @@ void *__cilkrts_insert_new_view(hyper_table *table, uintptr_t key, size_t size,
     struct bucket new_bucket = {
         .key = (uintptr_t)key,
         .hash = 0,
-        .value = {.view = new_view, .reduce_fn = &reduce}};
+        .data = { .view = new_view, .extra = reduce }
+    };
     bool success = insert_hyperobject(table, new_bucket);
     assert(success);
     (void)success;
@@ -423,14 +453,13 @@ hyper_table *merge_two_hts(hyper_table *__restrict left,
             // Merge the two views in the source and destination buckets, being
             // sure to preserve left-to-right ordering.  Free the right view
             // when done.
-            reducer_base dst_rb = dst_bucket->value;
             if (left_dst) {
-                (*dst_rb.reduce_fn)(dst_rb.view, b.value.view);
-                free(b.value.view);
+                bucket::reduce(dst_bucket, &b);
             } else {
-                (*dst_rb.reduce_fn)(b.value.view, dst_rb.view);
-                free(dst_rb.view);
-                dst_bucket->value.view = b.value.view;
+                bucket::reduce(&b, dst_bucket);
+                dst_bucket->data = b.data;
+                b.data.extra = (__reducer_base *)nullptr;
+                b.data.view = nullptr;
             }
         }
     }
@@ -439,4 +468,28 @@ hyper_table *merge_two_hts(hyper_table *__restrict left,
     local_hyper_table_free(src);
 
     return dst;
+}
+
+void bucket::reduce(bucket *left, bucket *right)
+{
+    assert(left->data.extra.index() == right->data.extra.index());
+    void *left_view = left->data.view, *right_view = right->data.view;
+    if (std::holds_alternative<__reducer_base *>(left->data.extra)) {
+        __reducer_base *leftmost =
+            static_cast<__reducer_base *>
+            (reinterpret_cast<void *>(left->key));
+        __reducer_base *left_r = std::get<__reducer_base *>(left->data.extra);
+        __reducer_base *right_r = std::get<__reducer_base *>(right->data.extra);
+        leftmost->reduce(left_r, right_r);
+        right_r->~__reducer_base();
+    } else if (std::holds_alternative<const __cilk_reduce_fn *>(left->data.extra)) {
+        (*std::get<const __cilk_reduce_fn *>(left->data.extra))
+            (left_view, right_view);
+    } else {
+        std::get<void (*)(void *, void *)>(left->data.extra)
+            (left_view, right_view);
+    }
+    right->data.extra = (__reducer_base *)nullptr;
+    right->data.view = nullptr;
+    free(right_view);
 }

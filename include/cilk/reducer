@@ -1,21 +1,32 @@
 #ifndef _CILK_REDUCER_
 #define _CILK_REDUCER_
 
-#ifdef __cplusplus
-
+#include <cstddef>
 #include <functional>
 
-extern "C" void *__hyper_lookup(void const *, size_t,
-                                std::function<void(void *)> &,
-                                std::function<void(void *, void *)> &);
+typedef std::function<void(void *)> __cilk_identity_fn;
+typedef std::function<void(void *, void *)> __cilk_reduce_fn;
 
-void *__my_lookup(void const *, size_t, std::function<void(void *)> &,
-                  std::function<void(void *, void *)> &);
+struct __reducer_base {
+  __reducer_base();
+  virtual ~__reducer_base();
+  virtual std::size_t size() = 0;
+  // Return the __reducer_base subobject of a newly constructed object.
+  virtual __reducer_base *identity(void *view) = 0;
+  // Merge r into l.  The destructor for r will be called after reduce.
+  virtual void reduce(__reducer_base *l, __reducer_base *r) = 0;
+};
 
-#else // #ifdef __cplusplus
+struct __reducer_callbacks {
+  size_t size;
+  __cilk_identity_fn identity;
+  __cilk_reduce_fn reduce;
+};
 
-void *__hyper_lookup(void const *, size_t, void *, void *);
+extern "C" __reducer_base *__hyper_lookup_class(__reducer_base *)
+  __attribute__((nonnull, returns_nonnull));
 
-#endif // #ifdef __cplusplus
+extern "C" void *__hyper_lookup_internal_1(void *, const __reducer_callbacks &)
+  __attribute__((nonnull, returns_nonnull));
 
 #endif // _CILK_REDUCER_

@@ -48,11 +48,23 @@ unsigned __cilkrts_get_worker_number(void) {
     return 0;
 }
 
-// void *__cilkrts_reducer_lookup(void *key, size_t size,
-//                                void *identity_ptr, void *reduce_ptr) {
-void *__cilkrts_reducer_lookup(void *key, size_t size,
-                               __cilk_identity_fn &identity_fn,
-                               __cilk_reduce_fn &reduce_fn) {
+__reducer_base *__cilkrts_reducer_lookup_0(__reducer_base *key) {
+    // If we're outside a cilkified region, then the key is the view.
+    if (__cilkrts_status.need_to_cilkify)
+        return key;
+    struct hyper_table *table = get_hyper_table();
+    struct bucket *b = find_hyperobject(table, (uintptr_t)key);
+    if (__builtin_expect(!!b, true)) {
+        // Return the reducer_base subobject of the existing view.
+        // get_if is used instead of get because no exceptions are allowed
+        return *std::get_if<__reducer_base *>(&b->data.extra);
+    }
+
+    return __cilkrts_insert_new_view_0(table, key);
+}
+
+void *__cilkrts_reducer_lookup_1(void *key,
+                                 const __reducer_callbacks &callbacks) {
     // If we're outside a cilkified region, then the key is the view.
     if (__cilkrts_status.need_to_cilkify)
         return key;
@@ -60,14 +72,28 @@ void *__cilkrts_reducer_lookup(void *key, size_t size,
     struct bucket *b = find_hyperobject(table, (uintptr_t)key);
     if (__builtin_expect(!!b, true)) {
         // Return the existing view.
-        return b->value.view;
+        return b->data.view;
     }
 
-    // return __cilkrts_insert_new_view(table, (uintptr_t)key, size,
-    //                                  (__cilk_identity_fn)identity_ptr,
-    //                                  (__cilk_reduce_fn)reduce_ptr);
-    return __cilkrts_insert_new_view(table, (uintptr_t)key, size, identity_fn,
-                                     reduce_fn);
+    return __cilkrts_insert_new_view_1(table, (uintptr_t)key, callbacks);
+}
+
+
+void *__cilkrts_reducer_lookup_2(void *key, size_t size,
+                                 void (*identity)(void *),
+                                 void (*reduce)(void *, void *)) {
+    // If we're outside a cilkified region, then the key is the view.
+    if (__cilkrts_status.need_to_cilkify)
+        return key;
+    struct hyper_table *table = get_hyper_table();
+    struct bucket *b = find_hyperobject(table, (uintptr_t)key);
+    if (__builtin_expect(!!b, true)) {
+        // Return the existing view.
+        return b->data.view;
+    }
+
+    return __cilkrts_insert_new_view_2(table, (uintptr_t)key, size, identity,
+                                       reduce);
 }
 
 // Begin a Cilkified region.  The routine runs on a Cilkifying thread to
