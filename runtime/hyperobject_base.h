@@ -1,7 +1,8 @@
 #ifndef _HYPEROBJECT_BASE
 #define _HYPEROBJECT_BASE
 
-#include <cilk/cilk_api.h> // __cilk_reduce_fn
+#include <cilk/reducer> // __cilk_reduce_fn
+#include <variant>
 
 // Reducer data.
 //
@@ -18,9 +19,14 @@
 //   a view may be invalidated by other hyper_lookup operations.
 // - Problem: Need a way to keep track of whether the view in a
 //   reducer_base is storing a pointer to the view or the view itself.
-typedef struct reducer_base {
+
+struct reducer_data {
     void *view;
-    __cilk_reduce_fn *reduce_fn;
-} reducer_base;
+    std::variant<
+        __reducer_base *,
+        const std::function<void(void *, void *)> *,
+        void (*)(void *, void *)
+        > extra;
+};
 
 #endif /* _HYPEROBJECT_BASE */

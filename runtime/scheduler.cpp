@@ -557,41 +557,81 @@ static Closure *return_value(__cilkrts_worker *const w, worker_id self,
     return res;
 }
 
-static hyper_table *Cilk_merge_hts(__cilkrts_worker *w) {
+void __cilkrts_do_reductions(__cilkrts_stack_frame *sf) {
+    __cilkrts_worker *w = get_worker_from_stack(sf);
     local_state *l = w->l;
     hyper_table *lht = l->lht;
     hyper_table *rht = l->rht;
 
     if (lht == NULL && rht == NULL)
-        return NULL;
+        return;
 
     l->lht = NULL;
     l->rht = NULL;
 
-    hyper_table *active_ht = w->hyper_table;
+    hyper_table *ht = w->hyper_table;
     w->hyper_table = NULL;
 
-    // merge reducers
     if (lht) {
-        active_ht = merge_two_hts(lht, active_ht);
-    }
-    if (rht) {
-        active_ht = merge_two_hts(active_ht, rht);
-    }
-    // Assume that merge_two_hts doesn't itself use reducers.
-    // TODO: Relax this assumption.
-    return active_ht;
-}
+        ht = merge_two_hts(lht, ht);
+        while (ht != NULL) {
+            // The worker might have changed if the reduce operations executed
+            // parallel code.  Reload the worker pointer.
+            w = get_worker_from_stack(sf);
+            if (w->hyper_table == NULL) {
+                // The last call to merge_two_hts did not create any new
+                // reducer views.  Finish this loop.
+                break;
+            }
 
-void __cilkrts_do_reductions(__cilkrts_stack_frame *sf) {
-    __cilkrts_worker *w = get_worker_from_stack(sf);
-    hyper_table *ht = Cilk_merge_hts(w);
-    if (ht != NULL) {
-        // The worker might have changed if the reduce operations executed
-        // parallel code.  Reload the worker pointer.
-        w = get_worker_from_stack(sf);
-        w->hyper_table = ht;
+            // The last call to merge_two_hts created more reducer views.
+            // Reduce those new views on the right of the returned hyper table.
+            hyper_table *new_ht = w->hyper_table;
+            w->hyper_table = NULL;
+            ht = merge_two_hts(ht, new_ht);
+        }
     }
+
+    if (rht) {
+        ht = merge_two_hts(ht, rht);
+        while (ht != NULL) {
+            // The worker might have changed if the reduce operations executed
+            // parallel code.  Reload the worker pointer.
+            w = get_worker_from_stack(sf);
+            if (w->hyper_table == NULL) {
+                // The last call to merge_two_hts did not create any new
+                // reducer views.  Finish this loop.
+                break;
+            }
+
+            // The last call to merge_two_hts created more reducer views.
+            // Reduce those new views on the right of the returned hyper table.
+            rht = w->hyper_table;
+            w->hyper_table = NULL;
+            ht = merge_two_hts(ht, rht);
+        }
+    }
+
+    w->hyper_table = ht;
+
+    // hyper_table *ht = Cilk_merge_hts(w);
+    // while (ht != NULL) {
+    //     // The worker might have changed if the reduce operations executed
+    //     // parallel code.  Reload the worker pointer.
+    //     w = get_worker_from_stack(sf);
+
+    //     if (w->hyper_table == NULL) {
+    //         // The last call to Cilk_merge_hts did not create any new reducer
+    //         // views.  Set w's hyper table to be the result and return.
+    //         w->hyper_table = ht;
+    //         break;
+    //     }
+
+    //     // The last call to Cilk_merge_hts created more reducer views.  Reduce
+    //     // those new views on the right of the returned hyper table.
+    //     w->l->lht = ht;
+    //     ht = Cilk_merge_hts(w);
+    // }
 }
 
 static void Cilk_do_reductions_for_return(__cilkrts_worker *w,

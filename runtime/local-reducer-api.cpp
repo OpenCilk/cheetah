@@ -1,6 +1,5 @@
 #include "cilk-internal.h"
 #include "cilk2c_inlined.h"
-#include "hyperobject_base.h"
 #include "local-hypertable.h"
 #include "local-reducer-api.h"
 #include "rts-config.h"
@@ -8,56 +7,84 @@
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
 
-void __cilkrts_reducer_register(void *key, size_t size,
-				__cilk_identity_fn &id,
-				__cilk_reduce_fn &reduce) noexcept {
-    (void)size; // not currently used here, only in lookup
-    (void)id; // not currently used here, only in lookup
+__reducer_base::__reducer_base()
+{
+  // This would be a great place to register the reducer,
+  // but doing so would break the equivalence between
+  // leftmost view and dynamic views.  The derived class
+  // identity operation would need to pass a flag to this
+  // constructor to suppress registration.
+}
 
-    struct hyper_table *table = get_hyper_table();
-    struct bucket b = {.key = (uintptr_t)key,
-                       .hash = 0,
-                       .value = {.view = key, .reduce_fn = &reduce}};
+__reducer_base::~__reducer_base()
+{
+}
+
+static void reducer_register(struct bucket &b)
+    __CILKRTS_NOTHROW
+{
+    struct hyper_table *table =
+        get_local_hyper_table(__cilkrts_get_tls_worker());
     bool success = insert_hyperobject(table, b);
     CILK_ASSERT(success && "Failed to register reducer.");
     (void)success;
 }
 
-void __cilkrts_reducer_register_32(void *key, uint32_t size,
-                                   __cilk_identity_fn &id,
-                                   __cilk_reduce_fn &reduce) noexcept {
-    __cilkrts_reducer_register(key, size, id, reduce);
+void __cilkrts_reducer_register_0(__reducer_base *key)
+    __CILKRTS_NOTHROW
+{
+    struct bucket b {
+        .key = (uintptr_t)key,
+        .hash = 0,
+        .data = { .view = nullptr, .extra = key }
+    };
+    reducer_register(b);
 }
 
-void __cilkrts_reducer_register_64(void *key, uint64_t size,
-                                   __cilk_identity_fn &id,
-                                   __cilk_reduce_fn &reduce) noexcept {
-    __cilkrts_reducer_register(key, size, id, reduce);
+void __cilkrts_reducer_register_1(void *key, __reducer_callbacks *cb)
+    __CILKRTS_NOTHROW
+{
+    struct bucket b {
+        .key = (uintptr_t)key,
+        .hash = 0,
+        .data = { .view = key, .extra = &cb->reduce },
+    };
+    reducer_register(b);
+}
+
+void __cilkrts_reducer_register_2(void *key, void (*reduce)(void *, void *))
+    __CILKRTS_NOTHROW
+{
+    struct bucket b {
+        .key = (uintptr_t)key,
+        .hash = 0,
+        .data = { .view = key, .extra = reduce },
+    };
+    reducer_register(b);
 }
 
 void __cilkrts_reducer_unregister(void *key) noexcept {
-    struct hyper_table *table = get_hyper_table();
-    bool success = remove_hyperobject(table, (uintptr_t)key);
-    /* CILK_ASSERT(success && "Failed to unregister reducer."); */
-    (void)success;
+    if (struct hyper_table *table = get_hyper_table()) {
+        bool success = remove_hyperobject(table, (uintptr_t)key);
+        /* CILK_ASSERT(success && "Failed to unregister reducer."); */
+        (void)success;
+    }
 }
 
 #pragma clang diagnostic pop
 
 CHEETAH_INTERNAL
-void *internal_reducer_lookup(__cilkrts_worker *w, void *key, size_t size,
-                              __cilk_identity_fn &identity_ptr,
-                              __cilk_reduce_fn &reduce_ptr) {
+__reducer_base *internal_reducer_lookup(__cilkrts_worker *w,
+                                        __reducer_base *key) {
     struct hyper_table *table = get_local_hyper_table(w);
     struct bucket *b = find_hyperobject(table, (uintptr_t)key);
     if (__builtin_expect(!!b, true)) {
         CILK_ASSERT_POINTER_EQUAL(key, (void *)b->key);
         // Return the existing view.
-        return b->value.view;
+        return std::get<__reducer_base *>(b->data.extra);
     }
 
-    return __cilkrts_insert_new_view(table, (uintptr_t)key, size, identity_ptr,
-                                     reduce_ptr);
+    return __cilkrts_insert_new_view_0(table, key);
 }
 
 CHEETAH_INTERNAL

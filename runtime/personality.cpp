@@ -14,12 +14,7 @@
 #include <functional>
 #include <unwind.h>
 
-static struct closure_exception exception_reducer = {
-  .exn = nullptr,
-  .reraise_cfa = nullptr,
-  .parent_rsp = nullptr,
-  .throwing_fiber = nullptr
-};
+static struct closure_exception exception_reducer;
 
 typedef _Unwind_Reason_Code (*__personality_routine)(
     int version, _Unwind_Action actions, uint64_t exception_class,
@@ -54,18 +49,14 @@ bool exception_reducer_is_empty() noexcept {
 }
 
 // Identity method for the exception reducer.
-static void init_exception_reducer(void *v) noexcept {
-    struct closure_exception *ex = (struct closure_exception *)(v);
-    ex->exn = nullptr;
-    ex->reraise_cfa = nullptr;
-    ex->parent_rsp = nullptr;
-    ex->throwing_fiber = nullptr;
+__reducer_base *closure_exception::identity(void *v) {
+    return new (v) closure_exception;
 }
 
 // Reduce method for the exception reducer.
-static void reduce_exception_reducer(void *l, void *r) noexcept {
-    struct closure_exception *lex = (struct closure_exception *)(l);
-    struct closure_exception *rex = (struct closure_exception *)(r);
+void closure_exception::reduce(__reducer_base *l, __reducer_base *r) {
+    struct closure_exception *lex = static_cast<struct closure_exception *>(l);
+    struct closure_exception *rex = static_cast<struct closure_exception *>(r);
     if (lex->exn == nullptr) {
         lex->exn = rex->exn;
         rex->exn = nullptr;
@@ -86,13 +77,9 @@ static void reduce_exception_reducer(void *l, void *r) noexcept {
 // Get the current view of the exception-reducer state, creating a new view if
 // none exists.
 struct closure_exception *get_exception_reducer(__cilkrts_worker *w) noexcept {
-    std::function<void(void *)> init_exception_reducer_fn =
-        init_exception_reducer;
-    std::function<void(void *, void *)> reduce_exception_reducer_fn =
-        reduce_exception_reducer;
-    return (struct closure_exception *)internal_reducer_lookup(
-        w, static_cast<void *>(&exception_reducer), sizeof(exception_reducer),
-        init_exception_reducer_fn, reduce_exception_reducer_fn);
+    return
+        static_cast<struct closure_exception *>
+        (internal_reducer_lookup(w, &exception_reducer));
 }
 
 // Try to get the current view of the exception-reducer state, but return NULL
@@ -108,7 +95,8 @@ get_exception_reducer_or_null(__cilkrts_worker *w) noexcept {
     if (b) {
         CILK_ASSERT_POINTER_EQUAL(key, (void *)b->key);
         // Return the existing view.
-        return (struct closure_exception *)(b->value.view);
+        __reducer_base *base = std::get<__reducer_base *>(b->data.extra);
+        return static_cast<struct closure_exception *>(base);
     }
     // No view was found.  Don't create a new reducer view; just return NULL.
     return nullptr;

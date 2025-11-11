@@ -9,6 +9,7 @@
 #include "sched_stats.h"
 #include "worker.h"
 #include <cilk/cilk_api.h>
+#include <cilk/reducer>
 #include <cstdint>
 
 #if defined __i386__ || defined __x86_64__
@@ -71,9 +72,8 @@ get_worker_from_stack(const __cilkrts_stack_frame *sf) {
 }
 
 CHEETAH_INTERNAL
-void *internal_reducer_lookup(__cilkrts_worker *w, void *key, size_t size,
-                              __cilk_identity_fn &identity_ptr,
-                              __cilk_reduce_fn &reduce_ptr);
+__reducer_base *
+internal_reducer_lookup(__cilkrts_worker *w, __reducer_base *key);
 CHEETAH_INTERNAL
 void internal_reducer_remove(__cilkrts_worker *w, void *key);
 
@@ -101,19 +101,23 @@ __cilkrts_pop_ext_stack(__cilkrts_worker *w, size_t size) {
 /*
  * All the data needed to properly handle a thrown exception.
  */
-struct closure_exception {
-    char *exn;
+struct closure_exception final : public __reducer_base {
+    char *exn = nullptr;
     /* Canonical frame address (CFA) of the call-stack frame from which an
        exception was rethrown.  Used to ensure that the rethrown exception
        appears to be rethrown from the correct frame and to avoid repeated calls
        to __cilkrts_leave_frame during stack unwinding. */
-    char *reraise_cfa;
+    char *reraise_cfa = nullptr;
     /* Stack pointer for the parent fiber.  Used to restore the stack pointer
        properly after entering a landingpad. */
-    char *parent_rsp;
+    char *parent_rsp = nullptr;
     /* Fiber holding the stack frame of a call to _Unwind_RaiseException that is
        currently running. */
-    struct cilk_fiber *throwing_fiber;
+    struct cilk_fiber *throwing_fiber = nullptr;
+
+    virtual __reducer_base *identity(void *) override;
+    virtual void reduce(__reducer_base *, __reducer_base *) override;
+    virtual std::size_t size() override { return sizeof *this; }
 };
 
 // Reducer structure for handling exceptions thrown in parallel.
