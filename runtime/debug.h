@@ -1,9 +1,8 @@
 #ifndef _DEBUG_H
 #define _DEBUG_H
 
-#include <stdarg.h>
-
 #include "rts-config.h"
+#include <cstdarg>
 
 // forward declaration for using struct global_stat
 struct global_state;
@@ -43,10 +42,11 @@ extern CHEETAH_INTERNAL unsigned int alert_level;
 #define DEBUG_LVL 0xff
 #endif
 
-#define DEBUG_MEMORY 0x01
+#define DEBUG_MEMORY      0x01
 #define DEBUG_MEMORY_SLOW 0x02
-#define DEBUG_FIBER 0x04
-#define DEBUG_REDUCER 0x08
+#define DEBUG_FIBER       0x04
+#define DEBUG_REDUCER     0x08
+#define DEBUG_DISENGAGE   0x10
 extern CHEETAH_INTERNAL unsigned int debug_level;
 #define DEBUG_ENABLED(flag) (debug_level & (DEBUG_LVL & DEBUG_##flag))
 #define DEBUG_ENABLED_STATIC(flag) (DEBUG_LVL & DEBUG_##flag)
@@ -59,9 +59,10 @@ CHEETAH_INTERNAL void set_alert_level(unsigned int);
 CHEETAH_INTERNAL void set_debug_level(unsigned int);
 CHEETAH_INTERNAL void flush_alert_log(void);
 
-__attribute__((__format__(__printf__, 1, 2))) CHEETAH_INTERNAL_NORETURN void
-cilkrts_bug(const char *fmt, ...);
-CHEETAH_INTERNAL_NORETURN
+__attribute__((__format__(__printf__, 1, 2)))
+CHEETAH_INTERNAL_NORETURN CHEETAH_COLD
+void cilkrts_bug(const char *fmt, ...);
+CHEETAH_INTERNAL_NORETURN CHEETAH_COLD
 void cilk_die_internal(struct global_state *const g, const char *fmt, ...);
 
 #if ALERT_LVL != 0
@@ -81,7 +82,7 @@ cilkrts_alert(int lvl, const char *fmt, ...);
 #define WHEN_CILK_DEBUG(ex) ex
 
 /** Standard text for failed assertion */
-CHEETAH_INTERNAL extern const char *const __cilkrts_assertion_failed;
+CHEETAH_INTERNAL extern const char __cilkrts_assertion_failed[];
 
 #define CILK_ASSERT(ex)                                                        \
     (__builtin_expect((ex) != 0, 1)                                            \

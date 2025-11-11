@@ -1,30 +1,26 @@
-#include <stdatomic.h>
-#include <stdio.h>
-#include <unwind.h>
-
 #include "debug.h"
-
 #include "cilk-internal.h"
 #include "cilk2c.h"
 #include "fiber.h"
 #include "global.h"
-#include "readydeque.h"
 #include "rts-config.h"
 #include "scheduler.h"
+#include <unwind.h>
 
-CHEETAH_INTERNAL
-struct closure_exception exception_reducer = {.exn = NULL};
-
-extern void _Unwind_Resume(struct _Unwind_Exception *);
-extern _Unwind_Reason_Code _Unwind_RaiseException(struct _Unwind_Exception *);
+extern __attribute__((noreturn))
+void _Unwind_Resume(struct _Unwind_Exception *);
+extern __attribute__((noreturn))
+_Unwind_Reason_Code _Unwind_RaiseException(struct _Unwind_Exception *);
 
 CHEETAH_INTERNAL struct cilkrts_callbacks cilkrts_callbacks = {
-    0, 0, false, {NULL}, {NULL}};
+    0, 0, false, {nullptr}, {nullptr}};
 
 // Test if the Cilk runtime has been initialized.  This method is intended to
 // help initialization of libraries that depend on the OpenCilk runtime.
-int __cilkrts_is_initialized(void) { return NULL != default_cilkrts; }
+__attribute__((nothrow))
+int __cilkrts_is_initialized(void) { return nullptr != default_cilkrts; }
 
+__attribute__((nothrow))
 int __cilkrts_running_on_workers(void) {
     return !__cilkrts_status.need_to_cilkify;
 }
@@ -37,6 +33,7 @@ int __cilkrts_running_on_workers(void) {
 
 // Register a callback to run at Cilk-runtime initialization.  Returns 0 on
 // successful registration, nonzero otherwise.
+__attribute__((nothrow))
 int __cilkrts_atinit(void (*callback)(void)) {
     if (cilkrts_callbacks.last_init >= MAX_CALLBACKS ||
         cilkrts_callbacks.after_init)
@@ -48,6 +45,7 @@ int __cilkrts_atinit(void (*callback)(void)) {
 
 // Register a callback to run at Cilk-runtime exit.  Returns 0 on successful
 // registration, nonzero otherwise.
+__attribute__((nothrow))
 int __cilkrts_atexit(void (*callback)(void)) {
     if (cilkrts_callbacks.last_exit >= MAX_CALLBACKS)
         return -1;
@@ -72,8 +70,9 @@ void __cilkrts_check_exception_raise(__cilkrts_stack_frame *sf) {
     clear_exception_reducer(w, exn_r);
     sf->flags &= ~CILK_FRAME_EXCEPTION_PENDING;
 
-    if (exn != NULL) {
+    if (exn != nullptr) {
         _Unwind_RaiseException((struct _Unwind_Exception *)exn); // noreturn
+        __builtin_unreachable();
     }
 
     return;
@@ -93,8 +92,9 @@ void __cilkrts_check_exception_resume(__cilkrts_stack_frame *sf) {
     clear_exception_reducer(w, exn_r);
     sf->flags &= ~CILK_FRAME_EXCEPTION_PENDING;
 
-    if (exn != NULL) {
+    if (exn != nullptr) {
         _Unwind_Resume((struct _Unwind_Exception *)exn); // noreturn
+        __builtin_unreachable();
     }
 
     return;
@@ -104,7 +104,8 @@ void __cilkrts_check_exception_resume(__cilkrts_stack_frame *sf) {
 // of each landingpad in a spawning function.  Ensures that the stack pointer
 // points at the fiber and call-stack frame containing sf before any catch
 // handlers in that frame execute.
-void __cilkrts_cleanup_fiber(__cilkrts_stack_frame *sf, int32_t sel) {
+extern "C"
+void __cilkrts_cleanup_fiber(__cilkrts_stack_frame *sf, int32_t sel) noexcept {
     (void)sel; // currently unused
 
     __cilkrts_worker *w = get_worker_from_stack(sf);
@@ -113,13 +114,13 @@ void __cilkrts_cleanup_fiber(__cilkrts_stack_frame *sf, int32_t sel) {
     CILK_ASSERT(__cilkrts_synced(sf));
 
     struct closure_exception *exn_r = get_exception_reducer_or_null(w);
-    struct cilk_fiber *throwing_fiber = NULL;
-    char *parent_rsp = NULL;
-    if (exn_r != NULL) {
+    struct cilk_fiber *throwing_fiber = nullptr;
+    char *parent_rsp = nullptr;
+    if (exn_r != nullptr) {
         throwing_fiber = exn_r->throwing_fiber;
         parent_rsp = exn_r->parent_rsp;
 
-        exn_r->throwing_fiber = NULL;
+        exn_r->throwing_fiber = nullptr;
         clear_exception_reducer(w, exn_r);
     }
 
@@ -131,7 +132,7 @@ void __cilkrts_cleanup_fiber(__cilkrts_stack_frame *sf, int32_t sel) {
     // point, set the stack pointer in sf to parent_rsp if parent_rsp is
     // non-null.
 
-    if (NULL == parent_rsp) {
+    if (nullptr == parent_rsp) {
         // If parent_rsp is null, we might have unwound past the point where the
         // Cilk personality function performed a sync.  Because we're executing
         // a non-cleanup landing pad, execution is continuing within this frame,
@@ -153,6 +154,8 @@ void __cilkrts_cleanup_fiber(__cilkrts_stack_frame *sf, int32_t sel) {
     return;
 }
 
+extern "C"
+__attribute__((noreturn))
 void __cilkrts_sync(__cilkrts_stack_frame *sf) {
     __cilkrts_worker *w = get_worker_from_stack(sf);
     CILK_ASSERT_POINTER_EQUAL(w, __cilkrts_get_tls_worker());
@@ -171,12 +174,14 @@ void __cilkrts_sync(__cilkrts_stack_frame *sf) {
 ///////////////////////////////////////////////////////////////////////////
 /// Methods for handling extensions
 
+extern "C"
 void __cilkrts_register_extension(void *extension) {
     __cilkrts_status.use_extension = true;
     __cilkrts_worker *w = __cilkrts_get_tls_worker();
     w->extension = extension;
 }
 
+extern "C"
 void *__cilkrts_get_extension(void) {
     __cilkrts_worker *w = __cilkrts_get_tls_worker();
     return w->extension;

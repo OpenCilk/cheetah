@@ -1,21 +1,30 @@
 #ifndef _CONFIG_H
 #define _CONFIG_H
 
-/* Functions defined in the library and visible outside the library. */
-#ifndef CHEETAH_API
-#ifdef __ELF__
-#define CHEETAH_API __attribute((visibility("protected")))
+#ifdef CHEETAH_API_CONSUMER
+
+#define CHEETAH_API extern "C"
+#define CHEETAH_INTERNAL /* empty */
+#define CHEETAH_INTERNAL_NORETURN __attribute__((noreturn, nothrow))
+
 #else
-#define CHEETAH_API
+
+/* Functions defined in the library and visible outside the library.
+   On ELF systems the definitions can be marked protected.  */
+#ifdef __ELF__
+#define CHEETAH_API extern "C" __attribute((visibility("protected")))
+#else
+#define CHEETAH_API extern "C"
 #endif
-#endif
+
 /* Functions defined in the library and not visible outside the library. */
-#ifndef CHEETAH_INTERNAL
 #define CHEETAH_INTERNAL __attribute((visibility("hidden")))
-#endif
-#ifndef CHEETAH_INTERNAL_NORETURN
-#define CHEETAH_INTERNAL_NORETURN __attribute((noreturn, visibility("hidden")))
-#endif
+#define CHEETAH_INTERNAL_NORETURN \
+  __attribute((noreturn, nothrow, visibility("hidden")))
+
+#endif /* CHEETAH_API_CONSUMER */
+
+#define CHEETAH_COLD [[gnu::cold]]
 
 #ifndef __CILKRTS_VERSION
 #define __CILKRTS_VERSION 0x0
@@ -96,12 +105,6 @@ _Static_assert(MAX_NUM_PAGES_PER_STACK >= MIN_NUM_PAGES_PER_STACK, "Invalid Chee
 
 #ifndef MAX_CALLBACKS
 #define MAX_CALLBACKS 32 // Maximum number of init or exit callbacks
-#endif
-
-#if defined __i386__ || defined __x86_64__
-#ifdef __SSE__
-#define CHEETAH_SAVE_MXCSR
-#endif
 #endif
 
 #endif                   // _CONFIG_H

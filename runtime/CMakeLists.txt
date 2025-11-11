@@ -1,29 +1,33 @@
 set(CHEETAH_LIB_CMAKEFILES_DIR "${CMAKE_CURRENT_BINARY_DIR}${CMAKE_FILES_DIRECTORY}"  PARENT_SCOPE)
 
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_EXTENSIONS Off) # Use std=c++20 instead of std=gnu++20
+
 # Get sources
 set(CHEETAH_SOURCES
-  cilk2c.c
-  cilk2c_inlined.c
-  debug.c
-  fiber.c
-  fiber-pool.c
-  global.c
-  init.c
-  internal-malloc.c
-  local-hypertable.c
-  local-reducer-api.c
-  pedigree_globals.c
-  personality.c
-  sched_stats.c
-  scheduler.c
+  cilk2c.cpp
+  cilk2c_inlined.cpp
+  debug.cpp
+  fiber.cpp
+  fiber-pool.cpp
+  global.cpp
+  init.cpp
+  internal-malloc.cpp
+  local-hypertable.cpp
+  local-reducer-api.cpp
+  pedigree_globals.cpp
+  personality.cpp
+  sched_stats.cpp
+  scheduler.cpp
+  worker_sleep.cpp
 )
 
 set(CHEETAH_ABI_SOURCE
-  cilk2c_inlined.c
+  cilk2c_inlined.cpp
 )
 
 set(CHEETAH_PEDIGREE_LIB_SOURCES
-  pedigree_lib.c
+  pedigree_lib.cpp
 )
 
 set(CHEETAH_PERSONALITY_C_SOURCES
@@ -34,10 +38,12 @@ set(CHEETAH_PERSONALITY_CPP_SOURCES
   personality-cpp.cpp
 )
 
+#set_source_files_properties(file.cpp PROPERTIES COMPILE_OPTIONS -...)
+
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 # Add dependent libraries
-set(CHEETAH_COMPILE_FLAGS ${CHEETAH_COMMON_CFLAGS})
+set(CHEETAH_COMPILE_FLAGS ${CHEETAH_COMMON_CFLAGS} -fno-exceptions)
 append_list_if(CHEETAH_HAS_PTHREAD_LIB pthread CHEETAH_COMMON_LIBS)
 append_list_if(CHEETAH_HAS_DL_LIB dl CHEETAH_COMMON_LIBS)
 if (CHEETAH_USE_COMPILER_RT)
@@ -68,12 +74,15 @@ set(CHEETAH_DEBUG_OPTIONS -Og)
 set(CHEETAH_RELEASE_OPTIONS -O3)
 
 # Setup flags and defs for cheetah bitcode ABI build
+# Disable exceptions.  Inlining functions with personalities
+# or calls to terminate from bitcode does not work.
 set(CHEETAH_BITCODE_ABI_COMPILE_FLAGS ${CHEETAH_COMPILE_FLAGS} -emit-llvm)
 set(CHEETAH_BITCODE_ABI_COMPILE_DEFS ${CHEETAH_COMPILE_DEFS}
-  "CHEETAH_API="
-  "CHEETAH_INTERNAL="
-  "CHEETAH_INTERNAL_NORETURN=__attribute__((noreturn))"
+  "CHEETAH_API_CONSUMER=1"
   "CILK_DEBUG=0")
+
+set(CHEETAH_PERSONALITY_COMPILE_DEFS ${CHEETAH_COMPILE_DEFS}
+  "CHEETAH_API_CONSUMER=1")
 
 # Set compile flags, compile defs, and link flags for ASan build
 set(CHEETAH_ASAN_COMPILE_FLAGS ${CHEETAH_COMPILE_FLAGS})

@@ -1,14 +1,12 @@
-#include <inttypes.h>
-#include <stdio.h>
+#include <cinttypes>
+#include <cstdio>
 #include <time.h>
-
 #include "cilk-internal.h"
 #include "debug.h"
 #include "global.h"
 #include "internal-malloc-impl.h"
 #include "local.h"
 #include "sched_stats.h"
-#include "types.h"
 
 #if SCHED_STATS
 static const char *enum_to_str(enum timing_type t) {
@@ -241,7 +239,7 @@ void cilk_sched_stats_print(struct global_state *g) {
     fprintf(stderr, COUNT_DESC, g->stats.onesen_rqsts);
     fprintf(stderr, "\n");
 
-    for_each_worker(g, &sched_stats_reset_worker, NULL);
+    for_each_worker(g, &sched_stats_reset_worker, nullptr);
 }
 
 /*

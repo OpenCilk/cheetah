@@ -1,9 +1,8 @@
 // Runtime functions that are known to the compiler.
 // All of these use C linkage.
 
-#include <stdbool.h>
-#include <stdint.h>
 #include "cilk/cilk_api.h"
+#include <cstdint>
 
 struct __cilkrts_stack_frame;
 struct __cilkrts_worker;
@@ -37,6 +36,8 @@ void __cilkrts_detach(struct __cilkrts_stack_frame *sf,
 
 // Inserted on return from a spawning function that is not itself a spawn
 // helper.  Performs Cilk's return protocol for such functions.
+// Marked API because it is used inside the library by personality.cpp.
+CHEETAH_API
 void __cilkrts_leave_frame(struct __cilkrts_stack_frame *sf);
 // Inserted on return from a spawn-helper function.  Performs Cilk's return
 // protocol for such functions.
@@ -71,10 +72,10 @@ uint32_t __cilkrts_cilk_for_grainsize_32(uint32_t n) __CILKRTS_NOTHROW;
 uint64_t __cilkrts_cilk_for_grainsize_64(uint64_t n) __CILKRTS_NOTHROW;
 
 // Performs runtime operations to handle a cilk_sync.
-void __cilk_sync(struct __cilkrts_stack_frame *sf) __CILKRTS_NOTHROW;
+void __cilk_sync(struct __cilkrts_stack_frame *sf);
 
 // Implements a cilk_sync when the cilk_sync is guaranteed not to produce an
-// exception that needs to be handled.
+// exception that needs to be handled locally.
 void __cilk_sync_nothrow(struct __cilkrts_stack_frame *sf);
 
 void *__cilkrts_reducer_lookup(void *key, size_t size,
