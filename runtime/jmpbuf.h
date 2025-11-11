@@ -1,8 +1,6 @@
 #ifndef _JMPBUF_H
 #define _JMPBUF_H
 
-#include <stddef.h>
-
 #include "debug.h"
 
 #define JMPBUF_SIZE 5

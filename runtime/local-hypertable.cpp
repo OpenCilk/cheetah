@@ -1,16 +1,12 @@
-#include <assert.h>
-#include <stdbool.h>
-#include <stdint.h>
-#include <stdlib.h>
-
-#include "cilk-internal.h"
-#include "debug.h"
 #include "internal-malloc.h" /* only needed for new view allocation */
 #include "local-hypertable.h"
+#include <cassert>
+#include <cstdint>
+#include <cstdlib>
 
 static void reducer_base_init(reducer_base *rb) {
-    rb->view = NULL;
-    rb->reduce_fn = NULL;
+    rb->view = nullptr;
+    rb->reduce_fn = nullptr;
 }
 
 static void make_tombstone(uintptr_t *key) { *key = KEY_DELETED; }
@@ -49,7 +45,7 @@ static bool time_to_rebuild(int32_t ins_rm_count, int32_t capacity) {
            (ins_rm_count > capacity / (4 * LOAD_FACTOR_CONSTANT));
 }
 
-static struct bucket *bucket_array_create(int32_t array_size) {
+struct bucket *hyper_table::bucket_array_create(int32_t array_size) {
     struct bucket *buckets =
         (struct bucket *)calloc(array_size, sizeof(struct bucket));
     if (array_size < MIN_HT_CAPACITY) {
@@ -74,49 +70,41 @@ static struct bucket *bucket_array_create(int32_t array_size) {
 }
 
 hyper_table *__cilkrts_local_hyper_table_alloc(void) {
-    hyper_table *table = malloc(sizeof(hyper_table));
-    int32_t capacity = MIN_CAPACITY;
-    table->capacity = capacity;
-    table->occupancy = 0;
-    table->ins_rm_count = 0;
-    table->buckets = bucket_array_create(capacity);
-    return table;
+    return new hyper_table(MIN_CAPACITY);
 }
 
 void local_hyper_table_free(hyper_table *table) {
-    free(table->buckets);
-    free(table);
+    delete table;
 }
 
-static struct bucket *rebuild_table(hyper_table *table, int32_t new_capacity) {
-    struct bucket *old_buckets = table->buckets;
-    int32_t old_capacity = table->capacity;
-    int32_t old_occupancy = table->occupancy;
+void hyper_table::rebuild(int32_t new_capacity) {
+    struct bucket *old_buckets = buckets;
+    int32_t old_capacity = capacity;
+    int32_t old_occupancy = occupancy;
 
     assert(new_capacity <= MAX_CAPACITY);
 
-    table->buckets = bucket_array_create(new_capacity);
-    table->capacity = new_capacity;
-    table->occupancy = 0;
+    buckets = bucket_array_create(new_capacity);
+    capacity = new_capacity;
+    occupancy = 0;
     // Set count of insertions and removals to prevent insertions into
     // new table from triggering another rebuild.
-    table->ins_rm_count = -old_occupancy;
+    ins_rm_count = -old_occupancy;
 
     // Iterate through old table and insert each element into the new
     // table.
     for (int32_t i = 0; i < old_capacity; ++i) {
         if (is_valid(old_buckets[i].key)) {
-            bool success = insert_hyperobject(table, old_buckets[i]);
+            bool success = insert_hyperobject(this, old_buckets[i]);
             assert(success && "Failed to insert when resizing table.");
             (void)success;
         }
     }
 
-    assert(table->occupancy == old_occupancy &&
+    assert(occupancy == old_occupancy &&
            "Mismatched occupancy after resizing table.");
 
     free(old_buckets);
-    return table->buckets;
 }
 
 ///////////////////////////////////////////////////////////////////////////
@@ -140,7 +128,7 @@ struct bucket *__cilkrts_find_hyperobject_hash(hyper_table *table,
 
         // Found an empty entry?  The probe failed.
         if (is_empty(curr_key))
-            return NULL;
+            return nullptr;
 
         // Found a tombstone?  Continue the probe.
         if (is_tombstone(curr_key)) {
@@ -158,14 +146,14 @@ struct bucket *__cilkrts_find_hyperobject_hash(hyper_table *table,
 
         // If none of the above cases match, then the probe failed to
         // find the key.
-        return NULL;
+        return nullptr;
     } while (i != tgt);
 
     // The probe failed to find the key.
-    return NULL;
+    return nullptr;
 }
 
-bool remove_hyperobject(hyper_table *table, uintptr_t key) {
+bool remove_hyperobject(hyper_table *table, uintptr_t key) noexcept {
     if (table->capacity < MIN_HT_CAPACITY) {
         // If the table is small enough, just scan the array.
         struct bucket *buckets = table->buckets;
@@ -192,7 +180,7 @@ bool remove_hyperobject(hyper_table *table, uintptr_t key) {
     struct bucket *entry = find_hyperobject(table, key);
 
     // If entry is NULL, the probe did not find the key.
-    if (NULL == entry)
+    if (nullptr == entry)
         return false;
 
     // The probe found the key and returned a pointer to the entry.
@@ -203,14 +191,14 @@ bool remove_hyperobject(hyper_table *table, uintptr_t key) {
 
     int32_t capacity = table->capacity;
     if (is_underloaded(table->occupancy, capacity))
-        rebuild_table(table, capacity / 2);
+        table->rebuild(capacity / 2);
     else if (time_to_rebuild(table->ins_rm_count, capacity))
-        rebuild_table(table, capacity);
+        table->rebuild(capacity);
 
     return true;
 }
 
-bool insert_hyperobject(hyper_table *table, struct bucket b) {
+bool insert_hyperobject(hyper_table *table, struct bucket b) noexcept {
     assert(b.key != KEY_EMPTY && b.key != KEY_DELETED);
     int32_t capacity = table->capacity;
     struct bucket *buckets = table->buckets;
@@ -237,15 +225,18 @@ bool insert_hyperobject(hyper_table *table, struct bucket b) {
         // to a hash table, and fall through to insert the new bucket
         // into that hash table.
         capacity *= 2;
-        buckets = rebuild_table(table, capacity);
+        table->rebuild(capacity);
+        buckets = table->buckets;
     }
 
     // If the occupancy is already too high, rebuild the table.
     if (is_overloaded(table->occupancy, capacity)) {
         capacity *= 2;
-        buckets = rebuild_table(table, capacity);
+        table->rebuild(capacity);
+        buckets = table->buckets;
     } else if (time_to_rebuild(table->ins_rm_count, capacity)) {
-        buckets = rebuild_table(table, capacity);
+        table->rebuild(capacity);
+        buckets = table->buckets;
     }
 
     // Target hash
@@ -369,6 +360,7 @@ void *__cilkrts_insert_new_view(hyper_table *table, uintptr_t key, size_t size,
     // Insert the new view into the local hypertable.
     struct bucket new_bucket = {
         .key = (uintptr_t)key,
+        .hash = 0,
         .value = {.view = new_view, .reduce_fn = reduce}};
     bool success = insert_hyperobject(table, new_bucket);
     assert(success);
@@ -379,8 +371,8 @@ void *__cilkrts_insert_new_view(hyper_table *table, uintptr_t key, size_t size,
 
 // Merge two hypertables, left and right.  Returns the merged hypertable and
 // deletes the other.
-hyper_table *merge_two_hts(hyper_table *restrict left,
-                           hyper_table *restrict right) {
+hyper_table *merge_two_hts(hyper_table *__restrict left,
+                           hyper_table *__restrict right) {
     // In the trivial case of an empty hyper_table, return the other
     // hyper_table.
     if (!left)
@@ -423,7 +415,7 @@ hyper_table *merge_two_hts(hyper_table *restrict left,
         // destination table.
         struct bucket *dst_bucket = find_hyperobject(dst, b.key);
 
-        if (NULL == dst_bucket) {
+        if (nullptr == dst_bucket) {
             // The destination table does not contain this key.  Insert the
             // key-value pair from the source table into the destination.
             insert_hyperobject(dst, b);

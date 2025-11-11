@@ -6,24 +6,21 @@
 // the exception personality function.
 // =============================================================================
 
-#include <stdatomic.h>
-#include <stdio.h>
-#include <unwind.h>
-
 #include "cilk-internal.h"
-#include "cilk2c_inlined.h"
 #include "cilk2c.h"
+#include "cilk2c_inlined.h"
 #include "debug.h"
-#include "fiber.h"
 #include "fiber-header.h"
+#include "fiber.h"
 #include "frame.h"
 #include "global.h"
 #include "init.h"
 #include "local-reducer-api.h"
-#include "scheduler.h"
-
-#include "pedigree_ext.c"
+#include "pedigree_ext.cpp"
 #include "worker.h"
+#include <atomic>
+#include <unwind.h>
+
 
 // Suppress -Wmissing-variable-declarations for this variable.
 _Alignas(__cilkrts_stack_frame)
@@ -36,7 +33,7 @@ extern size_t __cilkrts_stack_frame_align;
 _Alignas(__cilkrts_stack_frame)
 size_t __cilkrts_stack_frame_align = __alignof__(__cilkrts_stack_frame);
 
-__attribute__((always_inline)) unsigned __cilkrts_get_nworkers(void) {
+__attribute__((always_inline)) unsigned __cilkrts_get_nworkers(void) noexcept {
     return __cilkrts_nproc;
 }
 
@@ -45,8 +42,7 @@ __attribute__((always_inline)) unsigned __cilkrts_get_nworkers(void) {
 // TODO: Figure out how we want to support worker-local storage.
 __attribute__((always_inline))
 unsigned __cilkrts_get_worker_number(void) {
-    __cilkrts_worker *w = __cilkrts_get_tls_worker();
-    if (w)
+    if (__cilkrts_worker *w = __cilkrts_get_tls_worker())
         return w->self;
     // If the worker structure is not yet initialized, pretend we're worker 0.
     return 0;
@@ -57,7 +53,7 @@ void *__cilkrts_reducer_lookup(void *key, size_t size,
     // If we're outside a cilkified region, then the key is the view.
     if (__cilkrts_status.need_to_cilkify)
         return key;
-    struct local_hyper_table *table = get_hyper_table();
+    struct hyper_table *table = get_hyper_table();
     struct bucket *b = find_hyperobject(table, (uintptr_t)key);
     if (__builtin_expect(!!b, true)) {
         // Return the existing view.
@@ -104,8 +100,8 @@ uncilkify(global_state *g, __cilkrts_stack_frame *sf) {
 
 // Enter a new Cilk function, i.e., a function that contains a cilk_spawn.  This
 // function must be inlined for correctness.
-__attribute__((always_inline,nothrow)) void
-__cilkrts_enter_frame(__cilkrts_stack_frame *sf) {
+__attribute__((always_inline)) void
+__cilkrts_enter_frame(__cilkrts_stack_frame *sf) noexcept {
     sf->flags = 0;
     if (__cilkrts_status.need_to_cilkify) {
         cilkify(sf);
@@ -126,9 +122,10 @@ __cilkrts_enter_frame(__cilkrts_stack_frame *sf) {
 // This function initializes worker and stack_frame structures.  Because this
 // routine will always be executed by a Cilk worker, it is optimized compared to
 // its counterpart, __cilkrts_enter_frame.
-__attribute__((always_inline,nothrow)) void
+__attribute__((always_inline)) void
 __cilkrts_enter_frame_helper(__cilkrts_stack_frame *sf,
-                             __cilkrts_stack_frame *parent, bool spawner) {
+                             __cilkrts_stack_frame *parent, bool spawner)
+  noexcept {
     cilkrts_alert(CFRAME, "__cilkrts_enter_frame_helper %p", (void *)sf);
 
     sf->flags = 0;
@@ -142,8 +139,8 @@ __cilkrts_enter_frame_helper(__cilkrts_stack_frame *sf,
     }
 }
 
-__attribute__((always_inline,nothrow)) int
-__cilk_prepare_spawn(__cilkrts_stack_frame *sf) {
+__attribute__((always_inline)) int
+__cilk_prepare_spawn(__cilkrts_stack_frame *sf) noexcept {
     sysdep_save_fp_ctrl_state(sf);
     int res = __builtin_setjmp(sf->ctx);
     if (res != 0) {
@@ -154,8 +151,9 @@ __cilk_prepare_spawn(__cilkrts_stack_frame *sf) {
 
 // Detach the given Cilk stack frame, allowing other Cilk workers to steal the
 // parent frame.
-__attribute__((always_inline,nothrow)) void
-__cilkrts_detach(__cilkrts_stack_frame *sf, __cilkrts_stack_frame *parent) {
+__attribute__((always_inline)) void
+__cilkrts_detach(__cilkrts_stack_frame *sf, __cilkrts_stack_frame *parent)
+  noexcept {
     __cilkrts_worker *w = get_worker_from_stack(sf);
     cilkrts_alert(CFRAME, "__cilkrts_detach %p", (void *)sf);
 
@@ -166,31 +164,33 @@ __cilkrts_detach(__cilkrts_stack_frame *sf, __cilkrts_stack_frame *parent) {
     }
 
     sf->flags |= CILK_FRAME_DETACHED;
-    struct __cilkrts_stack_frame **tail =
-        atomic_load_explicit(&w->tail, memory_order_relaxed);
+    struct __cilkrts_stack_frame **tail = w->tail.load(std::memory_order_relaxed);
     CILK_ASSERT((tail + 1) < w->ltq_limit);
 
     // store parent at *tail, and then increment tail
     *tail++ = parent;
     /* Release ordering ensures the two preceding stores are visible. */
-    atomic_store_explicit(&w->tail, tail, memory_order_release);
+    w->tail.store(tail, std::memory_order_release);
 }
 
 __attribute__((always_inline)) void __cilk_sync(__cilkrts_stack_frame *sf) {
-    if (sf->flags & CILK_FRAME_UNSYNCHED) {
-        if (__builtin_setjmp(sf->ctx) == 0) {
-            sysdep_save_fp_ctrl_state(sf);
-            __cilkrts_sync(sf);
-        } else {
-            sanitizer_finish_switch_fiber();
-            if (sf->flags & CILK_FRAME_EXCEPTION_PENDING) {
-                __cilkrts_check_exception_raise(sf);
+    if (sf->flags & CILK_FRAME_UNSYNCHED || USE_EXTENSION) {
+        if (sf->flags & CILK_FRAME_UNSYNCHED) {
+            if (__builtin_setjmp(sf->ctx) == 0) {
+                sysdep_save_fp_ctrl_state(sf);
+                __cilkrts_sync(sf);
+            } else {
+                sanitizer_finish_switch_fiber();
+                __cilkrts_do_reductions(sf);
+                if (sf->flags & CILK_FRAME_EXCEPTION_PENDING) {
+                    __cilkrts_check_exception_raise(sf);
+                }
             }
         }
-    }
-    if (USE_EXTENSION) {
-        __cilkrts_worker *w = get_worker_from_stack(sf);
-        __cilkrts_extend_sync(&w->extension);
+        if (USE_EXTENSION) {
+            __cilkrts_worker *w = get_worker_from_stack(sf);
+            __cilkrts_extend_sync(&w->extension);
+        }
     }
 }
 
@@ -203,6 +203,7 @@ __cilk_sync_nothrow(__cilkrts_stack_frame *sf) {
                 __cilkrts_sync(sf);
             } else {
                 sanitizer_finish_switch_fiber();
+                __cilkrts_do_reductions(sf);
             }
         }
         if (USE_EXTENSION) {
@@ -227,7 +228,7 @@ __cilkrts_leave_frame(__cilkrts_stack_frame *sf) {
     // __cilkrts_pop_frame, but has been manually inlined to avoid reloading the
     // worker unnecessarily.
     sf->fh->current_stack_frame = parent;
-    sf->call_parent = NULL;
+    sf->call_parent = nullptr;
 
     // Check if sf is the final stack frame, and if so, terminate the Cilkified
     // region.
@@ -276,24 +277,22 @@ __cilkrts_leave_frame_helper(__cilkrts_stack_frame *sf,
         __cilkrts_extend_return_from_spawn(w, &w->extension);
         w->extension = parent->extension;
     }
-    sf->call_parent = NULL;
+    sf->call_parent = nullptr;
 
     CILK_ASSERT(sf->flags & CILK_FRAME_DETACHED);
 
-    __cilkrts_stack_frame **tail =
-            atomic_load_explicit(&w->tail, memory_order_relaxed);
+    __cilkrts_stack_frame **tail = w->tail.load(std::memory_order_relaxed);
     --tail;
     /* The store of tail must precede the load of exc in global order.  See
        comment in do_dekker_on. */
-    atomic_store_explicit(&w->tail, tail, memory_order_seq_cst);
-    __cilkrts_stack_frame **exc =
-            atomic_load_explicit(&w->exc, memory_order_seq_cst);
+    w->tail.store(tail, std::memory_order_seq_cst);
+    __cilkrts_stack_frame **exc = w->exc.load(std::memory_order_seq_cst);
     /* Currently no other modifications of flags are atomic so this one isn't
        either.  If the thief wins it may run in parallel with the clear of
        DETACHED.  Does it modify flags too? */
     sf->flags &= ~CILK_FRAME_DETACHED;
     if (__builtin_expect(exc > tail, false)) {
-        __cilkrts_exception_handler(w, NULL);
+        __cilkrts_exception_handler(w, nullptr);
         // If Cilk_exception_handler returns this thread won the race and can
         // return to the parent function.
     }
@@ -341,7 +340,7 @@ __cilkrts_pause_frame(__cilkrts_stack_frame *sf, __cilkrts_stack_frame *parent,
     // worker unnecessarily.
     if (spawner)
         sf->fh->current_stack_frame = parent;
-    sf->call_parent = NULL;
+    sf->call_parent = nullptr;
 
     // A __cilkrts_pause_frame may be reached before the spawn-helper frame has
     // detached.  In that case, THE is not required.
@@ -350,14 +349,12 @@ __cilkrts_pause_frame(__cilkrts_stack_frame *sf, __cilkrts_stack_frame *parent,
             __cilkrts_extend_return_from_spawn(w, &w->extension);
             w->extension = parent->extension;
         }
-        __cilkrts_stack_frame **tail =
-            atomic_load_explicit(&w->tail, memory_order_relaxed);
+        __cilkrts_stack_frame **tail = w->tail.load(std::memory_order_relaxed);
         --tail;
         /* The store of tail must precede the load of exc in global order.
            See comment in do_dekker_on. */
-        atomic_store_explicit(&w->tail, tail, memory_order_seq_cst);
-        __cilkrts_stack_frame **exc =
-            atomic_load_explicit(&w->exc, memory_order_seq_cst);
+        w->tail.store(tail, std::memory_order_seq_cst);
+        __cilkrts_stack_frame **exc = w->exc.load(std::memory_order_seq_cst);
         /* Currently no other modifications of flags are atomic so this
            one isn't either.  If the thief wins it may run in parallel
            with the clear of DETACHED.  Does it modify flags too? */
@@ -391,7 +388,7 @@ __internal_preserve_stack_frame_type_helper(void) {
 ///
 ///     grainsize = min(2048, ceil(n / (8 * nworkers)))
 #define __cilkrts_grainsize_fn_impl(NAME, INT_T)                               \
-    __attribute__((always_inline)) INT_T NAME(INT_T n) {                       \
+    __attribute__((always_inline)) INT_T NAME(INT_T n) noexcept {              \
         INT_T small_loop_grainsize = n / (8 * __cilkrts_nproc);                \
         if (small_loop_grainsize <= 1)                                         \
             return 1;                                                          \
@@ -404,7 +401,7 @@ __internal_preserve_stack_frame_type_helper(void) {
     __cilkrts_grainsize_fn_impl(__cilkrts_cilk_for_grainsize_##SZ, uint##SZ##_t)
 
 __attribute__((always_inline)) uint8_t
-__cilkrts_cilk_for_grainsize_8(uint8_t n) {
+__cilkrts_cilk_for_grainsize_8(uint8_t n) noexcept {
     uint8_t small_loop_grainsize = n / (8 * __cilkrts_nproc);
     if (small_loop_grainsize <= 1)
         return 1;

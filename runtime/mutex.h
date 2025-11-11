@@ -5,11 +5,10 @@
 typedef union cilk_mutex cilk_mutex;
 
 // Includes
-#include <errno.h>
+#include <cerrno>
 #include <pthread.h>
-#include <stdio.h>
-#include <stdlib.h>
-
+#include <cstdio>
+#include <cstdlib>
 #include "rts-config.h"
 
 #ifndef __APPLE__
@@ -40,7 +39,7 @@ static inline void cilk_mutex_init(cilk_mutex *lock) {
         exit(-1);
     }
 #else
-    pthread_mutex_init(&(lock->posix), NULL);
+    pthread_mutex_init(&(lock->posix), nullptr);
 #endif
 }
 

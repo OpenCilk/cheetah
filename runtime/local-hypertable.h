@@ -1,12 +1,10 @@
 #ifndef _LOCAL_HYPERTABLE_H
 #define _LOCAL_HYPERTABLE_H
 
-#include <stdbool.h>
-#include <stdint.h>
-
 #include "hyperobject_base.h"
 #include "rts-config.h"
-#include "types.h"
+#include <cstdint>
+#include <cstdlib>
 
 typedef uint32_t index_t;
 
@@ -29,25 +27,37 @@ static inline bool is_valid(uintptr_t key) {
 
 // Hash table of reducers.  We don't need any locking or support for
 // concurrent updates, since the hypertable is local.
-typedef struct local_hyper_table {
+struct hyper_table {
     index_t capacity;
     int32_t occupancy;
     int32_t ins_rm_count;
     struct bucket *buckets;
-} hyper_table;
+    hyper_table(index_t capacity)
+        : capacity(capacity), occupancy(0), ins_rm_count(0),
+          buckets(bucket_array_create(capacity))
+    {
+    }
+    ~hyper_table()
+    {
+        free(buckets);
+    }
+    static struct bucket *bucket_array_create(int32_t size);
+    void rebuild(int32_t size);
+};
 
+CHEETAH_API
 hyper_table *__cilkrts_local_hyper_table_alloc(void);
 CHEETAH_INTERNAL
 void local_hyper_table_free(hyper_table *table);
 
 CHEETAH_INTERNAL
-bool remove_hyperobject(hyper_table *table, uintptr_t key);
+bool remove_hyperobject(hyper_table *table, uintptr_t key) noexcept;
 CHEETAH_INTERNAL
-bool insert_hyperobject(hyper_table *table, struct bucket b);
+bool insert_hyperobject(hyper_table *table, struct bucket b) noexcept;
 
 CHEETAH_INTERNAL
-hyper_table *merge_two_hts(hyper_table *restrict left,
-                           hyper_table *restrict right);
+hyper_table *merge_two_hts(hyper_table *__restrict left,
+                           hyper_table *__restrict right);
 
 #ifndef MOCK_HASH
 // Data type for indexing the hash table.  This type is used for
@@ -198,9 +208,10 @@ static inline struct bucket *find_hyperobject_linear(hyper_table *table,
         if (buckets[i].key == key)
             return &buckets[i];
 
-    return NULL;
+    return nullptr;
 }
 
+CHEETAH_API
 struct bucket *__cilkrts_find_hyperobject_hash(hyper_table *table,
                                                uintptr_t key);
 
@@ -213,6 +224,7 @@ static inline struct bucket *find_hyperobject(hyper_table *table,
     }
 }
 
+CHEETAH_API
 void *__cilkrts_insert_new_view(hyper_table *table, uintptr_t key, size_t size,
                                 __cilk_identity_fn identity,
                                 __cilk_reduce_fn reduce);

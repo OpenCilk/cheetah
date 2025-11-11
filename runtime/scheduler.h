@@ -1,7 +1,6 @@
 #ifndef _RSCHED_H
 #define _RSCHED_H
 
-#include "cilk-internal.h"
 #include "closure.h"
 #include "efficiency.h"
 

@@ -1,13 +1,12 @@
 #include "debug.h"
 #include "cilk-internal.h"
 #include "global.h"
-
-#include <assert.h>
+#include <cassert>
+#include <cstdarg>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
 #include <search.h>
-#include <stdarg.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 
 #if ALERT_LVL & (ALERT_CFRAME|ALERT_RETURN)
 unsigned int alert_level = 0;
@@ -19,7 +18,7 @@ CHEETAH_INTERNAL unsigned int debug_level = 0;
 /* To reduce overhead of logging messages are accumulated into memory
    and written to stderr in batches of about 5,000 bytes. */
 static size_t alert_log_size = 0, alert_log_offset = 0;
-static char *alert_log = NULL;
+static char *alert_log = nullptr;
 
 /**
  * Represents a usable alert level with a human-readable
@@ -28,7 +27,7 @@ static char *alert_log = NULL;
  **/
 typedef struct __alert_level_t {
     const char *name;
-    int mask_value;
+    unsigned int mask_value;
 } alert_level_t;
 
 /**
@@ -82,7 +81,7 @@ static int alert_name_comparison(const void *left, const void *right) {
  * @return           The bitmask corresponding to <code>alert_str<\code>, if in
  *                   <code>alert_table<\code>, else ALERT_NONE.
  **/
-static int parse_alert_level_str(const char *const alert_str) {
+static unsigned int parse_alert_level_str(const char *const alert_str) {
     size_t table_size = sizeof(alert_table) / sizeof(alert_table[0]);
 
     const alert_level_t search_key = { .name = alert_str, .mask_value = ALERT_NONE };
@@ -94,7 +93,7 @@ static int parse_alert_level_str(const char *const alert_str) {
                               sizeof(search_key), alert_name_comparison
         );
 
-    if (table_element != NULL) {
+    if (table_element != nullptr) {
         return table_element->mask_value;
     }
     
@@ -118,8 +117,8 @@ static int parse_alert_level_str(const char *const alert_str) {
  *                   be copied, then returns the current
  *                   <code>alert_level<\code> value.
  **/
-static int parse_alert_level_csv(const char *const alert_csv) {
-    int new_alert_lvl = ALERT_NONE;
+static unsigned int parse_alert_level_csv(const char *const alert_csv) {
+    unsigned int new_alert_lvl = ALERT_NONE;
 
     size_t csv_len = strlen(alert_csv);
 
@@ -166,7 +165,7 @@ static int parse_alert_level_csv(const char *const alert_csv) {
  **/
 void set_alert_level_from_str(const char *const alert_csv) {
     if (alert_csv) {
-        int new_alert_lvl = parse_alert_level_csv(alert_csv);
+        unsigned int new_alert_lvl = parse_alert_level_csv(alert_csv);
         set_alert_level(new_alert_lvl);
     }
 }
@@ -180,9 +179,9 @@ void set_alert_level(unsigned int level) {
     if (level & ALERT_NOBUF) {
         return;
     }
-    if (alert_log == NULL) {
+    if (alert_log == nullptr) {
         alert_log_size = 5000;
-        alert_log = malloc(alert_log_size);
+        alert_log = static_cast<char *>(malloc(alert_log_size));
         if (alert_log) {
             memset(alert_log, ' ', alert_log_size);
         }
@@ -191,9 +190,10 @@ void set_alert_level(unsigned int level) {
 
 void set_debug_level(unsigned int level) { debug_level = level; }
 
-const char *const __cilkrts_assertion_failed =
+extern const char __cilkrts_assertion_failed[] =
     "%s:%d: cilk assertion failed: %s\n";
 
+CHEETAH_INTERNAL_NORETURN CHEETAH_COLD
 void cilk_die_internal(struct global_state *const g, const char *fmt, ...) {
     fflush(stdout);
     va_list l;
@@ -208,7 +208,7 @@ void cilk_die_internal(struct global_state *const g, const char *fmt, ...) {
     exit(1);
 }
 
-CHEETAH_INTERNAL_NORETURN
+CHEETAH_INTERNAL_NORETURN CHEETAH_COLD
 void cilkrts_bug(const char *fmt, ...) {
     fflush(NULL);
     __cilkrts_worker *w = __cilkrts_get_tls_worker();
@@ -231,7 +231,7 @@ void cilkrts_bug(const char *fmt, ...) {
 void flush_alert_log() {
     if (ALERT_LVL == 0)
         return;
-    if (alert_log == NULL) {
+    if (alert_log == nullptr) {
         return;
     }
     if (alert_log_offset > 0) {
@@ -241,7 +241,7 @@ void flush_alert_log() {
     }
     alert_log_size = 0;
     free(alert_log);
-    alert_log = NULL;
+    alert_log = nullptr;
 }
 
 #undef cilkrts_alert

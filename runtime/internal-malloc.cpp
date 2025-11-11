@@ -1,14 +1,13 @@
-#include <math.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <strings.h> /* ffs */
-#include <sys/mman.h>
-#include <unistd.h> /* sysconf */
-
 #include "cilk-internal.h"
 #include "debug.h"
 #include "global.h"
 #include "local.h"
+#include <cmath>
+#include <cstdio>
+#include <cstdlib>
+#include <strings.h> /* ffs */
+#include <sys/mman.h>
+#include <unistd.h> /* sysconf */
 
 CHEETAH_INTERNAL int cheetah_page_shift = 0;
 
@@ -78,7 +77,7 @@ static void *remove_from_free_list(struct im_bucket *bucket) {
 static void init_im_buckets(struct cilk_im_desc *im_desc) {
     for (int i = 0; i < NUM_BUCKETS; i++) {
         struct im_bucket *bucket = &(im_desc->buckets[i]);
-        bucket->free_list = NULL;
+        bucket->free_list = nullptr;
         bucket->free_list_size = 0;
         bucket->free_list_limit = bucket_capacity[i];
         bucket->allocated = 0;
@@ -300,7 +299,7 @@ static char *malloc_from_system(__cilkrts_worker *w, size_t size) {
         mem = malloc(size);
     }
     CILK_CHECK(w->g, mem, "Internal malloc failed to allocate %zu bytes", size);
-    return mem;
+    return static_cast<char *>(mem);
 }
 
 static void free_to_system(void *p, size_t size) {
@@ -327,8 +326,10 @@ static void extend_global_pool(__cilkrts_worker *w) {
     if (im_pool->mem_list_index >= im_pool->mem_list_size) {
         CILK_ASSERT(im_pool->mem_list_size > 0);
         size_t new_list_size = 2 * im_pool->mem_list_size;
-        im_pool->mem_list = realloc(im_pool->mem_list,
-                                    new_list_size * sizeof(*im_pool->mem_list));
+        im_pool->mem_list =
+            static_cast<char **>
+            (realloc(im_pool->mem_list,
+                     new_list_size * sizeof(*im_pool->mem_list)));
         for (size_t i = im_pool->mem_list_size; i < new_list_size; ++i) {
             im_pool->mem_list[i] = 0;
         }
@@ -379,11 +380,11 @@ static void global_im_pool_destroy(struct global_im_pool *im_pool) {
     for (unsigned i = 0; i < im_pool->mem_list_size; i++) {
         void *mem = im_pool->mem_list[i];
         free_to_system(mem, INTERNAL_MALLOC_CHUNK_SIZE);
-        im_pool->mem_list[i] = NULL;
+        im_pool->mem_list[i] = nullptr;
     }
     free(im_pool->mem_list);
-    im_pool->mem_list = NULL;
-    im_pool->mem_begin = im_pool->mem_end = NULL;
+    im_pool->mem_list = nullptr;
+    im_pool->mem_begin = im_pool->mem_end = nullptr;
     im_pool->mem_list_index = -1;
     im_pool->mem_list_size = 0;
 }
@@ -396,10 +397,11 @@ void cilk_internal_malloc_global_init(global_state *g) {
         CILK_ASSERT((1 << cheetah_page_shift) == cheetah_page_size);
     }
     cilk_mutex_init(&(g->im_lock));
-    g->im_pool.mem_begin = g->im_pool.mem_end = NULL;
+    g->im_pool.mem_begin = g->im_pool.mem_end = nullptr;
     g->im_pool.mem_list_index = -1;
     g->im_pool.mem_list_size = MEM_LIST_SIZE;
-    g->im_pool.mem_list = calloc(MEM_LIST_SIZE, sizeof(*g->im_pool.mem_list));
+    g->im_pool.mem_list =
+      static_cast<char **>(calloc(MEM_LIST_SIZE, sizeof(*g->im_pool.mem_list)));
     CILK_CHECK(g, g->im_pool.mem_list,
                "Cannot allocate %u * %zu bytes for mem_list", MEM_LIST_SIZE,
                sizeof(*g->im_pool.mem_list));

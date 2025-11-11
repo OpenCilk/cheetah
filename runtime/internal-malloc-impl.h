@@ -1,9 +1,6 @@
 #ifndef _INTERAL_MALLOC_IMPL_H
 #define _INTERAL_MALLOC_IMPL_H
 
-#include "debug.h"
-#include "rts-config.h"
-
 #include "internal-malloc.h"
 
 #define NUM_BUCKETS 7

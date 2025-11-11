@@ -1,7 +1,3 @@
-#include <inttypes.h> /* PRIu32 */
-#include <stdio.h>
-#include <stdlib.h>
-
 #include "cilk-internal.h"
 #include "debug.h"
 #include "fiber-header.h"
@@ -9,6 +5,9 @@
 #include "global.h"
 #include "local.h"
 #include "mutex.h"
+#include <cinttypes> /* PRIu32 */
+#include <cstdio>
+#include <cstdlib>
 
 // When the pool becomes full (empty), free (allocate) this fraction
 // of the pool back to (from) parent / the OS.
@@ -83,7 +82,8 @@ static void fiber_pool_init(struct cilk_fiber_pool *pool, size_t stacksize,
     pool->parent = parent;
     pool->capacity = bufsize;
     pool->size = 0;
-    pool->fibers = calloc(bufsize, sizeof(*pool->fibers));
+    pool->fibers =
+      static_cast<struct cilk_fiber **>(calloc(bufsize, sizeof(*pool->fibers)));
 }
 
 /* Helper function for destroying fiber pool */
@@ -92,11 +92,11 @@ static void fiber_pool_destroy(struct cilk_fiber_pool *pool) {
     cilk_mutex_destroy(&pool->lock);
     // pool->fibers might be NULL if the fiber pool was never actually
     // initialized, e.g., because no Cilk code was run.
-    if (pool->fibers == NULL)
+    if (pool->fibers == nullptr)
         return;
     free(pool->fibers);
-    pool->parent = NULL;
-    pool->fibers = NULL;
+    pool->parent = nullptr;
+    pool->fibers = nullptr;
 }
 
 static inline void fiber_pool_assert_ownership(worker_id self,
@@ -142,7 +142,8 @@ static void fiber_pool_increase_capacity(worker_id self,
 
     if (pool->capacity < new_size) {
         struct cilk_fiber **larger =
-            realloc(pool->fibers, new_size * sizeof(*pool->fibers));
+            static_cast<struct cilk_fiber **>
+                (realloc(pool->fibers, new_size * sizeof(*pool->fibers)));
         if (!larger)
             CILK_ABORT("out of fiber memory");
         pool->fibers = larger;
@@ -260,8 +261,9 @@ void cilk_fiber_pool_global_init(global_state *g) {
 
     unsigned int bufsize = g->options.nproc * g->options.fiber_pool_cap;
     struct cilk_fiber_pool *pool = &(g->fiber_pool);
-    fiber_pool_init(pool, g->options.stacksize, bufsize, NULL, 1 /*shared*/);
-    CILK_ASSERT(NULL != pool->fibers);
+    fiber_pool_init(pool, g->options.stacksize, bufsize,
+                    nullptr, 1 /*shared*/);
+    CILK_ASSERT(nullptr != pool->fibers);
     fiber_pool_stat_init(pool);
     /* let's not preallocate for global fiber pool for now */
 }
@@ -297,7 +299,7 @@ void cilk_fiber_pool_global_destroy(global_state *g) {
 void cilk_fiber_pool_per_worker_zero_init(__cilkrts_worker *w) {
     struct cilk_fiber_pool *pool = &(w->l->fiber_pool);
     pool->size = 0;
-    pool->fibers = NULL;
+    pool->fibers = nullptr;
 }
 
 /**
@@ -311,7 +313,7 @@ void cilk_fiber_pool_per_worker_init(__cilkrts_worker *w) {
     struct cilk_fiber_pool *pool = &(w->l->fiber_pool);
     fiber_pool_init(pool, g->options.stacksize, bufsize, &(g->fiber_pool),
                     0 /* private */);
-    CILK_ASSERT(NULL != pool->fibers);
+    CILK_ASSERT(nullptr != pool->fibers);
     CILK_ASSERT(g->fiber_pool.stack_size == pool->stack_size);
 
     fiber_pool_stat_init(pool);
@@ -326,7 +328,7 @@ void cilk_fiber_pool_per_worker_terminate(__cilkrts_worker *w) {
     while (pool->size > 0) {
         unsigned index = --pool->size;
         struct cilk_fiber *fiber = pool->fibers[index];
-        pool->fibers[index] = NULL;
+        pool->fibers[index] = nullptr;
         cilk_fiber_deallocate(fiber);
     }
 }
@@ -355,7 +357,7 @@ struct cilk_fiber *cilk_fiber_allocate_from_pool(__cilkrts_worker *w) {
     }
     CILK_ASSERT(ret);
     sanitizer_unpoison_fiber(ret);
-    init_fiber_header(ret);
+    ret->clear();
     return ret;
 }
 
@@ -374,12 +376,12 @@ void cilk_fiber_deallocate_to_pool(__cilkrts_worker *w,
                            (pool->capacity / BATCH_FRACTION));
     }
     if (fiber_to_return) {
-        deinit_fiber_header(fiber_to_return);
+        fiber_to_return->clear();
         pool->fibers[pool->size++] = fiber_to_return;
         pool->stats.in_use--;
         if (pool->size > pool->stats.max_free) {
             pool->stats.max_free = pool->size;
         }
-        fiber_to_return = NULL;
+        fiber_to_return = nullptr;
     }
 }

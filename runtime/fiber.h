@@ -7,9 +7,7 @@
 #include "frame.h"
 #include "mutex.h"
 #include "rts-config.h"
-#include "types.h"
-
-#include <stdint.h>
+#include "worker.h"
 
 //===============================================================
 // Struct defs used by fibers, fiber pools
@@ -41,7 +39,7 @@ struct cilk_fiber_pool {
 // Supported functions
 //===============================================================
 
-static inline __attribute__((always_inline)) void
+static inline __attribute__((always_inline,nothrow)) void
 sysdep_save_fp_ctrl_state(__cilkrts_stack_frame *sf) {
 #ifdef CHEETAH_SAVE_MXCSR
 #if 1
@@ -60,7 +58,7 @@ sysdep_save_fp_ctrl_state(__cilkrts_stack_frame *sf) {
  * spawn.  This should be called each time a frame is resumed.  OpenCilk
  * only saves MXCSR.  The 80387 status word is obsolete.
  */
-static inline __attribute__((always_inline)) void
+static inline __attribute__((always_inline,nothrow)) void
 sysdep_restore_fp_state(__cilkrts_stack_frame *sf) {
     /* TODO: Find a way to do this only when using floating point. */
 #ifdef CHEETAH_SAVE_MXCSR
@@ -82,27 +80,10 @@ sysdep_restore_fp_state(__cilkrts_stack_frame *sf) {
 #endif
 }
 
-static inline char *sysdep_get_fiber_start(struct cilk_fiber *fiber) {
-    return fiber->alloc_low;
-}
-
-static inline char *sysdep_get_fiber_end(struct cilk_fiber *fiber) {
-    return (char *)(fiber + 1);
-}
-
-static inline char *sysdep_get_stack_start(struct cilk_fiber *fiber) {
-    /* The OpenCilk compiler should ensure that sufficient space is
-       allocated for outgoing arguments of any function, so we don't need any
-       particular alignment here.  We use a positive alignment here for the
-       subsequent debugging step that checks the stack is accessible. */
-
-    return (char *)fiber;
-}
-
 static inline char *sysdep_reset_stack_for_resume(struct cilk_fiber *fiber,
                                                   __cilkrts_stack_frame *sf) {
     CILK_ASSERT(fiber);
-    char *sp = sysdep_get_stack_start(fiber);
+    char *sp = fiber->get_stack_start();
     /* Debugging: make sure stack is accessible. */
     ((volatile char *)sp)[-1];
     SP(sf) = sp;
@@ -121,18 +102,6 @@ void sysdep_longjmp_to_sf(__cilkrts_stack_frame *sf) {
     sysdep_restore_fp_state(sf);
 #endif
     __builtin_longjmp(sf->ctx, 1);
-}
-
-static inline void init_fiber_header(struct cilk_fiber *fh) {
-    fh->worker = INVALID_WORKER;
-    fh->current_stack_frame = NULL;
-    fh->fake_stack_save = NULL;
-}
-
-static inline void deinit_fiber_header(struct cilk_fiber *fh) {
-    fh->worker = INVALID_WORKER;
-    fh->current_stack_frame = NULL;
-    fh->fake_stack_save = NULL;
 }
 
 CHEETAH_INTERNAL void cilk_fiber_pool_global_init(global_state *g);
@@ -157,11 +126,9 @@ CHEETAH_INTERNAL
 void cilk_fiber_deallocate_to_pool(__cilkrts_worker *w,
                                    struct cilk_fiber *fiber);
 
-CHEETAH_INTERNAL int in_fiber(struct cilk_fiber *, void *);
-
 #if CILK_ENABLE_ASAN_HOOKS
-void sanitizer_start_switch_fiber(struct cilk_fiber *fiber);
-void sanitizer_finish_switch_fiber(void);
+void sanitizer_start_switch_fiber(struct cilk_fiber *fiber) __CILKRTS_NOTHROW;
+void sanitizer_finish_switch_fiber(void) __CILKRTS_NOTHROW;
 CHEETAH_INTERNAL void sanitizer_poison_fiber(struct cilk_fiber *fiber);
 CHEETAH_INTERNAL void sanitizer_unpoison_fiber(struct cilk_fiber *fiber);
 #else

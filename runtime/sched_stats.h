@@ -2,7 +2,7 @@
 #define __SCHED_STATS_HEADER__
 
 #include "rts-config.h"
-#include <stdint.h>
+#include <cstdint>
 
 typedef struct __cilkrts_worker __cilkrts_worker;
 

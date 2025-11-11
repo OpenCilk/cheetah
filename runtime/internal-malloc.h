@@ -1,11 +1,10 @@
 #ifndef _INTERAL_MALLOC_H
 #define _INTERAL_MALLOC_H
 
-#include <stdint.h>
-#include <stdlib.h>
-
 #include "rts-config.h"
-#include "types.h"
+#include <cstdlib>
+
+typedef struct __cilkrts_worker __cilkrts_worker;
 
 CHEETAH_INTERNAL extern int cheetah_page_shift;
 
@@ -35,7 +34,7 @@ static inline void *cilk_aligned_alloc(size_t alignment, size_t size) {
     void *ptr;
     if (posix_memalign(&ptr, alignment, size) == 0)
         return ptr;
-    return NULL;
+    return nullptr;
 #endif
 }
 
