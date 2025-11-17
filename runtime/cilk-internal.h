@@ -117,7 +117,7 @@ struct closure_exception final : public __reducer_base {
 
     virtual __reducer_base *identity(void *) override;
     virtual void reduce(__reducer_base *, __reducer_base *) override;
-    virtual std::size_t size() override { return sizeof *this; }
+    virtual std::size_t size() const override { return sizeof *this; }
 };
 
 // Reducer structure for handling exceptions thrown in parallel.

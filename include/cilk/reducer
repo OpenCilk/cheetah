@@ -10,7 +10,8 @@ typedef std::function<void(void *, void *)> __cilk_reduce_fn;
 struct __reducer_base {
   __reducer_base();
   virtual ~__reducer_base();
-  virtual std::size_t size() = 0;
+  // All of the following methods may be called concurrently.
+  virtual std::size_t size() const = 0;
   // Return the __reducer_base subobject of a newly constructed object.
   virtual __reducer_base *identity(void *view) = 0;
   // Merge r into l.  The destructor for r will be called after reduce.
