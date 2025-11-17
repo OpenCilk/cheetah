@@ -7,7 +7,7 @@
 #include <string.h>
 
 #include "../runtime/cilk2c.h"
-#include "../runtime/cilk2c_inlined.c"
+#include "../runtime/cilk2c_inlined.cpp"
 #include "ktiming.h"
 
 extern size_t ZERO;

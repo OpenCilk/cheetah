@@ -2,7 +2,7 @@
 #include <stdlib.h>
 
 #include "../runtime/cilk2c.h"
-#include "../runtime/cilk2c_inlined.c"
+#include "../runtime/cilk2c_inlined.cpp"
 #include "ktiming.h"
 #include "getoptions.h"
 
