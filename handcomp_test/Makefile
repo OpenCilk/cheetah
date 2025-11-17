@@ -1,8 +1,8 @@
 include ../config.mk
 
-SRCS = $(wildcard *.c)
+SRCS = $(wildcard *.cpp)
 HDRS = $(wildcard *.h)
-OBJS = $(patsubst %.c,%.o,$(SRCS))
+OBJS = $(patsubst %.cpp,%.o,$(SRCS))
 
 DEFINES = $(ABI_DEF)
 
@@ -21,10 +21,13 @@ TIMING_COUNT ?= 1
 all: $(TESTS)
 
 $(TESTS): %: %.o ktiming.o getoptions.o ZERO.o
-	$(CC) $^ -o $@ $(RTS_LIBS) -lrt -lpthread -lm
+	$(CXX) $^ -o $@ $(RTS_LIBS) -lrt -lpthread -lm
 
 %.o: %.c
 	$(CC) -c $(OPTIONS) -DTIMING_COUNT=$(TIMING_COUNT) -o $@ $<
+
+%.o: %.cpp
+	$(CXX) -c $(OPTIONS) -DTIMING_COUNT=$(TIMING_COUNT) -o $@ $<
 
 memcheck: 
 	$(MAKE) clean; $(MAKE) > /dev/null
