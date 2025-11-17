@@ -31,29 +31,29 @@ struct __attribute__((visibility("hidden"))) Closure {
         CILK_ASSERT(!frame);
         frame = sf;
     }
-    struct cilk_fiber *fiber;
-    struct cilk_fiber *fiber_child;
+    struct cilk_fiber *fiber = nullptr;
+    struct cilk_fiber *fiber_child = nullptr;
 
-    struct cilk_fiber *ext_fiber;
-    struct cilk_fiber *ext_fiber_child;
+    struct cilk_fiber *ext_fiber = nullptr;
+    struct cilk_fiber *ext_fiber_child = nullptr;
 
-    worker_id owner_ready_deque; /* debug only */
+    worker_id owner_ready_deque = NO_WORKER; /* debug only */
 
-    enum ClosureStatus status; /* doubles as magic number */
-    bool has_cilk_callee;
-    bool exception_pending;
-    unsigned int join_counter; /* number of outstanding spawned children */
-    char *orig_rsp; /* the rsp one should use when sync successfully */
+    enum ClosureStatus status = CLOSURE_PRE_INVALID;
+    bool has_cilk_callee = false;
+    bool exception_pending = false;
+    unsigned int join_counter = 0; /* number of outstanding spawned children */
+    char *orig_rsp = nullptr; /* rsp one should use when sync successfully */
 
-    Closure *callee;
+    Closure *callee = nullptr;
 
-    Closure *call_parent;  /* the "parent" closure that called */
-    Closure *spawn_parent; /* the "parent" closure that spawned */
+    Closure *call_parent = nullptr;  /* the "parent" closure that called */
+    Closure *spawn_parent = nullptr; /* the "parent" closure that spawned */
 
-    Closure *left_sib;  // left *spawned* sibling in the closure tree
-    Closure *right_sib; // right *spawned* sibling in the closur tree
+    Closure *left_sib = nullptr;  // left *spawned* sibling in the closure tree
+    Closure *right_sib = nullptr; // right *spawned* sibling in the closur tree
     // right most *spawned* child in the closure tree
-    Closure *right_most_child;
+    Closure *right_most_child = nullptr;
 
     /*
      * stuff related to ready deque.
@@ -72,15 +72,16 @@ struct __attribute__((visibility("hidden"))) Closure {
      *       v |
      *      bottom
      */
-    Closure *next_ready;
-    Closure *prev_ready;
+    Closure *next_ready = nullptr;
+    Closure *prev_ready = nullptr;
 
-    hyper_table *right_ht;
-    hyper_table *child_ht;
-    hyper_table *user_ht;
+    hyper_table *right_ht = nullptr;
+    hyper_table *child_ht = nullptr;
+    hyper_table *user_ht = nullptr;
 
     std::atomic<worker_id> mutex_owner
-      __attribute__((aligned(CILK_CACHE_LINE)));
+      __attribute__((aligned(CILK_CACHE_LINE)))
+     = NO_WORKER;
 
     bool has_children() const {
         return (has_cilk_callee || join_counter != 0);

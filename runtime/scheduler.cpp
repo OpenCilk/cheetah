@@ -81,14 +81,6 @@ void local_state::change_state(enum __cilkrts_worker_state s) {
     state = s;
 }
 
-// JFC: The following comment refers to Cilk-M, not OpenCilk.
-// need to be careful when calling this function --- we check whether a
-// frame is set stolen (i.e., has a full frame associated with it), but note
-// that the setting of this can be delayed.  A thief can steal a spawned
-// frame, but it cannot fully promote it until it remaps its TLMM stack,
-// because the flag field is stored in the frame on the TLMM stack.  That
-// means, a frame can be stolen, in the process of being promoted, and
-// mean while, the stolen flag is not set until finish_promote.
 static bool Closure_at_top_of_stack(__cilkrts_worker *const w,
                                     __cilkrts_stack_frame *const frame) {
     __cilkrts_stack_frame **head = w->head.load(std::memory_order_relaxed);
@@ -436,17 +428,6 @@ static Closure *Closure_return(__cilkrts_worker *const w, worker_id self,
         l->provably_good_steal = true;  // Use the existing SP in the frame
 
         return child;
-
-        // // merge reducers
-        // if (lht) {
-        //     active_ht = merge_two_hts(lht, active_ht);
-        // }
-        // if (rht) {
-        //     active_ht = merge_two_hts(active_ht, rht);
-        // }
-
-        // parent->lock(self);
-        // child->lock(self);
     }
 
     // Cilk_exception_handler ended up pushing a stack frame onto child, to do
@@ -613,25 +594,6 @@ void __cilkrts_do_reductions(__cilkrts_stack_frame *sf) {
     }
 
     w->hyper_table = ht;
-
-    // hyper_table *ht = Cilk_merge_hts(w);
-    // while (ht != NULL) {
-    //     // The worker might have changed if the reduce operations executed
-    //     // parallel code.  Reload the worker pointer.
-    //     w = get_worker_from_stack(sf);
-
-    //     if (w->hyper_table == NULL) {
-    //         // The last call to Cilk_merge_hts did not create any new reducer
-    //         // views.  Set w's hyper table to be the result and return.
-    //         w->hyper_table = ht;
-    //         break;
-    //     }
-
-    //     // The last call to Cilk_merge_hts created more reducer views.  Reduce
-    //     // those new views on the right of the returned hyper table.
-    //     w->l->lht = ht;
-    //     ht = Cilk_merge_hts(w);
-    // }
 }
 
 static void Cilk_do_reductions_for_return(__cilkrts_worker *w,
@@ -1836,29 +1798,7 @@ void *scheduler_thread_proc(void *arg) {
 }
 
 Closure::Closure(__cilkrts_stack_frame *frame)
-    : frame(frame),
-      fiber(nullptr),
-      fiber_child(nullptr),
-      ext_fiber(nullptr),
-      ext_fiber_child(nullptr),
-      owner_ready_deque(NO_WORKER),
-      status(CLOSURE_PRE_INVALID),
-      has_cilk_callee(false),
-      exception_pending(false),
-      join_counter(0),
-      orig_rsp(nullptr),
-      callee(nullptr),
-      call_parent(nullptr),
-      spawn_parent(nullptr),
-      left_sib(nullptr),
-      right_sib(nullptr),
-      right_most_child(nullptr),
-      next_ready(nullptr),
-      prev_ready(nullptr),
-      right_ht(nullptr),
-      child_ht(nullptr),
-      user_ht(nullptr),
-      mutex_owner(NO_WORKER)
+    : frame(frame)
 {
 }
 
