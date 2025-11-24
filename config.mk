@@ -4,7 +4,7 @@ CONFIG_DIR:=$(dir $(realpath $(lastword $(MAKEFILE_LIST))))
 
 COMPILER_BASE?=
 CC=$(COMPILER_BASE)clang
-CXX=$(COMPILER_BASE)clang++
+CXX=$(COMPILER_BASE)clang++ --std=c++20
 LINK_CC=$(CC)
 LLVM_LINK=$(COMPILER_BASE)llvm-link
 LLVM_CONFIG=$(COMPILER_BASE)llvm-config
