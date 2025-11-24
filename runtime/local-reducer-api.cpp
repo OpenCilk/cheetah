@@ -35,7 +35,6 @@ void __cilkrts_reducer_register_0(__reducer_base *key)
 {
     struct bucket b {
         .key = (uintptr_t)key,
-        .hash = 0,
         .data = { .view = nullptr, .extra = key }
     };
     reducer_register(b);
@@ -46,7 +45,6 @@ void __cilkrts_reducer_register_1(void *key, __reducer_callbacks *cb)
 {
     struct bucket b {
         .key = (uintptr_t)key,
-        .hash = 0,
         .data = { .view = key, .extra = &cb->reduce },
     };
     reducer_register(b);
@@ -57,7 +55,6 @@ void __cilkrts_reducer_register_2(void *key, void (*reduce)(void *, void *))
 {
     struct bucket b {
         .key = (uintptr_t)key,
-        .hash = 0,
         .data = { .view = key, .extra = reduce },
     };
     reducer_register(b);

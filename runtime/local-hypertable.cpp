@@ -349,7 +349,6 @@ __reducer_base *__cilkrts_insert_new_view_0(hyper_table *table,
     // Insert the new view into the local hypertable.
     struct bucket new_bucket = {
         .key = (uintptr_t)key,
-        .hash = 0,
         .data = { .view = new_view, .extra = base }
     };
     bool success = insert_hyperobject(table, new_bucket);
@@ -368,7 +367,6 @@ void *__cilkrts_insert_new_view_1(hyper_table *table, uintptr_t key,
     // Insert the new view into the local hypertable.
     struct bucket new_bucket = {
         .key = (uintptr_t)key,
-        .hash = 0,
         // XXX check lifetime
         .data = { .view = new_view, .extra = &callbacks.reduce }
     };
@@ -389,7 +387,6 @@ void *__cilkrts_insert_new_view_2(hyper_table *table, uintptr_t key,
     // Insert the new view into the local hypertable.
     struct bucket new_bucket = {
         .key = (uintptr_t)key,
-        .hash = 0,
         .data = { .view = new_view, .extra = reduce }
     };
     bool success = insert_hyperobject(table, new_bucket);
