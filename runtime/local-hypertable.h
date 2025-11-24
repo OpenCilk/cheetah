@@ -25,6 +25,9 @@ struct bucket {
     index_t hash = 0;
     reducer_data data;
 
+#ifdef __ELF__
+    __attribute__((visibility("protected")))
+#endif
     static void reduce(bucket *left, bucket *right);
 
     bool is_empty() { return key == KEY_EMPTY; }
