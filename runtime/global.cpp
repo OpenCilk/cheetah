@@ -207,7 +207,6 @@ void global_state::record_event(scheduler_event::event code,
     struct scheduler_event *event = &events[event_index++ % 1024];
     event->time = __builtin_readcyclecounter();
     event->code = code;
-    event->data0 = 0;
     event->data1 = data;
     event->worker = self;
 #endif

@@ -19,7 +19,7 @@ struct __reducer_base {
 };
 
 struct __reducer_callbacks {
-  size_t size;
+  std::size_t size;
   __cilk_identity_fn identity;
   __cilk_reduce_fn reduce;
 };

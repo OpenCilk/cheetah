@@ -6,6 +6,8 @@
 
 struct __cilkrts_stack_frame;
 struct __cilkrts_worker;
+struct __reducer_base;
+struct __reducer_callbacks;
 
 #ifdef __cplusplus
 extern "C" {

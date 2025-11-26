@@ -51,7 +51,7 @@ struct scheduler_event {
         MORE_THIEVES,
         ALL_THIEVES,
     } code;
-    unsigned short data0;
+    // 2 byte hole
     int data1;
     worker_id worker;
 };
