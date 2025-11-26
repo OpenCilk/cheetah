@@ -30,9 +30,9 @@ struct bucket {
 #endif
     static void reduce(bucket *left, bucket *right);
 
-    bool is_empty() { return key == KEY_EMPTY; }
-    bool is_tombstone() { return key == KEY_DELETED; }
-    bool is_valid() { return key != KEY_EMPTY && key != KEY_DELETED; }
+    bool is_empty() const { return key == KEY_EMPTY; }
+    bool is_tombstone() const { return key == KEY_DELETED; }
+    bool is_valid() const { return key != KEY_EMPTY && key != KEY_DELETED; }
 };
 
 static bool is_empty(uintptr_t key) { return key == KEY_EMPTY; }
