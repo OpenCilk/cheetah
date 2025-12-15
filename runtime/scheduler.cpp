@@ -1743,8 +1743,7 @@ void worker_scheduler(__cilkrts_worker *w, history_t *const history) {
     history->recent_sentinel_count = recent_sentinel_count;
 }
 
-void *scheduler_thread_proc(void *arg) {
-    struct worker_args *w_arg = (struct worker_args *)arg;
+void *scheduler_thread_proc(worker_args *w_arg) {
     __cilkrts_worker *w = __cilkrts_init_tls_worker(w_arg->id, w_arg->g);
 
     cilkrts_alert(BOOT, "scheduler_thread_proc");

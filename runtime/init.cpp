@@ -221,8 +221,7 @@ static inline void pin_thread(std::thread &thread_handle,
  *
  * @return     the result of <code>scheduler_thread_proc<\code>
  */
-void *init_threads_and_enter_scheduler(void *args) {
-    struct worker_args *w_arg = (struct worker_args *)args;
+void *init_threads_and_enter_scheduler(worker_args *w_arg) {
     struct global_state *g = w_arg->g;
 
     int const worker_start = 2;
@@ -346,7 +345,7 @@ void *init_threads_and_enter_scheduler(void *args) {
 #endif
 #endif
 
-    return scheduler_thread_proc(args);
+    return scheduler_thread_proc(w_arg);
 }
 
 static void threads_init(global_state *g) {
