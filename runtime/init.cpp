@@ -1,5 +1,6 @@
 #include <cstdint>
 #include <sched.h>
+#include <thread>
 
 #include <pthread.h>
 #ifdef DEBUG
@@ -202,10 +203,10 @@ static inline int fill_worker_mask_and_get_next_cpu(
  * @param thread_id   the id of the thread that should be pinned
  * @param worker_mask the set of cpus to which the thread should be pinned
  */
-static inline void pin_thread(pthread_t const thread_id,
+static inline void pin_thread(std::thread &thread_handle,
                               cpu_set_t *const worker_mask) {
     int const err =
-        pthread_setaffinity_np(thread_id, sizeof(*worker_mask), worker_mask);
+        pthread_setaffinity_np(thread_handle.native_handle(), sizeof(*worker_mask), worker_mask);
     CILK_ASSERT_G(err == 0);
 }
 #endif
@@ -237,6 +238,9 @@ void *init_threads_and_enter_scheduler(void *args) {
     cpu_set_t process_mask;
     int available_cores = 0;
     // Get the mask from the parent thread (master thread)
+    // Use pthread_self() directly here, as there is no clean way to get
+    // this using std::thread (i.e. std::this_thread does not provide a
+    // native_handle function)
     if (0 == pthread_getaffinity_np(pthread_self(), sizeof(process_mask),
                                     &process_mask)) {
         available_cores = CPU_COUNT(&process_mask);
@@ -317,13 +321,8 @@ void *init_threads_and_enter_scheduler(void *args) {
 #endif // ENABLE_WORKER_PINNING
 
     for (int w = worker_start; w < n_threads; w++) {
-        int status = pthread_create(&g->threads[w], nullptr, scheduler_thread_proc,
-                                    &g->worker_args[w]);
-
-        if (status != 0) {
-            cilkrts_bug(nullptr, "Cilk: thread creation (%u) failed: %s", w,
-                        strerror(status));
-        }
+        new (&g->threads[w]) std::thread{scheduler_thread_proc,
+                                         &g->worker_args[w]};
 
 #if ENABLE_WORKER_PINNING
 #ifdef CPU_SETSIZE
@@ -355,14 +354,10 @@ static void threads_init(global_state *g) {
 
     // Make sure we are supposed to create worker threads
     if (worker_start < (int)g->nworkers) {
-        int status = pthread_create(&g->threads[worker_start], nullptr,
-                                    init_threads_and_enter_scheduler,
-                                    &g->worker_args[worker_start]);
-
-        if (status != 0) {
-            cilkrts_bug(nullptr, "Cilk: thread creation (%u) failed: %s",
-                        worker_start, strerror(status));
-        }
+        new (&g->threads[worker_start]) std::thread{
+                                          init_threads_and_enter_scheduler,
+                                            &g->worker_args[worker_start]
+          };
     }
 }
 
@@ -420,13 +415,10 @@ static void __cilkrts_stop_workers(global_state *g) {
     // work-stealing loop.
     g->wake_all_disengaged();
 
-    // Join the worker pthreads
+    // Join the worker threads
     unsigned int worker_start = 1;
     for (unsigned int i = worker_start; i < g->nworkers; i++) {
-        int status = pthread_join(g->threads[i], nullptr);
-        if (status != 0)
-            cilkrts_bug(nullptr, "Cilk runtime error: thread join (%u) failed: %s",
-                        i, strerror(status));
+        g->threads[i].join();
     }
     cilkrts_alert(BOOT, "(threads_join) All workers joined!");
     g->workers_started = false;
@@ -695,7 +687,7 @@ static void global_state_deinit(global_state *g) {
     g->nworkers = 0;
     free(g->deques);
     g->deques = nullptr;
-    free(g->threads);
+    delete [] g->threads;
     g->threads = nullptr;
     free(g->index_to_worker);
     g->index_to_worker = nullptr;
