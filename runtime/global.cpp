@@ -116,6 +116,9 @@ static void parse_rts_environment(global_state *g) {
 #if defined(CPU_SETSIZE) && !defined(ANDROID)
         cpu_set_t process_mask;
         // get the mask from the parent thread (master thread)
+        // Use pthread_self() directly here, as there is no clean way to get
+        // this using std::thread (i.e. std::this_thread does not provide a
+        // native_handle function)
         int err = pthread_getaffinity_np(pthread_self(), sizeof(process_mask),
                                          &process_mask);
         if (0 == err) {
@@ -176,7 +179,7 @@ global_state *global_state_init(int argc, char *argv[]) {
         (__cilkrts_worker **)calloc(active_size, sizeof(__cilkrts_worker *));
     g->deques = (ReadyDeque *)cilk_aligned_alloc(
         __alignof__(ReadyDeque), active_size * sizeof(ReadyDeque));
-    g->threads = (pthread_t *)calloc(active_size, sizeof(pthread_t));
+    g->threads = new std::thread[active_size];
     g->index_to_worker = (worker_id *)calloc(active_size, sizeof(worker_id));
     g->worker_to_index = (worker_id *)calloc(active_size, sizeof(worker_id));
     cilk_internal_malloc_global_init(g); // initialize internal malloc first

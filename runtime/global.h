@@ -13,6 +13,7 @@
 #include <atomic>
 #include <cstdint>
 #include <pthread.h>
+#include <thread>
 
 extern unsigned __cilkrts_nproc;
 
@@ -65,7 +66,7 @@ struct CHEETAH_INTERNAL global_state {
     struct __cilkrts_worker **workers;
     /* dynamically-allocated array of deques, one per processor */
     struct ReadyDeque *deques;
-    pthread_t *threads;
+    std::thread *threads;
     struct Closure *root_closure;
 
     struct cilk_fiber_pool fiber_pool __attribute__((aligned(CILK_CACHE_LINE)));
