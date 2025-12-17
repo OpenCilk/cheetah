@@ -27,6 +27,7 @@ foreach( f ${cilk_header_files})
 endforeach( f )
 
 add_custom_target(cilk-headers ALL DEPENDS ${out_files})
+add_dependencies(cheetah cilk-headers)
 set_target_properties(cilk-headers PROPERTIES FOLDER "Cheetah Misc")
 
 set(header_install_dir ${CHEETAH_INSTALL_PATH}/include)
