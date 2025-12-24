@@ -60,7 +60,6 @@ static void worker_local_destroy(local_state *l, global_state *g) {
 static void deques_init(global_state *g) {
     cilkrts_alert(BOOT, "(deques_init) Initializing deques");
     for (unsigned int i = 0; i < g->options.nproc; i++) {
-        g->deques[i].top = nullptr;
         g->deques[i].bottom = nullptr;
         g->deques[i].mutex_owner = NO_WORKER;
     }
@@ -587,7 +586,6 @@ void __cilkrts_internal_exit_cilkified_root(global_state *g,
     // closure.
     ReadyDeque::lock_self(deques, self);
     deques[self].bottom = nullptr;
-    deques[self].top = nullptr;
     WHEN_CILK_DEBUG(g->root_closure->owner_ready_deque = NO_WORKER);
     ReadyDeque::unlock_self(deques, self);
 

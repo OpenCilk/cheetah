@@ -261,7 +261,7 @@ void __cilkrts_set_return(__cilkrts_worker *const w) {
     CILK_ASSERT((t->frame->flags & CILK_FRAME_DETACHED) == 0);
 
     Closure *call_parent = t->call_parent;
-    Closure *t1 = ReadyDeque::xtract_bottom(deques, self, self);
+    Closure *t1 = ReadyDeque::xtract(deques, self, self);
 
     USE_UNUSED(t1);
     CILK_ASSERT_POINTER_EQUAL(t, t1);
@@ -362,7 +362,6 @@ static Closure *Closure_return(__cilkrts_worker *const w, worker_id self,
     CILK_ASSERT(child->owner_ready_deque == NO_WORKER);
     child->assert_alienation(self);
 
-    CILK_ASSERT(child->has_cilk_callee == 0);
     CILK_ASSERT_NULL(child->call_parent);
     CILK_ASSERT(parent != nullptr);
 
@@ -698,96 +697,6 @@ static inline bool trivial_stacklet(const __cilkrts_stack_frame *head) {
 }
 
 /*
- * This return the oldest frame in stacklet that has not been promoted to
- * full frame (i.e., never been stolen), or the closest detached frame
- * if nothing in this stacklet has been promoted.
- */
-static inline __cilkrts_stack_frame *
-oldest_non_stolen_frame_in_stacklet(__cilkrts_stack_frame *head) {
-
-    __cilkrts_stack_frame *cur = head;
-    while (cur && (cur->flags & CILK_FRAME_DETACHED) == 0 && cur->call_parent &&
-           __cilkrts_not_stolen(cur->call_parent)) {
-        cur = cur->call_parent;
-    }
-
-    return cur;
-}
-
-static Closure *setup_call_parent_closure_helper(
-    __cilkrts_worker *const w, __cilkrts_worker *const victim_w,
-    __cilkrts_stack_frame *frame, void *extension, Closure *oldest) {
-    Closure *call_parent, *curr_cl;
-
-    if (oldest->frame == frame) {
-        CILK_ASSERT(__cilkrts_stolen(oldest->frame));
-        CILK_ASSERT(oldest->fiber);
-        return oldest;
-    }
-    call_parent = setup_call_parent_closure_helper(
-        w, victim_w, frame->call_parent, extension, oldest);
-    __cilkrts_set_stolen(frame);
-    curr_cl = Closure::create(w, frame);
-
-    CILK_ASSERT(call_parent->fiber);
-
-    curr_cl->set_status(CLOSURE_SUSPENDED);
-    curr_cl->fiber = call_parent->fiber;
-
-    if (USE_EXTENSION) {
-        curr_cl->frame->extension = extension;
-        curr_cl->ext_fiber = call_parent->ext_fiber;
-    }
-
-    call_parent->add_callee(curr_cl);
-
-    return curr_cl;
-}
-
-/***
- * ANGE: youngest_cl is the spawning parent that the thief is trying to
- * extract and resume.  Temporarily its call_parent is pointing to the
- * oldest closure on top of victim's deque when the steal occurs.
- * There may be more frames between them (i.e., stacklet contains more
- * than two frames) that require promotion.  This function promotes
- * and suspends them.
- ***/
-static void setup_closures_in_stacklet(__cilkrts_worker *const w,
-                                       __cilkrts_worker *const victim_w,
-                                       Closure *youngest_cl) {
-
-    Closure *call_parent;
-    Closure *oldest_cl = youngest_cl->call_parent;
-    __cilkrts_stack_frame *youngest, *oldest;
-    youngest = youngest_cl->frame;
-    void *extension = USE_EXTENSION ? youngest->extension : nullptr;
-    oldest = oldest_non_stolen_frame_in_stacklet(youngest);
-
-    CILK_ASSERT_POINTER_EQUAL(youngest, youngest_cl->frame);
-    CILK_ASSERT(__cilkrts_stolen(youngest));
-
-    CILK_ASSERT((oldest_cl->frame == nullptr && oldest != youngest) ||
-                       (oldest_cl->frame == oldest->call_parent &&
-                        __cilkrts_stolen(oldest_cl->frame)));
-
-    if (oldest_cl->frame == nullptr) {
-        CILK_ASSERT(__cilkrts_not_stolen(oldest));
-        CILK_ASSERT(oldest->flags & CILK_FRAME_DETACHED);
-        __cilkrts_set_stolen(oldest);
-        oldest_cl->frame = oldest;
-        if (USE_EXTENSION) {
-            oldest_cl->frame->extension = extension;
-        }
-    }
-
-    call_parent = setup_call_parent_closure_helper(
-        w, victim_w, youngest->call_parent, extension, oldest_cl);
-
-    CILK_ASSERT(youngest_cl->fiber != oldest_cl->fiber);
-    call_parent->add_callee(youngest_cl);
-}
-
-/*
  * Do the thief part of Dekker's protocol.  Return the head pointer upon
  * success, NULL otherwise.  The protocol fails when the victim already popped T
  * so that E=T.
@@ -835,7 +744,7 @@ static __cilkrts_stack_frame **do_dekker_on(worker_id self,
  * Returns the child.
  *
  * ANGE: I don't think this function actually detach the parent.  Someone
- *       calling this function has to do xtract_top on the victim's
+ *       calling this function has to do xtract on the victim's
  *       deque to get the parent closure.  This is the only time I can
  *       think of, where the ready deque contains more than one frame.
  ***/
@@ -848,7 +757,6 @@ static Closure *promote_child(__cilkrts_stack_frame **head, ReadyDeque *deques,
 
     CILK_ASSERT(cl->status == CLOSURE_RUNNING);
     CILK_ASSERT(cl->owner_ready_deque == pn);
-    CILK_ASSERT_NULL(cl->next_ready);
 
     /* cl may have a call parent: it might be promoted as its containing
      * stacklet is stolen, and it's call parent is promoted into full and
@@ -883,6 +791,7 @@ static Closure *promote_child(__cilkrts_stack_frame **head, ReadyDeque *deques,
     if (cl->frame == frame_to_steal) { // stolen before
         CILK_ASSERT(__cilkrts_stolen(frame_to_steal));
         spawn_parent = cl;
+        *res = ReadyDeque::xtract(deques, self, pn);
     } else if (trivial_stacklet(frame_to_steal)) { // spawning expression
         CILK_ASSERT(__cilkrts_not_stolen(frame_to_steal));
         CILK_ASSERT(frame_to_steal->call_parent &&
@@ -891,6 +800,7 @@ static Closure *promote_child(__cilkrts_stack_frame **head, ReadyDeque *deques,
         __cilkrts_set_stolen(frame_to_steal);
         cl->set_frame(frame_to_steal);
         spawn_parent = cl;
+        *res = ReadyDeque::xtract(deques, self, pn);
     } else { // spawning a function and stacklet never gotten stolen before
         // cl->frame could either be NULL or some older frame (e.g.,
         // cl->frame was stolen and resumed, it calls another frame which
@@ -953,7 +863,6 @@ static Closure *promote_child(__cilkrts_stack_frame **head, ReadyDeque *deques,
         spawn_parent->orig_rsp = static_cast<char *>(SP(frame_to_steal));
     }
 
-    CILK_ASSERT(spawn_parent->has_cilk_callee == 0);
     // ANGE: we set this frame lazily
     Closure *spawn_child = Closure::create(w, nullptr);
 
@@ -988,21 +897,10 @@ static Closure *promote_child(__cilkrts_stack_frame **head, ReadyDeque *deques,
  * into full closures.
  ***/
 static void finish_promote(__cilkrts_worker *const w, worker_id self,
-                           __cilkrts_worker *const victim_w, Closure *parent,
-                           bool has_frames_to_promote) {
+                           __cilkrts_worker *const victim_w, Closure *parent) {
 
     parent->assert_ownership(self);
-    CILK_ASSERT(parent->has_cilk_callee == 0);
     CILK_ASSERT(__cilkrts_stolen(parent->frame));
-
-    // ANGE: if there are more frames to promote, the youngest frame that we
-    // are stealing (i.e., parent) has been promoted and its closure call_parent
-    // has been set to the closure of the oldest frame in the stacklet
-    // temporarily, with multiple shadow frames in between that still need
-    // their own closure.  Set those up.
-    if (has_frames_to_promote) {
-        setup_closures_in_stacklet(w, victim_w, parent);
-    }
 
     __cilkrts_set_unsynced(parent->frame);
     /* Make the parent ready */
@@ -1045,15 +943,6 @@ static Closure *extract_top_spawning_closure(__cilkrts_stack_frame **head,
     cilkrts_alert(STEAL,
                   "(Closure_steal) promote gave cl/res/child = %p/%p/%p",
                   (void *)cl, (void *)res, (void *)child);
-
-    /* detach the parent */
-    if (res == nullptr) {
-        // ANGE: in this case, the spawning parent to steal / resume
-        // is simply cl (i.e., there is only one frame in the stacklet),
-        // so we didn't set res in promote_child.
-        res = ReadyDeque::xtract_top(deques, self, victim_id);
-        CILK_ASSERT_POINTER_EQUAL(cl, res);
-    }
 
     res->fiber = cilk_fiber_allocate_from_pool(w);
     if (USE_EXTENSION) {
@@ -1127,8 +1016,7 @@ static Closure *Closure_steal(__cilkrts_worker **workers,
                 res->assert_ownership(self);
 
                 // ANGE: finish the promotion process in finish_promote
-                finish_promote(w, self, victim_w, res,
-                               /* has_frames_to_promote */ false);
+                finish_promote(w, self, victim_w, res);
 
                 cilkrts_alert(STEAL,
                               "(Closure_steal) success; res %p has "
@@ -1165,65 +1053,6 @@ static Closure *Closure_steal(__cilkrts_worker **workers,
     }
 
     return res;
-}
-
-/***
- * Protocol for promoting a worker's own deque.
- *
- * This is used by *sequential* cilksan race detector when detecting races for
- * code that uses reducers, invoked from compiled code to simulate that a
- * continuation of a spawn statement has been stolen.  Specifically this
- * function should be invoked in the spawn helper after detach.  Upon
- * invocation, the worker will promote its own deque but do not allocate a new
- * fiber for the parent Closure (i.e., the "stolen" continuation), as the
- * parent will not be resumed until the worker returns from the spawned child.
- ***/
-void promote_own_deque(__cilkrts_worker *w) {
-
-    ReadyDeque *deques = w->g->deques;
-    worker_id self = w->self;
-    if (!ReadyDeque::trylock(deques, self, self)) {
-        cilkrts_bug(
-            "Bug: failed to acquire deque lock when promoting own deque");
-        return;
-    }
-
-    bool done = false;
-    while (!done) {
-        Closure *cl = ReadyDeque::peek_top(deques, self, self);
-        CILK_ASSERT(cl);
-        CILK_ASSERT(cl->status == CLOSURE_RUNNING);
-
-        if (!cl->trylock(self)) {
-            ReadyDeque::unlock(deques, self, self);
-            // XXX Status is from compare_exchange_weaka
-            // which may spuriously fail.
-            cilkrts_bug(
-                "Bug: failed to acquire deque lock when promoting own deque");
-            return;
-        }
-        __cilkrts_stack_frame **head = do_dekker_on(self, w, cl);
-        if (head) {
-            // unfortunately this function releases both locks
-            Closure *res = extract_top_spawning_closure(head, deques, w, w, cl, self, self);
-            CILK_ASSERT(res);
-            CILK_ASSERT_NULL(res->fiber);
-
-            // ANGE: if cl is not the spawning parent, then
-            // there is more frames in the stacklet to promote
-            bool has_frames_to_promote = (cl != res);
-            // ANGE: finish the promotion process in finish_promote
-            finish_promote(w, self, w, res, has_frames_to_promote);
-
-            res->set_status(CLOSURE_SUSPENDED);
-            res->unlock(self);
-
-        } else {
-            cl->unlock(self);
-            ReadyDeque::unlock(deques, self, self);
-            done = true; // we can break out; no more frames to promote
-        }
-    }
 }
 
 // ==============================================
@@ -1322,7 +1151,6 @@ int Cilk_sync(__cilkrts_worker *const w, __cilkrts_stack_frame *frame) {
     CILK_ASSERT(t->status == CLOSURE_RUNNING);
     CILK_ASSERT(frame && (t->frame == frame));
     CILK_ASSERT(__cilkrts_stolen(frame));
-    CILK_ASSERT(t->has_cilk_callee == 0);
     // CILK_ASSERT(w, t->frame->magic == CILK_STACKFRAME_MAGIC);
 
     // each sync is executed only once; since we occupy user_ht only
@@ -1441,7 +1269,7 @@ static void do_what_it_says(ReadyDeque *deques, __cilkrts_worker *w,
                     // Attempt to get a closure from the bottom of our deque.
                     // We should already have the lock on the deque at this
                     // point, as we jumped here from Cilk_exception_handler.
-                    t = ReadyDeque::xtract_bottom(deques, self, self);
+                    t = ReadyDeque::xtract(deques, self, self);
                     ReadyDeque::unlock_self(deques, self);
                 }
             }
@@ -1845,7 +1673,7 @@ void Closure::suspend(struct ReadyDeque *deques, worker_id self) {
 
     change_status(CLOSURE_RUNNING, CLOSURE_SUSPENDED);
 
-    Closure *cl1 = ReadyDeque::xtract_bottom(deques, self, self);
+    Closure *cl1 = ReadyDeque::xtract(deques, self, self);
 
     CILK_ASSERT_POINTER_EQUAL(this, cl1);
     USE_UNUSED(cl1);
@@ -1861,7 +1689,7 @@ void Closure::suspend_victim(struct ReadyDeque *deques,
 
     change_status(CLOSURE_RUNNING, CLOSURE_SUSPENDED);
 
-    Closure *cl1 = ReadyDeque::xtract_bottom(deques, thief_id, victim_id);
+    Closure *cl1 = ReadyDeque::xtract(deques, thief_id, victim_id);
     CILK_ASSERT_POINTER_EQUAL(this, cl1);
     USE_UNUSED(cl1);
 }
@@ -1871,22 +1699,17 @@ void Closure::remove_callee() {
     // A child is not double linked with siblings if it is called
     // so there is no need to unlink it.
     CILK_ASSERT(status == CLOSURE_SUSPENDED);
-    CILK_ASSERT(has_cilk_callee);
-    has_cilk_callee = false;
-    callee = nullptr;
+    --join_counter;
 }
 
 void Closure::add_callee(Closure *new_callee) {
     // ANGE: instead of checking has_cilk_callee, we just check if callee is
     // NULL, because we might have set the has_cilk_callee in
     // Closure_add_tmp_callee to prevent the closure from being resumed.
-    CILK_ASSERT_NULL(callee);
     CILK_ASSERT_NULL(new_callee->spawn_parent);
     CILK_ASSERT((new_callee->frame->flags & CILK_FRAME_DETACHED) == 0);
 
-    new_callee->call_parent = this;
-    callee = new_callee;
-    has_cilk_callee = true;
+    ++join_counter;
 }
 
 /***
