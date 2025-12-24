@@ -19,7 +19,6 @@ struct ReadyDeque;
 // Actual declaration
 struct ReadyDeque {
     Closure *bottom;
-    Closure *top __attribute__((aligned(CILK_CACHE_LINE)));
     std::atomic<worker_id> mutex_owner
       __attribute__((aligned(CILK_CACHE_LINE)));
 
@@ -93,54 +92,19 @@ struct ReadyDeque {
      * must have locked worker pn's deque before entering the function
      */
 
-    Closure *xtract_top(worker_id self) {
-        /* ANGE: make sure w has the lock on worker pn's deque */
-        assert_ownership(self);
-
-        if (Closure *cl = top) {
-            top = cl->next_ready;
-            /* ANGE: if there is only one entry in the deque ... */
-            if (cl == bottom) {
-                CILK_ASSERT_NULL(cl->next_ready);
-                bottom = nullptr;
-            } else {
-                CILK_ASSERT(cl->next_ready);
-                (cl->next_ready)->prev_ready = nullptr;
-            }
-            cl->owner_ready_deque = NO_WORKER;
-            return cl;
-        }
-        CILK_ASSERT_NULL(bottom);
-        return nullptr;
+    static Closure *xtract(ReadyDeque *deques, worker_id self, worker_id pn) {
+        return deques[pn].xtract(self);
     }
 
-    static Closure *xtract_top(ReadyDeque *deques, worker_id self,
-                               worker_id pn) {
-        return deques[pn].xtract_top(self);
-    }
-
-    static Closure *xtract_bottom(ReadyDeque *deques, worker_id self,
-                                  worker_id pn) {
-        return deques[pn].xtract_bottom(self);
-    }
-
-    Closure *xtract_bottom(worker_id self) {
+    Closure *xtract(worker_id self) {
         /* ANGE: make sure w has the lock on worker pn's deque */
         assert_ownership(self);
 
         if (Closure *cl = bottom) {
-            bottom = cl->prev_ready;
-            if (cl == top) {
-                CILK_ASSERT_NULL(cl->prev_ready);
-                top = nullptr;
-            } else {
-                CILK_ASSERT(cl->prev_ready);
-                (cl->prev_ready)->next_ready = nullptr;
-            }
+            bottom = nullptr;
             cl->owner_ready_deque = NO_WORKER;
             return cl;
         }
-        CILK_ASSERT_NULL(top);
         return nullptr;
     }
 
@@ -149,7 +113,7 @@ struct ReadyDeque {
         assert_ownership(self);
 
         /* ANGE: return the top but does not unlink it from the rest */
-        if (Closure *cl = top) {
+        if (Closure *cl = bottom) {
             // If w is stealing, then it may peek the top of the deque
             // of the worker who is in the midst of exiting a
             // Cilkified region.  In that case, cl will be the root
@@ -175,7 +139,6 @@ struct ReadyDeque {
         if (Closure *cl = bottom) {
             return cl;
         }
-        CILK_ASSERT_NULL(top);
         return nullptr;
     }
 
@@ -192,17 +155,9 @@ struct ReadyDeque {
         assert_ownership(self);
 
         CILK_ASSERT(cl->owner_ready_deque == NO_WORKER);
-
-        cl->prev_ready = bottom;
-        cl->next_ready = nullptr;
+        CILK_ASSERT_NULL(bottom);
         bottom = cl;
         cl->owner_ready_deque = pn;
-        if (top) {
-            CILK_ASSERT(cl->prev_ready);
-            (cl->prev_ready)->next_ready = cl;
-        } else {
-            top = cl;
-        }
     }
 
     static void add_bottom(ReadyDeque *deques, Closure *cl,

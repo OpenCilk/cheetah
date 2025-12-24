@@ -40,12 +40,9 @@ struct __attribute__((visibility("hidden"))) Closure {
     worker_id owner_ready_deque = NO_WORKER; /* debug only */
 
     enum ClosureStatus status = CLOSURE_PRE_INVALID;
-    bool has_cilk_callee = false;
     bool exception_pending = false;
     unsigned int join_counter = 0; /* number of outstanding spawned children */
     char *orig_rsp = nullptr; /* rsp one should use when sync successfully */
-
-    Closure *callee = nullptr;
 
     Closure *call_parent = nullptr;  /* the "parent" closure that called */
     Closure *spawn_parent = nullptr; /* the "parent" closure that spawned */
@@ -54,26 +51,6 @@ struct __attribute__((visibility("hidden"))) Closure {
     Closure *right_sib = nullptr; // right *spawned* sibling in the closur tree
     // right most *spawned* child in the closure tree
     Closure *right_most_child = nullptr;
-
-    /*
-     * stuff related to ready deque.
-     *
-     * ANGE: for top of the ReadyDeque, prev_ready = NULL
-     *       for bottom of the ReadyDeque, next_ready = NULL
-     *       next_ready pointing downward, prev_ready pointing upward
-     *
-     *       top
-     *  next | ^
-     *       | | prev
-     *       v |
-     *       ...
-     *  next | ^
-     *       | | prev
-     *       v |
-     *      bottom
-     */
-    Closure *next_ready = nullptr;
-    Closure *prev_ready = nullptr;
 
     hyper_table *right_ht = nullptr;
     hyper_table *child_ht = nullptr;
@@ -84,7 +61,7 @@ struct __attribute__((visibility("hidden"))) Closure {
      = NO_WORKER;
 
     bool has_children() const {
-        return (has_cilk_callee || join_counter != 0);
+        return join_counter != 0;
     }
 
     void set_status(enum ClosureStatus to) {
