@@ -320,7 +320,7 @@ void *init_threads_and_enter_scheduler(worker_args *w_arg) {
 #endif // ENABLE_WORKER_PINNING
 
     for (int w = worker_start; w < n_threads; w++) {
-        new (&g->threads[w]) std::thread{scheduler_thread_proc,
+        g->threads[w] = std::thread{scheduler_thread_proc,
                                          &g->worker_args[w]};
 
 #if ENABLE_WORKER_PINNING
@@ -353,7 +353,7 @@ static void threads_init(global_state *g) {
 
     // Make sure we are supposed to create worker threads
     if (worker_start < (int)g->nworkers) {
-        new (&g->threads[worker_start]) std::thread{
+        g->threads[worker_start] = std::thread{
                                           init_threads_and_enter_scheduler,
                                             &g->worker_args[worker_start]
           };
