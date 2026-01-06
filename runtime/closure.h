@@ -3,10 +3,12 @@
 
 #include "cilk-internal.h"
 #include "local-hypertable.h"
+#include "rts-config.h"
 #include <atomic>
 
-// Forward declaration
-typedef struct Closure Closure;
+// Forward declarations
+struct Closure;
+struct BusyClosure;
 
 enum ClosureStatus : unsigned char {
     /* Closure.status == 0 is invalid */
@@ -37,7 +39,7 @@ struct __attribute__((visibility("hidden"))) Closure {
     struct cilk_fiber *ext_fiber = nullptr;
     struct cilk_fiber *ext_fiber_child = nullptr;
 
-    worker_id owner_ready_deque = NO_WORKER; /* debug only */
+    worker_id owner = NO_WORKER; /* debug only */
 
     enum ClosureStatus status = CLOSURE_PRE_INVALID;
     bool exception_pending = false;
@@ -92,10 +94,9 @@ struct __attribute__((visibility("hidden"))) Closure {
     static void destroy(Closure *, struct global_state *);
 
     // This method is used for sync.
-    void suspend(struct ReadyDeque *deques, worker_id self);
+    void suspend(BusyClosure *busy, worker_id self);
     // This method is used for steal.
-    void suspend_victim(struct ReadyDeque *deques, worker_id thief,
-                        worker_id victim);
+    void suspend_victim(BusyClosure *busy, worker_id thief, worker_id victim);
 
     void add_callee(Closure *new_callee);
     void remove_callee();

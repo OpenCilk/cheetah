@@ -19,6 +19,7 @@ extern unsigned __cilkrts_nproc;
 
 struct __cilkrts_worker;
 struct Closure;
+struct BusyClosure;
 
 // clang-format off
 #define DEFAULT_OPTIONS                                            \
@@ -64,8 +65,8 @@ struct CHEETAH_INTERNAL global_state {
     unsigned int nworkers; /* size of next 4 arrays */
     struct worker_args *worker_args;
     struct __cilkrts_worker **workers;
-    /* dynamically-allocated array of deques, one per processor */
-    struct ReadyDeque *deques;
+    /* dynamically-allocated array of busy closures, one per processor */
+    BusyClosure *busy;
     std::thread *threads;
     struct Closure *root_closure;
 

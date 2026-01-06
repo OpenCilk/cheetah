@@ -16,13 +16,13 @@
 #endif
 #include <unistd.h>
 
+#include "busyclosure.h"
 #include "cilk-internal.h"
 #include "debug.h"
 #include "fiber.h"
 #include "global.h"
 #include "init.h"
 #include "local.h"
-#include "readydeque.h"
 #include "sched_stats.h"
 #include "scheduler.h"
 
@@ -57,11 +57,11 @@ static void worker_local_destroy(local_state *l, global_state *g) {
     /* currently nothing to do here */
 }
 
-static void deques_init(global_state *g) {
-    cilkrts_alert(BOOT, "(deques_init) Initializing deques");
+static void busy_init(global_state *g) {
+    cilkrts_alert(BOOT, "(busy_init) Initializing busy closures");
     for (unsigned int i = 0; i < g->options.nproc; i++) {
-        g->deques[i].bottom = nullptr;
-        g->deques[i].mutex_owner = NO_WORKER;
+        g->busy[i].closure = nullptr;
+        g->busy[i].mutex_owner = NO_WORKER;
     }
 }
 
@@ -363,7 +363,7 @@ global_state *__cilkrts_startup(int argc, char *argv[]) {
     cilkrts_alert(BOOT, "(__cilkrts_startup) argc %d", argc);
     global_state *g = global_state_init(argc, argv);
     workers_init(g);
-    deques_init(g);
+    busy_init(g);
 
     // Create the root closure and a fiber to go with it.  Use worker 0 to
     // allocate the closure and fiber.
@@ -560,7 +560,7 @@ void __cilkrts_internal_exit_cilkified_root(global_state *g,
 
     worker_id self = w->self;
     const bool is_boss = (0 == self);
-    ReadyDeque *deques = g->deques;
+    BusyClosure *busy = g->busy;
 
     // Mark the computation as done.  Also "sleep" the workers: update global
     // flags so workers who exit the work-stealing loop will return to waiting
@@ -579,15 +579,15 @@ void __cilkrts_internal_exit_cilkified_root(global_state *g,
         w->extension = nullptr;
     }
 
-    // Clear this worker's deque.  Nobody can successfully steal from this deque
-    // at this point, because head == tail, but we still want any subsequent
-    // Cilkified region to start with an empty deque.  We go ahead and grab the
-    // deque lock to make sure no other worker has a lingering pointer to the
-    // closure.
-    ReadyDeque::lock_self(deques, self);
-    deques[self].bottom = nullptr;
-    WHEN_CILK_DEBUG(g->root_closure->owner_ready_deque = NO_WORKER);
-    ReadyDeque::unlock_self(deques, self);
+    // Clear this worker's busy closure.  Nobody can successfully steal from
+    // this worker's deque at this point, because head == tail, but any
+    // subsequent Cilkified region should still start with an empty busy
+    // closure.  We go ahead and grab the lock to make sure no other worker
+    // has a lingering pointer to the closure.
+    BusyClosure::lock_self(busy, self);
+    busy[self].closure = nullptr;
+    WHEN_CILK_DEBUG(g->root_closure->owner = NO_WORKER);
+    BusyClosure::unlock_self(busy, self);
 
     // Clear the flags in sf.  This routine runs before leave_frame in a Cilk
     // function, but leave_frame is executed conditionally in Cilk functions
@@ -682,8 +682,8 @@ static void global_state_deinit(global_state *g) {
     free(g->workers);
     g->workers = nullptr;
     g->nworkers = 0;
-    free(g->deques);
-    g->deques = nullptr;
+    free(g->busy);
+    g->busy = nullptr;
     delete [] g->threads;
     g->threads = nullptr;
     free(g->index_to_worker);
@@ -693,10 +693,10 @@ static void global_state_deinit(global_state *g) {
     free(g);
 }
 
-static void deques_deinit(global_state *g) {
-    cilkrts_alert(BOOT, "(deques_deinit) Clean up deques");
+static void busy_deinit(global_state *g) {
+    cilkrts_alert(BOOT, "(busy_deinit) Clean up busy closures");
     for (unsigned int i = 0; i < g->options.nproc; i++) {
-        CILK_ASSERT(g->deques[i].mutex_owner == NO_WORKER);
+        CILK_ASSERT(g->busy[i].mutex_owner == NO_WORKER);
     }
 }
 
@@ -790,7 +790,7 @@ void __cilkrts_shutdown(global_state *g) {
     // internal-malloc that does not include all the free fibers.
     global_state_terminate(g);
     workers_deinit(g);
-    deques_deinit(g);
+    busy_deinit(g);
     global_state_deinit(g);
 }
 
