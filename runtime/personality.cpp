@@ -1,3 +1,4 @@
+#include "busyclosure.h"
 #include "cilk-internal.h"
 #include "cilk2c.h"
 #include "cilk2c_inlined.h"
@@ -7,7 +8,6 @@
 #include "frame.h"
 #include "init.h"
 #include "local-reducer-api.h"
-#include "readydeque.h"
 #include <cilk/cilk_api.h>
 #include <cstdint>
 #include <cstring>
@@ -120,7 +120,7 @@ __attribute__((noinline)) static void
 sync_in_personality(__cilkrts_worker *w, __cilkrts_stack_frame *sf,
                     struct _Unwind_Exception *ue_header) {
     worker_id self = w->self;
-    ReadyDeque *deques = w->g->deques;
+    BusyClosure *busy = w->g->busy;
     // save floating point state
     sysdep_save_fp_ctrl_state(sf);
 
@@ -129,8 +129,8 @@ sync_in_personality(__cilkrts_worker *w, __cilkrts_stack_frame *sf,
         struct closure_exception *exn_r = get_exception_reducer(w);
         exn_r->exn = (char *)ue_header;
 
-        ReadyDeque::lock_self(deques, self);
-        Closure *t = ReadyDeque::peek_bottom(deques, self, self);
+        BusyClosure::lock_self(busy, self);
+        Closure *t = BusyClosure::peek(busy, self, self);
         t->lock(self);
 
         // ensure that we return here after a cilk_sync.
@@ -138,7 +138,7 @@ sync_in_personality(__cilkrts_worker *w, __cilkrts_stack_frame *sf,
         t->orig_rsp = (char *)SP(sf);
 
         t->unlock(self);
-        ReadyDeque::unlock_self(deques, self);
+        BusyClosure::unlock_self(busy, self);
 
         // save the current fiber for further stack unwinding.
         if (exn_r->throwing_fiber == nullptr) {

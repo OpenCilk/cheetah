@@ -7,9 +7,10 @@
 #ifdef __FreeBSD__
 #include <pthread_np.h>
 #endif
+#include "busyclosure.h"
 #include "debug.h"
 #include "global.h"
-#include "readydeque.h"
+#include "local.h"
 #include <cstdio>
 #include <cstring>
 #include <sched.h>
@@ -177,8 +178,8 @@ global_state *global_state_init(int argc, char *argv[]) {
         (struct worker_args *)calloc(active_size, sizeof(struct worker_args));
     g->workers =
         (__cilkrts_worker **)calloc(active_size, sizeof(__cilkrts_worker *));
-    g->deques = (ReadyDeque *)cilk_aligned_alloc(
-        __alignof__(ReadyDeque), active_size * sizeof(ReadyDeque));
+    g->busy = (BusyClosure *)cilk_aligned_alloc(
+        __alignof__(BusyClosure), active_size * sizeof(BusyClosure));
     g->threads = new std::thread[active_size];
     g->index_to_worker = (worker_id *)calloc(active_size, sizeof(worker_id));
     g->worker_to_index = (worker_id *)calloc(active_size, sizeof(worker_id));
