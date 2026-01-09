@@ -35,11 +35,15 @@ $(MAIN).so: $(OBJS)
 $(PERSON_C).a: build/$(PERSON_C_SRC).o
 	$(AR) rcs $@ $^
 
+$(PERSON_C).so: $(RTS_LIBDIR)/libopencilk.so
+
 $(PERSON_C).so: build/$(PERSON_C_SRC).o
 	$(CC) -shared -o $@ $^ -L$(RTS_LIBDIR) -lopencilk
 
 $(PERSON_CPP).a: build/$(PERSON_CPP_SRC).o
 	$(AR) rcs $@ $^
+
+$(PERSON_CPP).so: $(RTS_LIBDIR)/libopencilk.so
 
 $(PERSON_CPP).so: ./build/$(PERSON_CPP_SRC).o
 	$(CXX) -shared -o $@ $^ -L$(RTS_LIBDIR) -lopencilk
