@@ -16,7 +16,7 @@ template <typename A> static void reduce(void *left, void *right) {
 }
 
 template <typename A>
-using holder = A _Hyperobject(init<A>, reduce<A>);
+using holder = A cilk_reducer(init<A>, reduce<A>);
 
 } // namespace cilk
 

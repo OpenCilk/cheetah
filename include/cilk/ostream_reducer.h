@@ -62,10 +62,10 @@ public:
 
 };
 
-template<typename Char, typename Traits = std::char_traits<Char>>
-  using ostream_reducer = ostream_view<Char, Traits>
-    _Hyperobject(&ostream_view<Char, std::char_traits<Char>>::identity,
-                 &ostream_view<Char, std::char_traits<Char>>::reduce);
+template <typename Char, typename Traits = std::char_traits<Char>>
+using ostream_reducer = ostream_view<Char, Traits>
+    cilk_reducer(&ostream_view<Char, Traits>::identity,
+                 &ostream_view<Char, Traits>::reduce);
 
 } // namespace cilk
 
