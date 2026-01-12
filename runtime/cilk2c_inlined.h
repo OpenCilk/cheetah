@@ -67,10 +67,14 @@ void __cilkrts_pause_frame(__cilkrts_stack_frame *sf,
 
 // Compute the grainsize for a cilk_for loop at runtime, based on the number n
 // of loop iterations.
-uint8_t __cilkrts_cilk_for_grainsize_8(uint8_t n) __CILKRTS_NOTHROW;
-uint16_t __cilkrts_cilk_for_grainsize_16(uint16_t n) __CILKRTS_NOTHROW;
-uint32_t __cilkrts_cilk_for_grainsize_32(uint32_t n) __CILKRTS_NOTHROW;
-uint64_t __cilkrts_cilk_for_grainsize_64(uint64_t n) __CILKRTS_NOTHROW;
+uint8_t __cilkrts_cilk_for_grainsize_8(uint8_t n,
+                                       uint8_t bound) __CILKRTS_NOTHROW;
+uint16_t __cilkrts_cilk_for_grainsize_16(uint16_t n,
+                                         uint16_t bound) __CILKRTS_NOTHROW;
+uint32_t __cilkrts_cilk_for_grainsize_32(uint32_t n,
+                                         uint32_t bound) __CILKRTS_NOTHROW;
+uint64_t __cilkrts_cilk_for_grainsize_64(uint64_t n,
+                                         uint64_t bound) __CILKRTS_NOTHROW;
 
 // Performs runtime operations to handle a cilk_sync.
 void __cilk_sync(__cilkrts_stack_frame *sf);

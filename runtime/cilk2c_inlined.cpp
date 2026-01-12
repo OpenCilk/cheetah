@@ -418,11 +418,11 @@ __internal_preserve_stack_frame_type_helper(void) {
 ///
 ///     grainsize = min(2048, ceil(n / (8 * nworkers)))
 #define __cilkrts_grainsize_fn_impl(NAME, INT_T)                               \
-    __attribute__((always_inline)) INT_T NAME(INT_T n) noexcept {              \
+    __attribute__((always_inline)) INT_T NAME(INT_T n, INT_T bound) noexcept { \
         INT_T small_loop_grainsize = n / (8 * __cilkrts_nproc);                \
         if (small_loop_grainsize <= 1)                                         \
             return 1;                                                          \
-        INT_T large_loop_grainsize = 2048;                                     \
+        INT_T large_loop_grainsize = bound ? bound : 2048;                     \
         return large_loop_grainsize < small_loop_grainsize                     \
                    ? large_loop_grainsize                                      \
                    : small_loop_grainsize;                                     \
@@ -431,11 +431,12 @@ __internal_preserve_stack_frame_type_helper(void) {
     __cilkrts_grainsize_fn_impl(__cilkrts_cilk_for_grainsize_##SZ, uint##SZ##_t)
 
 __attribute__((always_inline)) uint8_t
-__cilkrts_cilk_for_grainsize_8(uint8_t n) noexcept {
+__cilkrts_cilk_for_grainsize_8(uint8_t n, uint8_t bound) noexcept {
     uint8_t small_loop_grainsize = n / (8 * __cilkrts_nproc);
     if (small_loop_grainsize <= 1)
         return 1;
-    return small_loop_grainsize;
+    return (bound && bound < small_loop_grainsize) ? bound
+                                                   : small_loop_grainsize;
 }
 
 __cilkrts_grainsize_fn(16) __cilkrts_grainsize_fn(32) __cilkrts_grainsize_fn(64)
