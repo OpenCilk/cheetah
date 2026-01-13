@@ -9,11 +9,11 @@ struct __cilkrts_stack_frame;
 // Structure inserted at the top of a fiber, to implement fiber-local storage.
 // The stack begins just below this structure.  See get_stack_start().
 // This must be a standard layout class.
-struct cilk_fiber {
+struct alignas(CILK_CACHE_LINE) cilk_fiber {
     // Worker currently executing on the fiber.
-    struct __cilkrts_worker *worker;
+    __cilkrts_worker *worker;
     // Current stack frame executing on the fiber.
-    struct __cilkrts_stack_frame *current_stack_frame;
+    __cilkrts_stack_frame *current_stack_frame;
 
     // NOTE: The current hyper_table can be stored in the fiber header, but we
     // don't currently observe any performance advantage or disadvantage to
@@ -25,8 +25,8 @@ struct cilk_fiber {
 
     // These next two words are for internal library use and are
     // constant for the life of this structure.
-    char *alloc_low;         // lowest byte of mapped region
-    char *stack_low;         // lowest byte of stack region
+    char *alloc_low; // lowest byte of mapped region
+    char *stack_low; // lowest byte of stack region
 
     // Three unused words remain on 64 bit systems with 64 byte cache lines.
 
@@ -45,7 +45,6 @@ struct cilk_fiber {
         current_stack_frame = nullptr;
         fake_stack_save = nullptr;
     }
-
-} __attribute__((aligned(CILK_CACHE_LINE)));
+};
 
 #endif // _FIBER_HEADER_H

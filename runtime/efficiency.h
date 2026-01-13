@@ -17,7 +17,7 @@ typedef uint32_t history_sample_t;
 // worker state.  ATTEMPTS must divide SENTINEL_THRESHOLD.
 #define ATTEMPTS 4
 
-typedef struct history_t {
+struct history_t {
     history_sample_t inefficient_history = 0;
     history_sample_t efficient_history = 0;
     unsigned int sentinel_count_history_tail = 0;
@@ -25,6 +25,6 @@ typedef struct history_t {
     unsigned int fails = 0; // rts->init_fails(...);
     unsigned int sample_threshold = SENTINEL_THRESHOLD;
     unsigned int sentinel_count_history[SENTINEL_COUNT_HISTORY] = { 1 };
-} history_t;
+};
 
 #endif

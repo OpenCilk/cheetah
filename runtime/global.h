@@ -32,15 +32,16 @@ struct BusyClosure;
 // clang-format on
 
 struct rts_options {
-    size_t stacksize;            /* can be set via env variable CILK_STACKSIZE */
-    unsigned int nproc;          /* can be set via env variable CILK_NWORKERS */
-    unsigned int deqdepth;       /* can be set via env variable CILK_DEQDEPTH */
-    unsigned int fiber_pool_cap; /* can be set via env variable CILK_FIBER_POOL */
+    size_t stacksize;      /* can be set via env variable CILK_STACKSIZE */
+    unsigned int nproc;    /* can be set via env variable CILK_NWORKERS */
+    unsigned int deqdepth; /* can be set via env variable CILK_DEQDEPTH */
+    unsigned int
+        fiber_pool_cap; /* can be set via env variable CILK_FIBER_POOL */
 };
 
 struct worker_args {
-    worker_id id;
-    global_state *g;
+    worker_id id = 0;
+    global_state *g = nullptr;
 };
 
 struct scheduler_event {
@@ -60,38 +61,38 @@ struct scheduler_event {
 
 struct CHEETAH_INTERNAL global_state {
     /* globally-visible options (read-only after init) */
-    struct rts_options options;
+    rts_options options;
 
     unsigned int nworkers; /* size of next 4 arrays */
-    struct worker_args *worker_args;
-    struct __cilkrts_worker **workers;
+    worker_args *worker_args;
+    __cilkrts_worker **workers;
     /* dynamically-allocated array of busy closures, one per processor */
     BusyClosure *busy;
     std::thread *threads;
-    struct Closure *root_closure;
+    Closure *root_closure;
 
-    struct cilk_fiber_pool fiber_pool __attribute__((aligned(CILK_CACHE_LINE)));
-    struct global_im_pool im_pool __attribute__((aligned(CILK_CACHE_LINE)));
-    struct cilk_im_desc im_desc __attribute__((aligned(CILK_CACHE_LINE)));
+    alignas(CILK_CACHE_LINE) cilk_fiber_pool fiber_pool;
+    alignas(CILK_CACHE_LINE) global_im_pool im_pool;
+    alignas(CILK_CACHE_LINE) cilk_im_desc im_desc;
     cilk_mutex im_lock; // lock for accessing global im_desc
 
     // These fields are accessed exclusively by the boss thread.
 
-    jmpbuf boss_ctx __attribute__((aligned(CILK_CACHE_LINE)));
+    alignas(CILK_CACHE_LINE) jmpbuf boss_ctx;
     void *orig_rsp;
     bool workers_started;
 
     // This field is shared between the boss thread and a couple workers.
 
-    std::atomic<bool> cilkified __attribute__((aligned(CILK_CACHE_LINE)));
+    alignas(CILK_CACHE_LINE) std::atomic<bool> cilkified;
 
     // These fields are shared among all workers in the work-stealing loop.
 
-    std::atomic<bool> done __attribute__((aligned(CILK_CACHE_LINE)));
+    alignas(CILK_CACHE_LINE) std::atomic<bool> done;
     bool terminate;
     bool root_closure_initialized;
 
-    worker_id *index_to_worker __attribute__((aligned(CILK_CACHE_LINE)));
+    alignas(CILK_CACHE_LINE) worker_id *index_to_worker;
     worker_id *worker_to_index;
     cilk_mutex index_lock;
 
@@ -99,12 +100,12 @@ struct CHEETAH_INTERNAL global_state {
     // the disengaged workers.  Lower 32 bits count the sentinel workers.  These
     // two counts are stored in a single word to make it easier to update both
     // counts atomically.
-    std::atomic<uint64_t> disengaged_sentinel __attribute__((aligned(CILK_CACHE_LINE)));
+    alignas(CILK_CACHE_LINE) std::atomic<uint64_t> disengaged_sentinel;
 #define GET_DISENGAGED(D) ((D) >> 32)
 #define GET_SENTINEL(D) ((D) & 0xffffffff)
 #define DISENGAGED_SENTINEL(A, B) (((uint64_t)(A) << 32) | (uint32_t)(B))
 
-    std::atomic<uint32_t> disengaged_thieves __attribute__((aligned(CILK_CACHE_LINE)));
+    alignas(CILK_CACHE_LINE) std::atomic<uint32_t> disengaged_thieves;
 
     cilk_mutex print_lock; // global lock for printing messages
 
@@ -114,15 +115,15 @@ struct CHEETAH_INTERNAL global_state {
     // does not need to check whether it's reading an uninitialized entry in the
     // global workers array.  Instead, this dummy worker will ensure the fast
     // check in Closure_steal always fails.
-    struct __cilkrts_worker dummy_worker;
+    __cilkrts_worker dummy_worker;
 
-    struct global_sched_stats stats;
+    global_sched_stats stats;
 
     uint64_t start_time;
 
-    _Atomic size_t event_index;
+    std::atomic<size_t> event_index;
 
-    struct scheduler_event events[1024];
+    scheduler_event events[1024];
 
     CHEETAH_INTERNAL void set_cilkified();
     CHEETAH_INTERNAL void signal_uncilkified();
@@ -165,36 +166,34 @@ struct CHEETAH_INTERNAL global_state {
                                         unsigned int *const sample_threshold);
     void reset_fails(unsigned int fails);
 #endif
-    unsigned int maybe_reengage_workers(worker_id self,
-                       unsigned int nworkers, __cilkrts_worker *const w,
-                       unsigned int fails,
-                       unsigned int *const sample_threshold,
-                       history_sample_t *const inefficient_history,
-                       history_sample_t *const efficient_history,
-                       unsigned int *const sentinel_count_history,
-                       unsigned int *const sentinel_count_history_tail,
-                       unsigned int *const recent_sentinel_count);
-    unsigned int go_to_sleep_maybe(worker_id self,
-                                   unsigned int nworkers,
-                                   const unsigned int NAP_THRESHOLD,
-                                   __cilkrts_worker *const w,
-                                   Closure *const t, unsigned int fails,
-                                   unsigned int *const sample_threshold,
-                                   history_sample_t *const inefficient_history,
-                                   history_sample_t *const efficient_history,
-                                   unsigned int *const sentinel_count_history,
-                                   unsigned int *const sentinel_count_history_tail,
-                                   unsigned int *const recent_sentinel_count);
-    unsigned int handle_failed_steal_attempts(worker_id self,
-                             unsigned int nworkers, const unsigned int NAP_THRESHOLD,
-                             __cilkrts_worker *const w,
-                             unsigned int fails,
-                             unsigned int *const sample_threshold,
-                             history_sample_t *const inefficient_history,
-                             history_sample_t *const efficient_history,
-                             unsigned int *const sentinel_count_history,
-                             unsigned int *const sentinel_count_history_tail,
-                             unsigned int *const recent_sentinel_count);
+    unsigned int
+    maybe_reengage_workers(worker_id self, unsigned int nworkers,
+                           __cilkrts_worker *const w, unsigned int fails,
+                           unsigned int *const sample_threshold,
+                           history_sample_t *const inefficient_history,
+                           history_sample_t *const efficient_history,
+                           unsigned int *const sentinel_count_history,
+                           unsigned int *const sentinel_count_history_tail,
+                           unsigned int *const recent_sentinel_count);
+    unsigned int
+    go_to_sleep_maybe(worker_id self, unsigned int nworkers,
+                      const unsigned int NAP_THRESHOLD,
+                      __cilkrts_worker *const w, Closure *const t,
+                      unsigned int fails, unsigned int *const sample_threshold,
+                      history_sample_t *const inefficient_history,
+                      history_sample_t *const efficient_history,
+                      unsigned int *const sentinel_count_history,
+                      unsigned int *const sentinel_count_history_tail,
+                      unsigned int *const recent_sentinel_count);
+    unsigned int handle_failed_steal_attempts(
+        worker_id self, unsigned int nworkers, const unsigned int NAP_THRESHOLD,
+        __cilkrts_worker *const w, unsigned int fails,
+        unsigned int *const sample_threshold,
+        history_sample_t *const inefficient_history,
+        history_sample_t *const efficient_history,
+        unsigned int *const sentinel_count_history,
+        unsigned int *const sentinel_count_history_tail,
+        unsigned int *const recent_sentinel_count);
 
     unsigned int init_fails(uint32_t wake_val);
 };

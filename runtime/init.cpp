@@ -33,8 +33,7 @@ typedef cpuset_t cpu_set_t;
 extern local_state default_worker_local_state;
 
 static local_state *worker_local_init(local_state *l, global_state *g) {
-    l->shadow_stack = (__cilkrts_stack_frame **)calloc(
-        g->options.deqdepth, sizeof(struct __cilkrts_stack_frame *));
+    l->shadow_stack = new __cilkrts_stack_frame *[g->options.deqdepth]();
     for (int i = 0; i < JMPBUF_SIZE; i++) {
         l->rts_ctx[i] = nullptr;
     }
@@ -51,9 +50,8 @@ static local_state *worker_local_init(local_state *l, global_state *g) {
     return l;
 }
 
-static void worker_local_destroy(local_state *l, global_state *g) {
-    (void)l; // not currently used
-    (void)g; // not currently used
+static void worker_local_destroy([[maybe_unused]] local_state *l,
+                                 [[maybe_unused]] global_state *g) {
     /* currently nothing to do here */
 }
 
@@ -154,7 +152,7 @@ static void move_bit(int cpu, cpu_set_t *to, cpu_set_t *from) {
  * for different workers.
  *
  * @param worker_mask     (output) the processor mask that will store the set
- *                        of all cpu ids to assigne to worker <code>w_id<\code>
+ *                        of all cpu ids to assigned to worker <code>w_id<\code>
  * @param w_id            the id of the worker that will be pinned using the
  *                        <code>worker_mask<\code> (used for debug messages)
  * @param cpu_start       the cpu id from which to start searching in the
@@ -204,8 +202,8 @@ static inline int fill_worker_mask_and_get_next_cpu(
  */
 static inline void pin_thread(std::thread &thread_handle,
                               cpu_set_t *const worker_mask) {
-    int const err =
-        pthread_setaffinity_np(thread_handle.native_handle(), sizeof(*worker_mask), worker_mask);
+    int const err = pthread_setaffinity_np(thread_handle.native_handle(),
+                                           sizeof(*worker_mask), worker_mask);
     CILK_ASSERT_G(err == 0);
 }
 #endif
@@ -221,7 +219,7 @@ static inline void pin_thread(std::thread &thread_handle,
  * @return     the result of <code>scheduler_thread_proc<\code>
  */
 void *init_threads_and_enter_scheduler(worker_args *w_arg) {
-    struct global_state *g = w_arg->g;
+    global_state *g = w_arg->g;
 
     int const worker_start = 2;
 
@@ -319,8 +317,7 @@ void *init_threads_and_enter_scheduler(worker_args *w_arg) {
 #endif // ENABLE_WORKER_PINNING
 
     for (int w = worker_start; w < n_threads; w++) {
-        g->threads[w] = std::thread{scheduler_thread_proc,
-                                         &g->worker_args[w]};
+        g->threads[w] = std::thread{scheduler_thread_proc, &g->worker_args[w]};
 
 #if ENABLE_WORKER_PINNING
 #ifdef CPU_SETSIZE
@@ -352,10 +349,8 @@ static void threads_init(global_state *g) {
 
     // Make sure we are supposed to create worker threads
     if (worker_start < (int)g->nworkers) {
-        g->threads[worker_start] = std::thread{
-                                          init_threads_and_enter_scheduler,
-                                            &g->worker_args[worker_start]
-          };
+        g->threads[worker_start] = std::thread{init_threads_and_enter_scheduler,
+                                               &g->worker_args[worker_start]};
     }
 }
 
@@ -369,7 +364,7 @@ global_state *__cilkrts_startup(int argc, char *argv[]) {
     // allocate the closure and fiber.
     __cilkrts_worker *w0 = g->workers[0];
     Closure *t = Closure::create(w0, nullptr);
-    struct cilk_fiber *fiber = cilk_fiber_allocate(g->options.stacksize);
+    cilk_fiber *fiber = cilk_fiber_allocate(g->options.stacksize);
     t->fiber = fiber;
     g->root_closure = t;
 
@@ -377,8 +372,7 @@ global_state *__cilkrts_startup(int argc, char *argv[]) {
 }
 
 // Global constructor for starting up the default cilkrts.
-__attribute__((constructor))
-static void __default_cilkrts_startup() {
+__attribute__((constructor)) static void __default_cilkrts_startup() {
     default_cilkrts = __cilkrts_startup(0, nullptr);
 
     for (unsigned i = 0; i < cilkrts_callbacks.last_init; ++i)
@@ -457,7 +451,7 @@ static inline __attribute__((noinline)) void boss_wait_helper(void) {
 // Setup runtime structures to start a new Cilkified region.  Executed by the
 // Cilkifying thread in cilkify().
 void __cilkrts_internal_invoke_cilkified_root(__cilkrts_stack_frame *sf)
-  __CILKRTS_NOTHROW {
+    __CILKRTS_NOTHROW {
     global_state *g = default_cilkrts;
 
     // Initialize the boss thread's runtime structures, if necessary.
@@ -497,9 +491,8 @@ void __cilkrts_internal_invoke_cilkified_root(__cilkrts_stack_frame *sf)
 
     // Setup the stack pointer to point at the root closure's fiber.
     g->orig_rsp = SP(sf);
-    void *new_rsp =
+    [[maybe_unused]] void *new_rsp =
         (void *)sysdep_reset_stack_for_resume(root_closure->fiber, sf);
-    USE_UNUSED(new_rsp);
     CILK_ASSERT_POINTER_EQUAL(SP(sf), new_rsp);
 
     // Mark that this root frame is last (meaning, at the top of the stack)
@@ -620,17 +613,17 @@ void __cilkrts_internal_exit_cilkified_root(global_state *g,
 
 static const char *event_code(scheduler_event::event code) {
     switch (code) {
-    case scheduler_event:: CILKIFY:
+    case scheduler_event::CILKIFY:
         return "cilkify";
-    case scheduler_event:: UNCILKIFY:
+    case scheduler_event::UNCILKIFY:
         return "uncilkify";
-    case scheduler_event:: WAIT_CILKIFIED:
+    case scheduler_event::WAIT_CILKIFIED:
         return "wait_cilkified";
-    case scheduler_event:: WAIT_DISENGAGED:
+    case scheduler_event::WAIT_DISENGAGED:
         return "wait_disengaged";
-    case scheduler_event:: MORE_THIEVES:
+    case scheduler_event::MORE_THIEVES:
         return "more_thieves";
-    case scheduler_event:: ALL_THIEVES:
+    case scheduler_event::ALL_THIEVES:
         return "all_thieves";
     default:
         return "?";
@@ -653,11 +646,11 @@ static void print_events(global_state *g) {
         unsigned long us = (unsigned long)(t / 1000);
         unsigned int ns = (unsigned int)(t % 1000);
         if (w == NO_WORKER)
-            printf("%11lu.%03u %20s --- %d\n", us, ns,
-                   code_s, g->events[i].data1);
+            printf("%11lu.%03u %20s --- %d\n", us, ns, code_s,
+                   g->events[i].data1);
         else
-            printf("%11lu.%03u %20s %3u %d\n", us, ns,
-                   code_s, (unsigned int)w, g->events[i].data1);
+            printf("%11lu.%03u %20s %3u %d\n", us, ns, code_s, (unsigned int)w,
+                   g->events[i].data1);
     }
 }
 
@@ -677,18 +670,18 @@ static void global_state_deinit(global_state *g) {
     cilk_mutex_destroy(&(g->index_lock));
     /* pthread_mutex_destroy(&g->start_thieves_lock); */
     /* pthread_cond_destroy(&g->start_thieves_cond_var); */
-    free(g->worker_args);
+    delete[] g->worker_args;
     g->worker_args = nullptr;
-    free(g->workers);
+    delete[] g->workers;
     g->workers = nullptr;
     g->nworkers = 0;
-    free(g->busy);
+    delete[] g->busy;
     g->busy = nullptr;
-    delete [] g->threads;
+    delete[] g->threads;
     g->threads = nullptr;
-    free(g->index_to_worker);
+    delete[] g->index_to_worker;
     g->index_to_worker = nullptr;
-    free(g->worker_to_index);
+    delete[] g->worker_to_index;
     g->worker_to_index = nullptr;
     free(g);
 }
@@ -700,9 +693,7 @@ static void busy_deinit(global_state *g) {
     }
 }
 
-static void worker_terminate(__cilkrts_worker *w, void *data) {
-    (void)data; // not currently used
-
+static void worker_terminate(__cilkrts_worker *w, [[maybe_unused]] void *data) {
     cilk_fiber_pool_per_worker_terminate(w);
     hyper_table *ht = w->hyper_table;
     if (ht) {
@@ -750,9 +741,9 @@ static void workers_deinit(global_state *g) {
         if (!worker_is_valid(w, g))
             continue;
         cilk_internal_malloc_per_worker_destroy(w); // internal malloc last
-        free(w->l->shadow_stack);
+        delete[] w->l->shadow_stack;
         w->l->shadow_stack = nullptr;
-        *(struct local_state **)(&w->l) = nullptr;
+        *(local_state **)(&w->l) = nullptr;
         if (i != 0)
             free(w);
     }
@@ -760,8 +751,7 @@ static void workers_deinit(global_state *g) {
     /* TODO: Export initial reducer map */
 }
 
-CHEETAH_INTERNAL CHEETAH_COLD
-void __cilkrts_shutdown(global_state *g) {
+CHEETAH_INTERNAL CHEETAH_COLD void __cilkrts_shutdown(global_state *g) {
     CILK_ASSERT(exception_reducer_is_empty());
     // If the workers are still running, stop them now.
     if (g->workers_started)
@@ -795,7 +785,6 @@ void __cilkrts_shutdown(global_state *g) {
 }
 
 // Global destructor for shutting down the default cilkrts
-__attribute__((destructor))
-static void __default_cilkrts_shutdown() {
+__attribute__((destructor)) static void __default_cilkrts_shutdown() {
     __cilkrts_shutdown(default_cilkrts);
 }

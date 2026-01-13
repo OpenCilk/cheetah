@@ -23,24 +23,24 @@ struct fiber_pool_stats {
 struct cilk_fiber_pool {
     worker_id mutex_owner;
     int shared;
-    size_t stack_size;              // Size of stacks for fibers in this pool.
-    struct cilk_fiber_pool *parent; // Parent pool.
-                                    // If this pool is empty, get from parent
+    size_t stack_size;       // Size of stacks for fibers in this pool.
+    cilk_fiber_pool *parent; // Parent pool.
+                             // If this pool is empty, get from parent
     // Describes inactive fibers stored in the pool.
-    struct cilk_fiber **fibers; // Array of max_size fiber pointers
-    unsigned int capacity;      // Limit on number of fibers in pool
-    unsigned int size;          // Number of fibers currently in the pool
-    struct fiber_pool_stats stats;
+    cilk_fiber **fibers;   // Array of max_size fiber pointers
+    unsigned int capacity; // Limit on number of fibers in pool
+    unsigned int size;     // Number of fibers currently in the pool
+    fiber_pool_stats stats;
 
-    cilk_mutex lock __attribute__((aligned(CILK_CACHE_LINE)));
+    alignas(CILK_CACHE_LINE) cilk_mutex lock;
 };
 
 //===============================================================
 // Supported functions
 //===============================================================
 
-static inline __attribute__((always_inline,nothrow)) void
-sysdep_save_fp_ctrl_state(__cilkrts_stack_frame *sf) {
+static inline __attribute__((always_inline, nothrow)) void
+sysdep_save_fp_ctrl_state([[maybe_unused]] __cilkrts_stack_frame *sf) {
 #ifdef CHEETAH_SAVE_MXCSR
 #if 1
     __asm__("stmxcsr %0" : "=m"(MXCSR(sf)));
@@ -49,7 +49,7 @@ sysdep_save_fp_ctrl_state(__cilkrts_stack_frame *sf) {
     sf->mxcsr = __builtin_ia32_stmxcsr(); /* aka _mm_setcsr */
 #endif
 #else
-    (void)sf; // intentionally unused
+    // sf intentionally unused
 #endif
 }
 
@@ -58,8 +58,8 @@ sysdep_save_fp_ctrl_state(__cilkrts_stack_frame *sf) {
  * spawn.  This should be called each time a frame is resumed.  OpenCilk
  * only saves MXCSR.  The 80387 status word is obsolete.
  */
-static inline __attribute__((always_inline,nothrow)) void
-sysdep_restore_fp_state(__cilkrts_stack_frame *sf) {
+static inline __attribute__((always_inline, nothrow)) void
+sysdep_restore_fp_state([[maybe_unused]] __cilkrts_stack_frame *sf) {
     /* TODO: Find a way to do this only when using floating point. */
 #ifdef CHEETAH_SAVE_MXCSR
 #if 1
@@ -69,7 +69,7 @@ sysdep_restore_fp_state(__cilkrts_stack_frame *sf) {
     __builtin_ia32_ldmxcsr(sf->mxcsr); /* aka _mm_getcsr */
 #endif
 #else
-    (void)sf; // intentionally unused
+    // sf intentionally unused
 #endif
 
 #ifdef __AVX__
@@ -80,7 +80,7 @@ sysdep_restore_fp_state(__cilkrts_stack_frame *sf) {
 #endif
 }
 
-static inline char *sysdep_reset_stack_for_resume(struct cilk_fiber *fiber,
+static inline char *sysdep_reset_stack_for_resume(cilk_fiber *fiber,
                                                   __cilkrts_stack_frame *sf) {
     CILK_ASSERT(fiber);
     char *sp = fiber->get_stack_start();
@@ -91,10 +91,10 @@ static inline char *sysdep_reset_stack_for_resume(struct cilk_fiber *fiber,
     return sp;
 }
 
-static inline __attribute__((noreturn))
-void sysdep_longjmp_to_sf(__cilkrts_stack_frame *sf) {
-    cilkrts_alert(FIBER,
-                  "longjmp to sf, BP/SP/PC: %p/%p/%p", FP(sf), SP(sf), PC(sf));
+static inline __attribute__((noreturn)) void
+sysdep_longjmp_to_sf(__cilkrts_stack_frame *sf) {
+    cilkrts_alert(FIBER, "longjmp to sf, BP/SP/PC: %p/%p/%p", FP(sf), SP(sf),
+                  PC(sf));
 
 #if defined CHEETAH_SAVE_MXCSR
     // Restore the floating point state that was set in this frame at the
@@ -114,33 +114,28 @@ CHEETAH_INTERNAL void cilk_fiber_pool_per_worker_destroy(__cilkrts_worker *w);
 
 // allocate / deallocate one fiber from / back to OS
 CHEETAH_INTERNAL
-struct cilk_fiber *cilk_fiber_allocate(size_t stacksize);
+cilk_fiber *cilk_fiber_allocate(size_t stacksize);
 CHEETAH_INTERNAL
-void cilk_fiber_deallocate(struct cilk_fiber *fiber);
+void cilk_fiber_deallocate(cilk_fiber *fiber);
 CHEETAH_INTERNAL
-void cilk_fiber_deallocate_global(global_state *, struct cilk_fiber *fiber);
+void cilk_fiber_deallocate_global(global_state *, cilk_fiber *fiber);
 // allocate / deallocate one fiber from / back to per-worker pool
 CHEETAH_INTERNAL
-struct cilk_fiber *cilk_fiber_allocate_from_pool(__cilkrts_worker *w);
+cilk_fiber *cilk_fiber_allocate_from_pool(__cilkrts_worker *w);
 CHEETAH_INTERNAL
-void cilk_fiber_deallocate_to_pool(__cilkrts_worker *w,
-                                   struct cilk_fiber *fiber);
+void cilk_fiber_deallocate_to_pool(__cilkrts_worker *w, cilk_fiber *fiber);
 
 #if CILK_ENABLE_ASAN_HOOKS
-void sanitizer_start_switch_fiber(struct cilk_fiber *fiber) __CILKRTS_NOTHROW;
+void sanitizer_start_switch_fiber(cilk_fiber *fiber) __CILKRTS_NOTHROW;
 void sanitizer_finish_switch_fiber(void) __CILKRTS_NOTHROW;
-CHEETAH_INTERNAL void sanitizer_poison_fiber(struct cilk_fiber *fiber);
-CHEETAH_INTERNAL void sanitizer_unpoison_fiber(struct cilk_fiber *fiber);
+CHEETAH_INTERNAL void sanitizer_poison_fiber(cilk_fiber *fiber);
+CHEETAH_INTERNAL void sanitizer_unpoison_fiber(cilk_fiber *fiber);
 #else
-static inline void sanitizer_start_switch_fiber(struct cilk_fiber *fiber) {
-  (void)fiber;
-}
+static inline void
+sanitizer_start_switch_fiber([[maybe_unused]] cilk_fiber *fiber) {}
 static inline void sanitizer_finish_switch_fiber() {}
-static inline void sanitizer_poison_fiber(struct cilk_fiber *fiber) {
-  (void)fiber;
-}
-static inline void sanitizer_unpoison_fiber(struct cilk_fiber *fiber) {
-  (void)fiber;
-}
+static inline void sanitizer_poison_fiber([[maybe_unused]] cilk_fiber *fiber) {}
+static inline void
+sanitizer_unpoison_fiber([[maybe_unused]] cilk_fiber *fiber) {}
 #endif // CILK_ENABLE_ASAN_HOOKS
 #endif

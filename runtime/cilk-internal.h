@@ -23,8 +23,6 @@ extern "C" {
 #endif
 
 struct global_state;
-typedef struct global_state global_state;
-typedef struct local_state local_state;
 
 struct cilkrts_callbacks {
     unsigned last_init;
@@ -51,10 +49,10 @@ extern struct __cilkrts_status __cilkrts_status;
 
 struct __cilkrts_tls {
     __cilkrts_worker *worker;
-    struct cilk_fiber *fh;
+    cilk_fiber *fh;
 };
 
-extern __thread struct __cilkrts_tls __cilkrts_tls;
+extern thread_local struct __cilkrts_tls __cilkrts_tls;
 
 static inline __attribute__((always_inline,nothrow)) __cilkrts_worker *
 __cilkrts_get_tls_worker(void) {
@@ -113,7 +111,7 @@ struct closure_exception final : public __reducer_base {
     char *parent_rsp = nullptr;
     /* Fiber holding the stack frame of a call to _Unwind_RaiseException that is
        currently running. */
-    struct cilk_fiber *throwing_fiber = nullptr;
+    cilk_fiber *throwing_fiber = nullptr;
 
     virtual __reducer_base *identity(void *) override;
     virtual void reduce(__reducer_base *, __reducer_base *) override;
@@ -122,17 +120,16 @@ struct closure_exception final : public __reducer_base {
 
 // Reducer structure for handling exceptions thrown in parallel.
 // Retrieve the exception stored in the local view of the exception reducer.
-CHEETAH_INTERNAL struct closure_exception *
+CHEETAH_INTERNAL closure_exception *
 get_exception_reducer(__cilkrts_worker *w) noexcept;
 // Retrieve the exception stored in the local view of the exception reducer, or
 // NULL if there is no local view..
-CHEETAH_INTERNAL struct closure_exception *
+CHEETAH_INTERNAL closure_exception *
 get_exception_reducer_or_null(__cilkrts_worker *w) noexcept;
 // Free resources used for a local view of the exception reducer.  This method
 // does not deallocate the exception
-CHEETAH_INTERNAL void clear_exception_reducer(__cilkrts_worker *w,
-                                              struct closure_exception *exn_r)
-  noexcept;
+CHEETAH_INTERNAL void
+clear_exception_reducer(__cilkrts_worker *w, closure_exception *exn_r) noexcept;
 CHEETAH_INTERNAL bool exception_reducer_is_empty() noexcept;
 
 #ifdef __cplusplus

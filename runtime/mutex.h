@@ -1,15 +1,12 @@
 #ifndef _CILK_MUTEX_H
 #define _CILK_MUTEX_H
 
-// Forward declaration
-typedef union cilk_mutex cilk_mutex;
-
 // Includes
+#include "rts-config.h"
 #include <cerrno>
-#include <pthread.h>
 #include <cstdio>
 #include <cstdlib>
-#include "rts-config.h"
+#include <pthread.h>
 
 #ifndef __APPLE__
 #define USE_SPINLOCK 1

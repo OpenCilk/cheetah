@@ -1,6 +1,7 @@
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE
 #include "rts-config.h"
+#include <new>
 #endif
 
 #include <pthread.h>
@@ -46,8 +47,7 @@ static void set_alert_debug_level() {
 }
 
 static global_state *global_state_allocate() {
-    cilkrts_alert(BOOT,
-                  "(global_state_init) Allocating global state");
+    cilkrts_alert(BOOT, "(global_state_init) Allocating global state");
     global_state *g = (global_state *)cilk_aligned_alloc(
         __alignof(global_state), sizeof(global_state));
     memset(g, 0, sizeof *g);
@@ -90,7 +90,7 @@ static void set_fiber_pool_cap(global_state *g, unsigned int fiber_pool_cap) {
 }
 
 // not marked as static as it's called by __cilkrts_internal_set_nworkers
-// used by Cilksan to set nworker to 1 
+// used by Cilksan to set nworker to 1
 void set_nworkers(global_state *g, unsigned int nworkers) {
     CILK_ASSERT(!g->workers_started);
     CILK_ASSERT(nworkers <= g->options.nproc);
@@ -145,11 +145,9 @@ static void parse_rts_environment(global_state *g) {
 }
 
 CHEETAH_COLD
-global_state *global_state_init(int argc, char *argv[]) {
+global_state *global_state_init([[maybe_unused]] int argc,
+                                [[maybe_unused]] char *argv[]) {
     cilkrts_alert(BOOT, "(global_state_init) Initializing global state");
-
-    (void)argc; // not currently used
-    (void)argv; // not currently used
 
 #ifdef DEBUG
     setlinebuf(stderr);
@@ -158,7 +156,7 @@ global_state *global_state_init(int argc, char *argv[]) {
     set_alert_debug_level(); // alert / debug used by global_state_allocate
     global_state *g = global_state_allocate();
 
-    g->options = (struct rts_options)DEFAULT_OPTIONS;
+    g->options = (rts_options)DEFAULT_OPTIONS;
     parse_rts_environment(g);
 
     unsigned active_size = g->options.nproc;
@@ -174,15 +172,13 @@ global_state *global_state_init(int argc, char *argv[]) {
 
     g->terminate = false;
 
-    g->worker_args =
-        (struct worker_args *)calloc(active_size, sizeof(struct worker_args));
-    g->workers =
-        (__cilkrts_worker **)calloc(active_size, sizeof(__cilkrts_worker *));
-    g->busy = (BusyClosure *)cilk_aligned_alloc(
-        __alignof__(BusyClosure), active_size * sizeof(BusyClosure));
+    g->worker_args = new worker_args[active_size];
+    g->workers = new __cilkrts_worker *[active_size]();
+    g->busy =
+        new (std::align_val_t(alignof(BusyClosure))) BusyClosure[active_size];
     g->threads = new std::thread[active_size];
-    g->index_to_worker = (worker_id *)calloc(active_size, sizeof(worker_id));
-    g->worker_to_index = (worker_id *)calloc(active_size, sizeof(worker_id));
+    g->index_to_worker = new worker_id[active_size]();
+    g->worker_to_index = new worker_id[active_size]();
     cilk_internal_malloc_global_init(g); // initialize internal malloc first
     cilk_fiber_pool_global_init(g);
     cilk_global_sched_stats_init(&(g->stats));
@@ -205,17 +201,16 @@ void for_each_worker_rev(global_state *g,
             fn(g->workers[i], data);
 }
 
-void global_state::record_event(scheduler_event::event code,
-                                int data, worker_id self) {
+void global_state::record_event(scheduler_event::event code, int data,
+                                worker_id self) {
 #ifdef __amd64__ // really, if __builtin_readcyclecounter is fast
-    struct scheduler_event *event = &events[event_index++ % 1024];
+    scheduler_event *event = &events[event_index++ % 1024];
     event->time = __builtin_readcyclecounter();
     event->code = code;
     event->data1 = data;
     event->worker = self;
 #endif
 }
-
 
 // Routines to update global flags to prevent workers from re-entering the
 // work-stealing loop.  Note that we don't wait for the workers to exit the
@@ -308,9 +303,10 @@ uint32_t global_state::thief_disengage(worker_id self) {
         // designed to handle cases where multiple threads waiting on the futex
         // were woken up and where there may be spurious wakeups.
         while (uint32_t val =
-               disengaged_thieves.load(std::memory_order_relaxed)) {
-            if (disengaged_thieves.compare_exchange_weak(val, val - 1,
-                    std::memory_order_release, std::memory_order_relaxed)) {
+                   disengaged_thieves.load(std::memory_order_relaxed)) {
+            if (disengaged_thieves.compare_exchange_weak(
+                    val, val - 1, std::memory_order_release,
+                    std::memory_order_relaxed)) {
                 return val;
             }
             busy_loop_pause();
@@ -333,17 +329,15 @@ void global_state::wake_thieves() {
 // already, update the global state to indicate that this worker is engaged in
 // work stealing.
 bool global_state::thief_should_wait() {
-    while (uint32_t val =
-           disengaged_thieves.load(std::memory_order_relaxed)) {
-        if (disengaged_thieves.compare_exchange_weak(
-                val, val - 1, std::memory_order_release,
-                std::memory_order_relaxed))
+    while (uint32_t val = disengaged_thieves.load(std::memory_order_relaxed)) {
+        if (disengaged_thieves.compare_exchange_weak(val, val - 1,
+                                                     std::memory_order_release,
+                                                     std::memory_order_relaxed))
             return false;
         busy_loop_pause();
     }
     return true;
 }
-
 
 //=========================================================
 // Operations to disengage and reengage workers within the work-stealing loop.
@@ -382,7 +376,6 @@ void global_state::swap_worker_with_target(worker_id self,
     worker_to_index[target_worker] = self_index;
     worker_to_index[self] = target_index;
 }
-
 
 void global_state::disengage_worker(unsigned int nworkers, worker_id self) {
     cilk_mutex_lock(&index_lock);

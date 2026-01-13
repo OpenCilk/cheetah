@@ -25,7 +25,7 @@ enum ClosureStatus : unsigned char {
  * the children themselves, in order to avoid extra protocols
  * and locking.
  */
-struct __attribute__((visibility("hidden"))) Closure {
+struct __attribute__((visibility("hidden"))) alignas(CILK_CACHE_LINE) Closure {
     __cilkrts_stack_frame *frame; /* rest of the closure */
 
     void clear_frame() { frame = nullptr; }
@@ -33,15 +33,15 @@ struct __attribute__((visibility("hidden"))) Closure {
         CILK_ASSERT(!frame);
         frame = sf;
     }
-    struct cilk_fiber *fiber = nullptr;
-    struct cilk_fiber *fiber_child = nullptr;
+    cilk_fiber *fiber = nullptr;
+    cilk_fiber *fiber_child = nullptr;
 
-    struct cilk_fiber *ext_fiber = nullptr;
-    struct cilk_fiber *ext_fiber_child = nullptr;
+    cilk_fiber *ext_fiber = nullptr;
+    cilk_fiber *ext_fiber_child = nullptr;
 
     worker_id owner = NO_WORKER; /* debug only */
 
-    enum ClosureStatus status = CLOSURE_PRE_INVALID;
+    ClosureStatus status = CLOSURE_PRE_INVALID;
     bool exception_pending = false;
     unsigned int join_counter = 0; /* number of outstanding spawned children */
     char *orig_rsp = nullptr; /* rsp one should use when sync successfully */
@@ -58,28 +58,19 @@ struct __attribute__((visibility("hidden"))) Closure {
     hyper_table *child_ht = nullptr;
     hyper_table *user_ht = nullptr;
 
-    std::atomic<worker_id> mutex_owner
-      __attribute__((aligned(CILK_CACHE_LINE)))
-     = NO_WORKER;
+    alignas(CILK_CACHE_LINE) std::atomic<worker_id> mutex_owner = NO_WORKER;
 
-    bool has_children() const {
-        return join_counter != 0;
-    }
+    bool has_children() const { return join_counter != 0; }
 
-    void set_status(enum ClosureStatus to) {
-        status = to;
-    }
-    void change_status(enum ClosureStatus from, enum ClosureStatus to) {
+    void set_status(ClosureStatus to) { status = to; }
+    void change_status([[maybe_unused]] ClosureStatus from, ClosureStatus to) {
         CILK_ASSERT(status == from);
-        (void)from; // unused if assertions disabled
         status = to;
     }
 
     bool trylock(worker_id self);
 
-    void make_ready() {
-        status = CLOSURE_READY;
-    }
+    void make_ready() { status = CLOSURE_READY; }
 
     const char *status_to_string() const;
 
@@ -89,9 +80,9 @@ struct __attribute__((visibility("hidden"))) Closure {
     void lock(worker_id self);
     void unlock(worker_id self);
 
-    static Closure *create(struct __cilkrts_worker *, __cilkrts_stack_frame *);
-    static void destroy(Closure *, struct __cilkrts_worker *);
-    static void destroy(Closure *, struct global_state *);
+    static Closure *create(__cilkrts_worker *, __cilkrts_stack_frame *);
+    static void destroy(Closure *, __cilkrts_worker *);
+    static void destroy(Closure *, global_state *);
 
     // This method is used for sync.
     void suspend(BusyClosure *busy, worker_id self);
@@ -107,10 +98,9 @@ struct __attribute__((visibility("hidden"))) Closure {
     void assert_alienation(worker_id self);
     void checkmagic();
 
-private:
+  private:
     static void double_link_children(Closure *left, Closure *right);
     void unlink_child();
-
-} __attribute__((aligned(CILK_CACHE_LINE)));
+};
 
 #endif

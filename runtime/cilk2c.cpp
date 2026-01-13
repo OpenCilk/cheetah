@@ -7,11 +7,6 @@
 #include "scheduler.h"
 #include <unwind.h>
 
-extern __attribute__((noreturn))
-void _Unwind_Resume(struct _Unwind_Exception *);
-extern __attribute__((noreturn))
-_Unwind_Reason_Code _Unwind_RaiseException(struct _Unwind_Exception *);
-
 CHEETAH_INTERNAL struct cilkrts_callbacks cilkrts_callbacks = {
     0, 0, false, {nullptr}, {nullptr}};
 
@@ -62,7 +57,7 @@ void __cilkrts_check_exception_raise(__cilkrts_stack_frame *sf) {
     __cilkrts_worker *w = get_worker_from_stack(sf);
     CILK_ASSERT_POINTER_EQUAL(w, __cilkrts_get_tls_worker());
 
-    struct closure_exception *exn_r = get_exception_reducer(w);
+    closure_exception *exn_r = get_exception_reducer(w);
     char *exn = exn_r->exn;
 
     // zero exception storage, so we don't unintentionally try to
@@ -71,7 +66,7 @@ void __cilkrts_check_exception_raise(__cilkrts_stack_frame *sf) {
     sf->flags &= ~CILK_FRAME_EXCEPTION_PENDING;
 
     if (exn != nullptr) {
-        _Unwind_RaiseException((struct _Unwind_Exception *)exn); // noreturn
+        _Unwind_RaiseException((_Unwind_Exception *)exn); // noreturn
         __builtin_unreachable();
     }
 
@@ -84,7 +79,7 @@ void __cilkrts_check_exception_resume(__cilkrts_stack_frame *sf) {
     __cilkrts_worker *w = get_worker_from_stack(sf);
     CILK_ASSERT_POINTER_EQUAL(w, __cilkrts_get_tls_worker());
 
-    struct closure_exception *exn_r = get_exception_reducer(w);
+    closure_exception *exn_r = get_exception_reducer(w);
     char *exn = exn_r->exn;
 
     // zero exception storage, so we don't unintentionally try to
@@ -93,7 +88,7 @@ void __cilkrts_check_exception_resume(__cilkrts_stack_frame *sf) {
     sf->flags &= ~CILK_FRAME_EXCEPTION_PENDING;
 
     if (exn != nullptr) {
-        _Unwind_Resume((struct _Unwind_Exception *)exn); // noreturn
+        _Unwind_Resume((_Unwind_Exception *)exn); // noreturn
         __builtin_unreachable();
     }
 
@@ -104,17 +99,16 @@ void __cilkrts_check_exception_resume(__cilkrts_stack_frame *sf) {
 // of each landingpad in a spawning function.  Ensures that the stack pointer
 // points at the fiber and call-stack frame containing sf before any catch
 // handlers in that frame execute.
-extern "C"
-void __cilkrts_cleanup_fiber(__cilkrts_stack_frame *sf, int32_t sel) noexcept {
-    (void)sel; // currently unused
+extern "C" void __cilkrts_cleanup_fiber(__cilkrts_stack_frame *sf,
+                                        [[maybe_unused]] int32_t sel) noexcept {
 
     __cilkrts_worker *w = get_worker_from_stack(sf);
     CILK_ASSERT_POINTER_EQUAL(w, __cilkrts_get_tls_worker());
 
     CILK_ASSERT(__cilkrts_synced(sf));
 
-    struct closure_exception *exn_r = get_exception_reducer_or_null(w);
-    struct cilk_fiber *throwing_fiber = nullptr;
+    closure_exception *exn_r = get_exception_reducer_or_null(w);
+    cilk_fiber *throwing_fiber = nullptr;
     char *parent_rsp = nullptr;
     if (exn_r != nullptr) {
         throwing_fiber = exn_r->throwing_fiber;

@@ -33,7 +33,7 @@ struct im_bucket {
 
 /* One of these per worker, and one global */
 struct cilk_im_desc {
-    struct im_bucket buckets[NUM_BUCKETS];
+    im_bucket buckets[NUM_BUCKETS];
     long used; // local alloc - local free, may be negative
     long num_malloc[IM_NUM_TAGS];
 };

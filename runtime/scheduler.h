@@ -4,6 +4,8 @@
 #include "closure.h"
 #include "efficiency.h"
 
+struct worker_args;
+
 #define SYNC_READY 0
 #define SYNC_NOT_READY 1
 

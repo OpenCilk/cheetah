@@ -28,11 +28,14 @@ void __cilkrts_dprand_set_seed(uint64_t seed) __CILKRTS_NOTHROW;
 void __cilkrts_init_dprng(void) __CILKRTS_NOTHROW;
 uint64_t __cilkrts_get_dprand(void) __CILKRTS_NOTHROW;
 
-void __cilkrts_reducer_register_2(void *key, void (*reduce)(void *, void *))
-  __CILKRTS_NOTHROW;
+typedef void (__cilk_c_reduce_fn)(void *, void *);
+typedef void (__cilk_c_identity_fn)(void *);
 
-__attribute__((deprecated))
-void __cilkrts_reducer_unregister(void *key) __CILKRTS_NOTHROW;
+void __cilkrts_reducer_register_2(void *key,
+                                  __cilk_c_reduce_fn *reduce) __CILKRTS_NOTHROW;
+
+__attribute__((deprecated)) void
+__cilkrts_reducer_unregister(void *key) __CILKRTS_NOTHROW;
 
 #ifdef __cplusplus
 }
