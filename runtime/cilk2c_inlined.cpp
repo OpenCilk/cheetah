@@ -7,6 +7,7 @@
 // =============================================================================
 
 #include "cilk-internal.h"
+#include "cilk/cilk_api.h"
 #include "cilk2c.h"
 #include "cilk2c_inlined.h"
 #include "debug.h"
@@ -23,15 +24,14 @@
 
 
 // Suppress -Wmissing-variable-declarations for this variable.
-_Alignas(__cilkrts_stack_frame)
-extern size_t __cilkrts_stack_frame_align;
+alignas(__cilkrts_stack_frame) extern size_t __cilkrts_stack_frame_align;
 
 // This variable encodes the alignment of a __cilkrts_stack_frame, both in its
 // value and in its own alignment.  Because LLVM IR does not associate
 // alignments with types, this variable communicates the desired alignment to
 // the compiler instead.
-_Alignas(__cilkrts_stack_frame)
-size_t __cilkrts_stack_frame_align = __alignof__(__cilkrts_stack_frame);
+alignas(__cilkrts_stack_frame) size_t __cilkrts_stack_frame_align =
+    alignof(__cilkrts_stack_frame);
 
 __attribute__((always_inline)) unsigned __cilkrts_get_nworkers(void) noexcept {
     return __cilkrts_nproc;
@@ -52,8 +52,8 @@ __reducer_base *__cilkrts_reducer_lookup_0(__reducer_base *key) {
     // If we're outside a cilkified region, then the key is the view.
     if (__cilkrts_status.need_to_cilkify)
         return key;
-    struct hyper_table *table = get_hyper_table();
-    struct bucket *b = find_hyperobject(table, (uintptr_t)key);
+    hyper_table *table = get_hyper_table();
+    bucket *b = find_hyperobject(table, (uintptr_t)key);
     if (__builtin_expect(!!b, true)) {
         // Return the reducer_base subobject of the existing view.
         // get_if is used instead of get because no exceptions are allowed
@@ -68,8 +68,8 @@ void *__cilkrts_reducer_lookup_1(void *key,
     // If we're outside a cilkified region, then the key is the view.
     if (__cilkrts_status.need_to_cilkify)
         return key;
-    struct hyper_table *table = get_hyper_table();
-    struct bucket *b = find_hyperobject(table, (uintptr_t)key);
+    hyper_table *table = get_hyper_table();
+    bucket *b = find_hyperobject(table, (uintptr_t)key);
     if (__builtin_expect(!!b, true)) {
         // Return the existing view.
         return b->data.view;
@@ -78,15 +78,14 @@ void *__cilkrts_reducer_lookup_1(void *key,
     return __cilkrts_insert_new_view_1(table, (uintptr_t)key, callbacks);
 }
 
-
 void *__cilkrts_reducer_lookup_2(void *key, size_t size,
-                                 void (*identity)(void *),
-                                 void (*reduce)(void *, void *)) {
+                                 __cilk_c_identity_fn *identity,
+                                 __cilk_c_reduce_fn *reduce) {
     // If we're outside a cilkified region, then the key is the view.
     if (__cilkrts_status.need_to_cilkify)
         return key;
-    struct hyper_table *table = get_hyper_table();
-    struct bucket *b = find_hyperobject(table, (uintptr_t)key);
+    hyper_table *table = get_hyper_table();
+    bucket *b = find_hyperobject(table, (uintptr_t)key);
     if (__builtin_expect(!!b, true)) {
         // Return the existing view.
         return b->data.view;
@@ -141,7 +140,7 @@ __cilkrts_enter_frame(__cilkrts_stack_frame *sf) noexcept {
 
     sf->magic = frame_magic;
 
-    struct cilk_fiber *fh = __cilkrts_tls.fh;
+    cilk_fiber *fh = __cilkrts_tls.fh;
     sf->fh = fh;
     sf->call_parent = fh->current_stack_frame;
     fh->current_stack_frame = sf;
@@ -149,7 +148,7 @@ __cilkrts_enter_frame(__cilkrts_stack_frame *sf) noexcept {
     // WHEN_CILK_DEBUG(sf->magic = CILK_STACKFRAME_MAGIC);
 }
 
-// Enter a spawn helper, i.e., a fucntion containing code that was cilk_spawn'd.
+// Enter a spawn helper, i.e., a function containing code that was cilk_spawn'd.
 // This function initializes worker and stack_frame structures.  Because this
 // routine will always be executed by a Cilk worker, it is optimized compared to
 // its counterpart, __cilkrts_enter_frame.
@@ -162,7 +161,7 @@ __cilkrts_enter_frame_helper(__cilkrts_stack_frame *sf,
     sf->flags = 0;
     sf->magic = frame_magic;
 
-    struct cilk_fiber *fh = parent->fh;
+    cilk_fiber *fh = parent->fh;
     sf->fh = fh;
     if (spawner) {
         sf->call_parent = parent;
@@ -195,7 +194,7 @@ __cilkrts_detach(__cilkrts_stack_frame *sf, __cilkrts_stack_frame *parent)
     }
 
     sf->flags |= CILK_FRAME_DETACHED;
-    struct __cilkrts_stack_frame **tail = w->tail.load(std::memory_order_relaxed);
+    __cilkrts_stack_frame **tail = w->tail.load(std::memory_order_relaxed);
     CILK_ASSERT((tail + 1) < w->ltq_limit);
 
     // store parent at *tail, and then increment tail

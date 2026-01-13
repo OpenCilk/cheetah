@@ -9,7 +9,7 @@
 extern "C" {
 #endif
 
-// Returns 1 if the current exection is running on Cilk workers, 0 otherwise.
+// Returns 1 if the current execution is running on Cilk workers, 0 otherwise.
 CHEETAH_API int __cilkrts_running_on_workers(void) __CILKRTS_NOTHROW;
 
 // ABI functions inlined by the compiler (provided as a bitcode file after

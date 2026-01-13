@@ -18,10 +18,9 @@ static struct closure_exception exception_reducer;
 
 typedef _Unwind_Reason_Code (*__personality_routine)(
     int version, _Unwind_Action actions, uint64_t exception_class,
-    struct _Unwind_Exception *exception_object,
-    struct _Unwind_Context *context);
+    _Unwind_Exception *exception_object, _Unwind_Context *context);
 
-static char *get_cfa(struct _Unwind_Context *context) {
+static char *get_cfa(_Unwind_Context *context) {
     /* _Unwind_GetCFA is originally a gcc extension.  FreeBSD has its
        own library without that extension. */
 #if defined(__linux__) || (defined(__APPLE__) && defined(__MACH__))
@@ -55,14 +54,14 @@ __reducer_base *closure_exception::identity(void *v) {
 
 // Reduce method for the exception reducer.
 void closure_exception::reduce(__reducer_base *l, __reducer_base *r) {
-    struct closure_exception *lex = static_cast<struct closure_exception *>(l);
-    struct closure_exception *rex = static_cast<struct closure_exception *>(r);
+    closure_exception *lex = static_cast<closure_exception *>(l);
+    closure_exception *rex = static_cast<closure_exception *>(r);
     if (lex->exn == nullptr) {
         lex->exn = rex->exn;
         rex->exn = nullptr;
     }
     if (rex->exn != nullptr) {
-        _Unwind_DeleteException((struct _Unwind_Exception *)(rex->exn));
+        _Unwind_DeleteException((_Unwind_Exception *)(rex->exn));
         rex->exn = nullptr;
     }
     // Use right-holder logic for reraise_cfa, parent_rsp, and throwing_fiber.
@@ -76,27 +75,25 @@ void closure_exception::reduce(__reducer_base *l, __reducer_base *r) {
 
 // Get the current view of the exception-reducer state, creating a new view if
 // none exists.
-struct closure_exception *get_exception_reducer(__cilkrts_worker *w) noexcept {
-    return
-        static_cast<struct closure_exception *>
-        (internal_reducer_lookup(w, &exception_reducer));
+closure_exception *get_exception_reducer(__cilkrts_worker *w) noexcept {
+    return static_cast<closure_exception *>(
+        internal_reducer_lookup(w, &exception_reducer));
 }
 
 // Try to get the current view of the exception-reducer state, but return NULL
 // if no view exists.
-struct closure_exception *
-get_exception_reducer_or_null(__cilkrts_worker *w) noexcept {
+closure_exception *get_exception_reducer_or_null(__cilkrts_worker *w) noexcept {
     void *key = (void *)(&exception_reducer);
-    struct hyper_table *table = get_local_hyper_table_or_null(w);
+    hyper_table *table = get_local_hyper_table_or_null(w);
     if (nullptr == table)
         return nullptr;
 
-    struct bucket *b = find_hyperobject(table, (uintptr_t)key);
+    bucket *b = find_hyperobject(table, (uintptr_t)key);
     if (b) {
         CILK_ASSERT_POINTER_EQUAL(key, (void *)b->key);
         // Return the existing view.
         __reducer_base *base = std::get<__reducer_base *>(b->data.extra);
-        return static_cast<struct closure_exception *>(base);
+        return static_cast<closure_exception *>(base);
     }
     // No view was found.  Don't create a new reducer view; just return NULL.
     return nullptr;
@@ -104,7 +101,7 @@ get_exception_reducer_or_null(__cilkrts_worker *w) noexcept {
 
 // Destroy the current view of the exception-reducer state.
 void clear_exception_reducer(__cilkrts_worker *w,
-                             struct closure_exception *exn_r) noexcept {
+                             closure_exception *exn_r) noexcept {
     CILK_ASSERT_NULL(exn_r->throwing_fiber);
     free(exn_r);
     internal_reducer_remove(w, &exception_reducer);
@@ -118,7 +115,7 @@ void clear_exception_reducer(__cilkrts_worker *w,
 // local variables in the caller from being disrupted by the setjmp.
 __attribute__((noinline)) static void
 sync_in_personality(__cilkrts_worker *w, __cilkrts_stack_frame *sf,
-                    struct _Unwind_Exception *ue_header) {
+                    _Unwind_Exception *ue_header) {
     worker_id self = w->self;
     BusyClosure *busy = w->g->busy;
     // save floating point state
@@ -126,7 +123,7 @@ sync_in_personality(__cilkrts_worker *w, __cilkrts_stack_frame *sf,
 
     if (__builtin_setjmp(sf->ctx) == 0) {
         // set closure_exception
-        struct closure_exception *exn_r = get_exception_reducer(w);
+        closure_exception *exn_r = get_exception_reducer(w);
         exn_r->exn = (char *)ue_header;
 
         BusyClosure::lock_self(busy, self);
@@ -177,9 +174,9 @@ uncilkify(global_state *g, __cilkrts_stack_frame *sf) {
 
 // Custom routine to resume handling an exception after leaving a cilkified
 // region.
-static void
-resume_from_last_frame(__cilkrts_worker *w, __cilkrts_stack_frame *sf,
-                 struct _Unwind_Exception *ue_header) {
+static void resume_from_last_frame(__cilkrts_worker *w,
+                                   __cilkrts_stack_frame *sf,
+                                   _Unwind_Exception *ue_header) {
     cilkrts_alert(CFRAME, "resume_from_last_frame %p", (void *)sf);
     CILK_ASSERT(CHECK_CILK_FRAME_MAGIC(w->g, sf));
     // WHEN_CILK_DEBUG(sf->magic = ~CILK_STACKFRAME_MAGIC);
@@ -195,11 +192,10 @@ resume_from_last_frame(__cilkrts_worker *w, __cilkrts_stack_frame *sf,
     __builtin_unreachable();
 }
 
-extern "C"
-_Unwind_Reason_Code __cilk_personality_internal(
+extern "C" _Unwind_Reason_Code __cilk_personality_internal(
     __personality_routine std_lib_personality, int version,
     _Unwind_Action actions, uint64_t exception_class,
-    struct _Unwind_Exception *ue_header, struct _Unwind_Context *context) {
+    _Unwind_Exception *ue_header, _Unwind_Context *context) {
 
     // If called from outside a Cilkified region --- i.e., after the personality
     // function leaves the last __cilkrts_stack_frame --- then just use
@@ -208,7 +204,7 @@ _Unwind_Reason_Code __cilk_personality_internal(
         return std_lib_personality(version, actions, exception_class, ue_header,
                                    context);
 
-    struct cilk_fiber *fh = __cilkrts_tls.fh;
+    cilk_fiber *fh = __cilkrts_tls.fh;
     __cilkrts_worker *w = fh->worker;
     CILK_ASSERT_POINTER_EQUAL(w, __cilkrts_get_tls_worker());
     __cilkrts_stack_frame *sf = fh->current_stack_frame;
@@ -218,9 +214,8 @@ _Unwind_Reason_Code __cilk_personality_internal(
         return std_lib_personality(version, actions, exception_class, ue_header,
                                    context);
     } else if (actions & _UA_CLEANUP_PHASE) {
-        cilkrts_alert(EXCEPT,
-                      "cilk_personality called %p  CFA %p\n", (void *)sf,
-                      (void *)get_cfa(context));
+        cilkrts_alert(EXCEPT, "cilk_personality called %p  CFA %p\n",
+                      (void *)sf, (void *)get_cfa(context));
 
         if (sf->flags & CILK_FRAME_UNSYNCHED) {
             sync_in_personality(w, sf, ue_header);
@@ -234,7 +229,7 @@ _Unwind_Reason_Code __cilk_personality_internal(
         sf->flags &= ~CILK_FRAME_THROWING;
 
         // Get the saved exception state, if it exists.
-        struct closure_exception *exn_r = get_exception_reducer_or_null(w);
+        closure_exception *exn_r = get_exception_reducer_or_null(w);
 
         // Check for a reraised exception, and determine whether to skip
         // performing __cilkrts_leave_frame.
@@ -242,7 +237,8 @@ _Unwind_Reason_Code __cilk_personality_internal(
         bool skip_leaveframe = false;
         if (exn_r != nullptr) {
             in_reraised_cfa = (exn_r->reraise_cfa == (char *)get_cfa(context));
-            skip_leaveframe = ((exn_r->reraise_cfa != nullptr) && !in_reraised_cfa);
+            skip_leaveframe =
+                ((exn_r->reraise_cfa != nullptr) && !in_reraised_cfa);
         }
         if (in_reraised_cfa) {
             exn_r->reraise_cfa = nullptr;
@@ -253,8 +249,7 @@ _Unwind_Reason_Code __cilk_personality_internal(
         if ((exn_r != nullptr) && (exn_r->exn != nullptr) &&
             (exn_r->exn != (char *)ue_header)) {
 
-            struct _Unwind_Exception *exn =
-                    (struct _Unwind_Exception *)(exn_r->exn);
+            _Unwind_Exception *exn = (_Unwind_Exception *)(exn_r->exn);
             exn_r->exn = nullptr;
             cilkrts_alert(EXCEPT,
                           "cilk_personality calling RaiseException %p\n",

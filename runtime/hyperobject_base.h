@@ -1,6 +1,7 @@
 #ifndef _HYPEROBJECT_BASE
 #define _HYPEROBJECT_BASE
 
+#include "cilk/cilk_api.h"
 #include <cilk/reducer> // __cilk_reduce_fn
 #include <variant>
 
@@ -21,11 +22,11 @@
 //   reducer_data is storing a pointer to the view or the view itself.
 
 struct reducer_data {
-    void *view;
+    void *view = nullptr;
     std::variant<
         __reducer_base *,
         const __cilk_reduce_fn *,
-        void (*)(void *, void *)
+        __cilk_c_reduce_fn *
         > extra;
 };
 

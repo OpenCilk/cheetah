@@ -1,11 +1,11 @@
 #include "cilk-internal.h"
 #include "efficiency.h"
 #include "global.h"
+#include "local.h"
 #include "rts-config.h"
 #include "sched_stats.h"
 #include "worker_coord.h"
 #include <atomic>
-#include <climits>
 #include <cstdint>
 #include <time.h>
 
@@ -35,7 +35,7 @@
 
 // Threshold for number of consecutive failed steal attempts to try disengaging
 // this worker.  Must be a multiple of SENTINEL_THRESHOLD and a power of 2.
-#define DISENGAGE_THRESHOLD HISTORY_THRESHOLD * SENTINEL_THRESHOLD
+#define DISENGAGE_THRESHOLD HISTORY_THRESHOLD *SENTINEL_THRESHOLD
 
 uint64_t global_state::gettime_fast(void) {
     // __builtin_readcyclecounter triggers "illegal instruction" errors on ARM64
@@ -173,20 +173,19 @@ get_scaled_elapsed(unsigned int elapsed) {
 
 // If steal attempts found work, update histories as appropriate and possibly
 // reengage workers.
-unsigned int
-global_state::maybe_reengage_workers(worker_id self,
-                       unsigned int nworkers, __cilkrts_worker *const w,
-                       unsigned int fails,
-                       unsigned int *const sample_threshold,
-                       history_sample_t *const inefficient_history,
-                       history_sample_t *const efficient_history,
-                       unsigned int *const sentinel_count_history,
-                       unsigned int *const sentinel_count_history_tail,
-                       unsigned int *const recent_sentinel_count) {
+unsigned int global_state::maybe_reengage_workers(
+    worker_id self, unsigned int nworkers,
+    [[maybe_unused]] __cilkrts_worker *const w, unsigned int fails,
+    unsigned int *const sample_threshold,
+    history_sample_t *const inefficient_history,
+    history_sample_t *const efficient_history,
+    unsigned int *const sentinel_count_history,
+    unsigned int *const sentinel_count_history_tail,
+    unsigned int *const recent_sentinel_count) {
 #if !ENABLE_THIEF_SLEEP
     return 0;
 #endif
-    (void)w; // unused if scheduling stats not enabled
+    // NOTE: The worker pointer is unused if scheduling stats are not enabled.
 
     if (fails >= SENTINEL_THRESHOLD) {
         // This thief is no longer a sentinel.  Decrement the number of
@@ -284,8 +283,8 @@ global_state::maybe_reengage_workers(worker_id self,
 }
 
 #if ENABLE_THIEF_SLEEP
-// Attempt to disengage this thief thread.  The __cilkrts_worker parameter is only
-// used for debugging.
+// Attempt to disengage this thief thread.  The __cilkrts_worker parameter is
+// only used for debugging.
 bool global_state::maybe_disengage_thief(worker_id self,
                                          unsigned int nworkers) {
     // Check the number of active and sentinel workers, and disengage this
@@ -317,18 +316,16 @@ bool global_state::maybe_disengage_thief(worker_id self,
 
 // If steal attempts did not find work, update histories as appropriate and
 // possibly disengage this worker.
-unsigned int
-global_state::handle_failed_steal_attempts(worker_id self,
-                             unsigned int nworkers, const unsigned int NAP_THRESHOLD,
-                             __cilkrts_worker *const w,
-                             unsigned int fails,
-                             unsigned int *const sample_threshold,
-                             history_sample_t *const inefficient_history,
-                             history_sample_t *const efficient_history,
-                             unsigned int *const sentinel_count_history,
-                             unsigned int *const sentinel_count_history_tail,
-                             unsigned int *const recent_sentinel_count) {
-    (void)w; // only used when timing is enabled
+unsigned int global_state::handle_failed_steal_attempts(
+    worker_id self, unsigned int nworkers, const unsigned int NAP_THRESHOLD,
+    [[maybe_unused]] __cilkrts_worker *const w, unsigned int fails,
+    unsigned int *const sample_threshold,
+    history_sample_t *const inefficient_history,
+    history_sample_t *const efficient_history,
+    unsigned int *const sentinel_count_history,
+    unsigned int *const sentinel_count_history_tail,
+    unsigned int *const recent_sentinel_count) {
+    // worker is only used when timing is enabled
 
     const bool is_boss = (0 == self);
     // Threshold for number of failed steal attempts to put this thief to sleep
@@ -350,7 +347,8 @@ global_state::handle_failed_steal_attempts(worker_id self,
             // Prevent the fail count from exceeding this maximum, so we don't
             // have to worry about the fail count overflowing.
             fails = MAX_FAILS;
-            const struct timespec sleeptime = {.tv_sec = 0, .tv_nsec = SLEEP_NSEC};
+            const struct timespec sleeptime = {.tv_sec = 0,
+                                               .tv_nsec = SLEEP_NSEC};
             nanosleep(&sleeptime, nullptr);
         } else {
 #if ENABLE_THIEF_SLEEP
@@ -386,8 +384,7 @@ global_state::handle_failed_steal_attempts(worker_id self,
             history_sample_t my_inefficient_history = *inefficient_history;
             my_inefficient_history = (my_inefficient_history >> 1) |
                                      (curr_ineff << (HISTORY_LENGTH - 1));
-            int32_t ineff_steps =
-                __builtin_popcount(my_inefficient_history);
+            int32_t ineff_steps = __builtin_popcount(my_inefficient_history);
             *inefficient_history = my_inefficient_history;
 
 #endif
@@ -485,21 +482,19 @@ global_state::handle_failed_steal_attempts(worker_id self,
     return fails;
 }
 
-unsigned int global_state::go_to_sleep_maybe(worker_id self,
-                                      unsigned int nworkers,
-                                      const unsigned int NAP_THRESHOLD,
-                                      __cilkrts_worker *const w,
-                                      Closure *const t, unsigned int fails,
-                                      unsigned int *const sample_threshold,
-                                      history_sample_t *const inefficient_history,
-                                      history_sample_t *const efficient_history,
-                                      unsigned int *const sentinel_count_history,
-                                      unsigned int *const sentinel_count_history_tail,
-                                      unsigned int *const recent_sentinel_count) {
+unsigned int global_state::go_to_sleep_maybe(
+    worker_id self, unsigned int nworkers, const unsigned int NAP_THRESHOLD,
+    __cilkrts_worker *const w, Closure *const t, unsigned int fails,
+    unsigned int *const sample_threshold,
+    history_sample_t *const inefficient_history,
+    history_sample_t *const efficient_history,
+    unsigned int *const sentinel_count_history,
+    unsigned int *const sentinel_count_history_tail,
+    unsigned int *const recent_sentinel_count) {
     if (t) {
         return maybe_reengage_workers(
-            self, nworkers, w, fails, sample_threshold,
-            inefficient_history, efficient_history, sentinel_count_history,
+            self, nworkers, w, fails, sample_threshold, inefficient_history,
+            efficient_history, sentinel_count_history,
             sentinel_count_history_tail, recent_sentinel_count);
     } else {
         return handle_failed_steal_attempts(

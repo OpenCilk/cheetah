@@ -35,10 +35,11 @@ void __cilkrts_extend_spawn(__cilkrts_worker *w, void **parent_extension,
         __pedigree_dprng_m_array[parent_frame->dprng_depth]);
 }
 
-void __cilkrts_extend_return_from_spawn(__cilkrts_worker *w, void **extension) {
+// TODO: Remove extension parameter?
+void __cilkrts_extend_return_from_spawn(__cilkrts_worker *w,
+                                        [[maybe_unused]] void **extension) {
     // Free the pedigree frame.
     pop_pedigree_frame(w);
-    (void)extension; // TODO: Remove the parameter?
 }
 
 void __cilkrts_extend_sync(void **extension) {

@@ -14,7 +14,7 @@ enum __cilkrts_worker_state : unsigned char {
 };
 
 struct __attribute__((visibility("hidden"))) local_state {
-    struct __cilkrts_stack_frame **shadow_stack;
+    __cilkrts_stack_frame **shadow_stack;
 
     __cilkrts_worker_state state;
     bool provably_good_steal;
@@ -26,11 +26,11 @@ struct __attribute__((visibility("hidden"))) local_state {
     jmpbuf rts_ctx;
     hyper_table *lht;
     hyper_table *rht;
-    struct cilk_fiber_pool fiber_pool;
-    struct cilk_im_desc im_desc;
-    struct sched_stats stats;
+    cilk_fiber_pool fiber_pool;
+    cilk_im_desc im_desc;
+    sched_stats stats;
 
-    void change_state(enum __cilkrts_worker_state to);
+    void change_state(__cilkrts_worker_state to);
 };
 
 #endif /* _CILK_LOCAL_H */

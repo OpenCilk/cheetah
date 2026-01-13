@@ -63,7 +63,7 @@ __attribute__((__format__(__printf__, 1, 2)))
 CHEETAH_INTERNAL_NORETURN CHEETAH_COLD
 void cilkrts_bug(const char *fmt, ...);
 CHEETAH_INTERNAL_NORETURN CHEETAH_COLD
-void cilk_die_internal(struct global_state *const g, const char *fmt, ...);
+void cilk_die_internal(global_state *const g, const char *fmt, ...);
 
 #if ALERT_LVL != 0
 __attribute__((__format__(__printf__, 2, 3))) void
@@ -132,6 +132,4 @@ CHEETAH_INTERNAL extern const char __cilkrts_assertion_failed[];
 #define WHEN_CILK_DEBUG(ex)
 #endif // CILK_DEBUG
 
-// to silence compiler warning for vars only used during debugging
-#define USE_UNUSED(var) (void)(var)
 #endif

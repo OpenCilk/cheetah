@@ -42,7 +42,7 @@ struct __cilkrts_status __cilkrts_status = {
   .use_extension = false
 };
 
-__thread struct __cilkrts_tls __cilkrts_tls = {
+thread_local struct __cilkrts_tls __cilkrts_tls = {
   
   // TLS pointer to the current worker structure.
   .worker = &default_worker,
@@ -75,7 +75,7 @@ static unsigned int get_rand(unsigned int state) {
     return state >> 16;
 }
 
-void local_state::change_state(enum __cilkrts_worker_state s) {
+void local_state::change_state(__cilkrts_worker_state s) {
     /* TODO: Update statistics based on state change. */
     CILK_ASSERT(state != s);
     state = s;
@@ -139,7 +139,7 @@ static void signal_immediate_exception_to_all(__cilkrts_worker *const w) {
 
 static void setup_for_execution(__cilkrts_worker *w, Closure *t) {
     cilkrts_alert(SCHED, "(setup_for_execution) closure %p", (void *)t);
-    struct cilk_fiber *fh = t->fiber;
+    cilk_fiber *fh = t->fiber;
     fh->worker = w;
     t->set_status(CLOSURE_RUNNING);
 
@@ -193,7 +193,7 @@ static void setup_for_sync(__cilkrts_worker *w, worker_id self, Closure *t) {
     //         (void *)t->fiber);
     __cilkrts_set_synced(t->frame);
 
-    struct cilk_fiber *fh = t->fiber;
+    cilk_fiber *fh = t->fiber;
     __cilkrts_tls.fh = fh;
     t->frame->fh = fh;
     fh->worker = w;
@@ -261,9 +261,8 @@ void __cilkrts_set_return(__cilkrts_worker *const w) {
     CILK_ASSERT((t->frame->flags & CILK_FRAME_DETACHED) == 0);
 
     Closure *call_parent = t->call_parent;
-    Closure *t1 = BusyClosure::xtract(busy, self, self);
+    [[maybe_unused]] Closure *t1 = BusyClosure::xtract(busy, self, self);
 
-    USE_UNUSED(t1);
     CILK_ASSERT_POINTER_EQUAL(t, t1);
     CILK_ASSERT(__cilkrts_stolen(t->frame));
 
@@ -658,7 +657,7 @@ void __cilkrts_exception_handler(__cilkrts_worker *w, char *exn) {
         if (nullptr != exn) {
             // The spawned child is throwing an exception.  Save that exception
             // object for later processing.
-            struct closure_exception *exn_r = get_exception_reducer(w);
+            closure_exception *exn_r = get_exception_reducer(w);
             exn_r->exn = exn;
             t->exception_pending = true;
         }
@@ -861,7 +860,7 @@ static Closure *promote_child(__cilkrts_stack_frame **head, BusyClosure *busy,
     /***
      * Register this child, which sets up its sibling links.
      * We do this here instead of in finish_promote, because we must setup
-     * the sib links for the new child before its pointer escapses.
+     * the sib links for the new child before its pointer escapes.
      ***/
     spawn_parent->add_child(self, spawn_child);
 
@@ -917,8 +916,8 @@ static Closure *extract_top_spawning_closure(__cilkrts_stack_frame **head,
                                              Closure *cl, worker_id self,
                                              worker_id victim_id) {
     Closure *res = nullptr, *child;
-    struct cilk_fiber *parent_fiber = cl->fiber;
-    struct cilk_fiber *parent_ext_fiber = cl->ext_fiber;
+    cilk_fiber *parent_fiber = cl->fiber;
+    cilk_fiber *parent_ext_fiber = cl->ext_fiber;
 
     BusyClosure::assert_ownership(busy, self, victim_id);
     cl->assert_ownership(self);
@@ -1051,7 +1050,7 @@ void longjmp_to_user_code(__cilkrts_worker *w, Closure *t) {
     CILK_ASSERT(w->l->state == WORKER_RUN);
 
     __cilkrts_stack_frame *sf = t->frame;
-    struct cilk_fiber *fiber = t->fiber;
+    cilk_fiber *fiber = t->fiber;
 
     CILK_ASSERT(sf && fiber);
 
@@ -1080,8 +1079,8 @@ void longjmp_to_user_code(__cilkrts_worker *w, Closure *t) {
         if (t == g->root_closure && *initialized == false) {
             *initialized = true;
         } else {
-            void *new_rsp = sysdep_reset_stack_for_resume(fiber, sf);
-            USE_UNUSED(new_rsp);
+            [[maybe_unused]] void *new_rsp =
+                sysdep_reset_stack_for_resume(fiber, sf);
             CILK_ASSERT_POINTER_EQUAL(SP(sf), new_rsp);
             if (USE_EXTENSION) {
                 w->extension = sf->extension;
@@ -1094,7 +1093,7 @@ void longjmp_to_user_code(__cilkrts_worker *w, Closure *t) {
     if (!__cilkrts_throwing(sf)) {
         sanitizer_start_switch_fiber(fiber);
     } else {
-        struct closure_exception *exn_r = get_exception_reducer_or_null(w);
+        closure_exception *exn_r = get_exception_reducer_or_null(w);
         if (exn_r) {
             sanitizer_start_switch_fiber(exn_r->throwing_fiber);
         }
@@ -1115,7 +1114,7 @@ CHEETAH_INTERNAL_NORETURN void longjmp_to_runtime(__cilkrts_worker *w) {
 
 /* This function implements a sync in user code, including the implicit
    sync at the end of a function.  It is only called if compiled code
-   finds CILK_FRAME_UNSYCHED is set.  It returns SYNC_READY if there
+   finds CILK_FRAME_UNSYNCHED is set.  It returns SYNC_READY if there
    are no children and execution can continue.  Otherwise it returns
    SYNC_NOT_READY to suspend the frame. */
 int Cilk_sync(__cilkrts_worker *const w, __cilkrts_stack_frame *frame) {
@@ -1187,7 +1186,7 @@ int Cilk_sync(__cilkrts_worker *const w, __cilkrts_stack_frame *frame) {
         if (!__cilkrts_throwing(frame)) {
             sanitizer_start_switch_fiber(t->fiber);
         } else {
-            struct closure_exception *exn_r = get_exception_reducer_or_null(w);
+            closure_exception *exn_r = get_exception_reducer_or_null(w);
             if (exn_r) {
                 sanitizer_start_switch_fiber(exn_r->throwing_fiber);
             }
@@ -1200,7 +1199,7 @@ int Cilk_sync(__cilkrts_worker *const w, __cilkrts_stack_frame *frame) {
 
 static void do_what_it_says(BusyClosure *busy, __cilkrts_worker *w,
                             worker_id self, Closure *t) {
-    __cilkrts_stack_frame *f;
+    [[maybe_unused]] __cilkrts_stack_frame *f;
     local_state *l = w->l;
 
     do {
@@ -1214,7 +1213,6 @@ static void do_what_it_says(BusyClosure *busy, __cilkrts_worker *w,
             cilkrts_alert(SCHED, "(do_what_it_says) resume_sf = %p",
                           (void *)f);
             CILK_ASSERT(f);
-            USE_UNUSED(f);
 
             // MUST unlock the closure before locking the queue
             // (rule A in file PROTOCOLS)
@@ -1405,8 +1403,8 @@ void worker_scheduler(__cilkrts_worker *w, history_t *const history) {
                 rts->disengaged_sentinel.load(std::memory_order_relaxed);
             uint32_t disengaged = GET_DISENGAGED(disengaged_sentinel);
             uint32_t stealable = nworkers - disengaged;
-            __attribute__((unused))
-            uint32_t sentinel = recent_sentinel_count / SENTINEL_COUNT_HISTORY;
+            [[maybe_unused]] uint32_t sentinel =
+                recent_sentinel_count / SENTINEL_COUNT_HISTORY;
 
             if (__builtin_expect(stealable == 1, false))
                 // If this worker detects only 1 stealable worker, then its the
@@ -1415,8 +1413,7 @@ void worker_scheduler(__cilkrts_worker *w, history_t *const history) {
 
 #else // ENABLE_THIEF_SLEEP
             uint32_t stealable = nworkers;
-            __attribute__((unused))
-            uint32_t sentinel = nworkers / 2;
+            [[maybe_unused]] uint32_t sentinel = nworkers / 2;
 #endif // ENABLE_THIEF_SLEEP
 #ifndef __APPLE__
             uint32_t lg_sentinel = sentinel == 0 ? 1
@@ -1471,7 +1468,7 @@ void worker_scheduler(__cilkrts_worker *w, history_t *const history) {
                 // Add some delay to the time a worker takes between steal
                 // attempts.  On a variety of systems, this delay seems to
                 // improve parallel performance of Cilk computations where
-                // workers spend a signficant amount of time stealing.
+                // workers spend a significant amount of time stealing.
                 //
                 // The computation for the delay is heuristic, based on the
                 // following:
@@ -1660,10 +1657,9 @@ void Closure::suspend(BusyClosure *busy, worker_id self) {
 
     change_status(CLOSURE_RUNNING, CLOSURE_SUSPENDED);
 
-    Closure *cl1 = BusyClosure::xtract(busy, self, self);
+    [[maybe_unused]] Closure *cl1 = BusyClosure::xtract(busy, self, self);
 
     CILK_ASSERT_POINTER_EQUAL(this, cl1);
-    USE_UNUSED(cl1);
 }
 
 void Closure::suspend_victim(BusyClosure *busy, worker_id thief_id,
@@ -1675,9 +1671,9 @@ void Closure::suspend_victim(BusyClosure *busy, worker_id thief_id,
 
     change_status(CLOSURE_RUNNING, CLOSURE_SUSPENDED);
 
-    Closure *cl1 = BusyClosure::xtract(busy, thief_id, victim_id);
+    [[maybe_unused]] Closure *cl1 =
+        BusyClosure::xtract(busy, thief_id, victim_id);
     CILK_ASSERT_POINTER_EQUAL(this, cl1);
-    USE_UNUSED(cl1);
 }
 
 void Closure::remove_callee() {
@@ -1710,9 +1706,7 @@ void Closure::add_callee(Closure *new_callee) {
  * child gets unlinked at a time, and one child gets to modify the steal
  * tree at a time.
  ***/
-void Closure::remove_child(worker_id self, Closure *child) {
-    (void)self; // unused if assertions disabled
-
+void Closure::remove_child([[maybe_unused]] worker_id self, Closure *child) {
     CILK_ASSERT(child);
     CILK_ASSERT_POINTER_EQUAL(this, child->spawn_parent);
 
@@ -1744,12 +1738,10 @@ void Closure::remove_child(worker_id self, Closure *child) {
  * we are holding.  The pointer to new right most child is not visible
  * to anyone yet, so we don't need to lock that, either.
  ***/
-void Closure::add_child(worker_id self, Closure *child) {
-    (void)self; // unused if assertions disabled
-
-    /* ANGE: w must have the lock on parent */
+void Closure::add_child([[maybe_unused]] worker_id self, Closure *child) {
+    // w must have the lock on parent
     assert_ownership(self);
-    /* ANGE: w must NOT have the lock on child */
+    // w must NOT have the lock on child
     child->assert_alienation(self);
 
     // setup sib links between parent's right most child and the new child
@@ -1863,9 +1855,9 @@ Closure *Closure::create(__cilkrts_worker * w,
     return new(closure) Closure(sf);
 }
 
-/* ANGE: destroy the closure and internally free it (put back to global
+/* Destroy the closure and internally free it (put back to global
    pool) */
-void Closure::destroy(Closure *cl, struct __cilkrts_worker *const w) {
+void Closure::destroy(Closure *cl, __cilkrts_worker *const w) {
     cilkrts_alert(CLOSURE, "Deallocate closure %p", (void *)cl);
     cl->~Closure();
     cilk_internal_free(w, cl, sizeof(*cl), IM_CLOSURE);
@@ -1873,7 +1865,7 @@ void Closure::destroy(Closure *cl, struct __cilkrts_worker *const w) {
 
 /* Destroy the closure and internally free it (put back to global pool), after
    workers have been terminated. */
-void Closure::destroy(Closure *cl, struct global_state *const g) {
+void Closure::destroy(Closure *cl, global_state *const g) {
     cilkrts_alert(CLOSURE, "Deallocate closure %p", (void *)cl);
     cl->~Closure();
     cilk_internal_free_global(g, cl, sizeof(*cl), IM_CLOSURE);
@@ -1893,8 +1885,7 @@ void Closure::lock(worker_id self) {
     }
 }
 
-void Closure::unlock(worker_id self) {
-    (void)self; // unused if assertions disabled
+void Closure::unlock([[maybe_unused]] worker_id self) {
     checkmagic();
     assert_ownership(self);
     mutex_owner.store(NO_WORKER, std::memory_order_release);

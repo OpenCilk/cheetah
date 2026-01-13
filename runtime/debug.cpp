@@ -25,10 +25,10 @@ static char *alert_log = nullptr;
  * <code>name<\code> and the corresponding
  * <code>mask_value<\code> used by the runtime.
  **/
-typedef struct __alert_level_t {
+struct alert_level_t {
     const char *name;
     unsigned int mask_value;
-} alert_level_t;
+};
 
 /**
  * A table relating a human-readable alert level name to
@@ -194,7 +194,7 @@ extern const char __cilkrts_assertion_failed[] =
     "%s:%d: cilk assertion failed: %s\n";
 
 CHEETAH_INTERNAL_NORETURN CHEETAH_COLD
-void cilk_die_internal(struct global_state *const g, const char *fmt, ...) {
+void cilk_die_internal(global_state *const g, const char *fmt, ...) {
     fflush(stdout);
     va_list l;
     va_start(l, fmt);

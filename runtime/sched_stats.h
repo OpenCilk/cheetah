@@ -4,7 +4,8 @@
 #include "rts-config.h"
 #include <cstdint>
 
-typedef struct __cilkrts_worker __cilkrts_worker;
+struct __cilkrts_worker;
+struct global_state;
 
 #define SCHED_STATS CILK_STATS
 
@@ -48,9 +49,9 @@ struct global_sched_stats {
 
 #if SCHED_STATS
 CHEETAH_INTERNAL
-void cilk_global_sched_stats_init(struct global_sched_stats *s);
+void cilk_global_sched_stats_init(global_sched_stats *s);
 CHEETAH_INTERNAL
-void cilk_sched_stats_init(struct sched_stats *s);
+void cilk_sched_stats_init(sched_stats *s);
 CHEETAH_INTERNAL
 void cilk_start_timing(__cilkrts_worker *w, enum timing_type t);
 CHEETAH_INTERNAL
@@ -61,13 +62,13 @@ void cilk_switch_timing(__cilkrts_worker *w, enum timing_type t1,
 CHEETAH_INTERNAL
 void cilk_drop_timing(__cilkrts_worker *w, enum timing_type t);
 CHEETAH_INTERNAL
-void cilk_boss_start_timing(struct global_state *g);
+void cilk_boss_start_timing(global_state *g);
 CHEETAH_INTERNAL
-void cilk_boss_stop_timing(struct global_state *g);
+void cilk_boss_stop_timing(global_state *g);
 CHEETAH_INTERNAL
-void cilk_exit_worker_timing(struct global_state *g);
+void cilk_exit_worker_timing(global_state *g);
 CHEETAH_INTERNAL
-void cilk_sched_stats_print(struct global_state *g);
+void cilk_sched_stats_print(global_state *g);
 // void cilk_reset_timing(__cilkrts_worker *w, enum timing_type t);
 // FIXME: should have a header file that's user-code interfacing
 // void __cilkrts_reset_timing(); // user-code facing

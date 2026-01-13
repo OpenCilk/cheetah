@@ -1,13 +1,14 @@
 #ifndef _CILK_FRAME_H
 #define _CILK_FRAME_H
 
-#include "rts-config.h"
 #include "jmpbuf.h"
+#include "rts-config.h"
 #include <cstddef>
 #include <cstdint>
 
 struct __cilkrts_worker;
 struct __cilkrts_stack_frame;
+struct cilk_fiber;
 
 /**
  * Every spawning function has a frame descriptor.  A spawning function
@@ -28,13 +29,13 @@ struct __cilkrts_stack_frame {
     // This pointer is redundant with the __cilkrts_tls.fh TLS variable, but
     // accessing TLS is expensive on some systems, such as macOS.  It is
     // therefore faster to use this variable when possible.
-    struct cilk_fiber *fh;
+    cilk_fiber *fh;
 
     // call_parent points to the __cilkrts_stack_frame of the closest ancestor
     // spawning function, including spawn helpers, of this frame.  For each
     // worker, these pointers form a singly-linked list ending at the first
     // __cilkrts_stack_frame.
-    struct __cilkrts_stack_frame *call_parent;
+    __cilkrts_stack_frame *call_parent;
 
     // Before every spawn and nontrivial sync the client function
     // saves its continuation here.
@@ -80,15 +81,15 @@ struct __cilkrts_stack_frame {
 
 static const uint32_t frame_magic =
     (((((((((((__CILKRTS_ABI_VERSION * 13) +
-              offsetof(struct __cilkrts_stack_frame, ctx)) *
+              offsetof(__cilkrts_stack_frame, ctx)) *
              13) +
-            offsetof(struct __cilkrts_stack_frame, magic)) *
+            offsetof(__cilkrts_stack_frame, magic)) *
            13) +
-          offsetof(struct __cilkrts_stack_frame, flags)) *
+          offsetof(__cilkrts_stack_frame, flags)) *
          13) +
-        offsetof(struct __cilkrts_stack_frame, call_parent)) *
+        offsetof(__cilkrts_stack_frame, call_parent)) *
        13) +
-      offsetof(struct __cilkrts_stack_frame, extension)));
+      offsetof(__cilkrts_stack_frame, extension)));
 
 #define CHECK_CILK_FRAME_MAGIC(G, F) (frame_magic == (F)->magic)
 
@@ -97,40 +98,40 @@ static const uint32_t frame_magic =
 //===========================================================
 
 /* A frame is set to be stolen as long as it has a corresponding Closure */
-static inline void __cilkrts_set_stolen(struct __cilkrts_stack_frame *sf) {
+static inline void __cilkrts_set_stolen(__cilkrts_stack_frame *sf) {
     sf->flags |= CILK_FRAME_STOLEN;
 }
 
 /* A frame is set to be unsynced only if it has parallel subcomputation
- * underneathe, i.e., only if it has spawned children executing on a different
+ * underneath, i.e., only if it has spawned children executing on a different
  * worker
  */
-static inline void __cilkrts_set_unsynced(struct __cilkrts_stack_frame *sf) {
+static inline void __cilkrts_set_unsynced(__cilkrts_stack_frame *sf) {
     sf->flags |= CILK_FRAME_UNSYNCHED;
 }
 
-static inline void __cilkrts_set_synced(struct __cilkrts_stack_frame *sf) {
+static inline void __cilkrts_set_synced(__cilkrts_stack_frame *sf) {
     sf->flags &= ~CILK_FRAME_UNSYNCHED;
 }
 
 /* Returns nonzero if the frame has been stolen.
    Only used in assertions. */
-static inline int __cilkrts_stolen(struct __cilkrts_stack_frame *sf) {
+static inline int __cilkrts_stolen(__cilkrts_stack_frame *sf) {
     return (sf->flags & CILK_FRAME_STOLEN);
 }
 
 /* Returns nonzero if the frame is synched.  Only used in assertions. */
-static inline int __cilkrts_synced(struct __cilkrts_stack_frame *sf) {
+static inline int __cilkrts_synced(__cilkrts_stack_frame *sf) {
     return ((sf->flags & CILK_FRAME_UNSYNCHED) == 0);
 }
 
 /* Returns nonzero if the frame has never been stolen. */
-static inline int __cilkrts_not_stolen(struct __cilkrts_stack_frame *sf) {
+static inline int __cilkrts_not_stolen(__cilkrts_stack_frame *sf) {
     return ((sf->flags & CILK_FRAME_STOLEN) == 0);
 }
 
 /* Returns nonzero if the frame is throwing an exception. */
-static inline int __cilkrts_throwing(struct __cilkrts_stack_frame *sf) {
+static inline int __cilkrts_throwing(__cilkrts_stack_frame *sf) {
     return (sf->flags & CILK_FRAME_THROWING);
 }
 

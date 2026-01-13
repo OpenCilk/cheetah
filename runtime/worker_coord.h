@@ -1,6 +1,8 @@
 #ifndef _WORKER_COORD_H
 #define _WORKER_COORD_H
 
+#include "rts-config.h"
+
 // Routines for coordinating workers, specifically, putting workers to sleep and
 // waking workers when execution enters and leaves cilkified regions.
 

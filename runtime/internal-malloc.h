@@ -4,7 +4,8 @@
 #include "rts-config.h"
 #include <cstdlib>
 
-typedef struct __cilkrts_worker __cilkrts_worker;
+struct __cilkrts_worker;
+struct global_state;
 
 CHEETAH_INTERNAL extern int cheetah_page_shift;
 
@@ -39,24 +40,22 @@ static inline void *cilk_aligned_alloc(size_t alignment, size_t size) {
 }
 
 // public functions (external to source file, internal to library)
-CHEETAH_INTERNAL void cilk_internal_malloc_global_init(struct global_state *g);
+CHEETAH_INTERNAL void cilk_internal_malloc_global_init(global_state *g);
 CHEETAH_INTERNAL void internal_malloc_global_check(global_state *g);
-CHEETAH_INTERNAL void
-cilk_internal_malloc_global_terminate(struct global_state *g);
-CHEETAH_INTERNAL void
-cilk_internal_malloc_global_destroy(struct global_state *g);
+CHEETAH_INTERNAL void cilk_internal_malloc_global_terminate(global_state *g);
+CHEETAH_INTERNAL void cilk_internal_malloc_global_destroy(global_state *g);
 CHEETAH_INTERNAL void cilk_internal_malloc_per_worker_init(__cilkrts_worker *w);
 CHEETAH_INTERNAL void
 cilk_internal_malloc_per_worker_destroy(__cilkrts_worker *w);
 CHEETAH_INTERNAL void
 cilk_internal_malloc_per_worker_terminate(__cilkrts_worker *w);
-__attribute__((alloc_size(2), assume_aligned(32), malloc))
-CHEETAH_INTERNAL void *
-cilk_internal_malloc(__cilkrts_worker *w, size_t size, enum im_tag tag);
+__attribute__((alloc_size(2), assume_aligned(32),
+               malloc)) CHEETAH_INTERNAL void *
+cilk_internal_malloc(__cilkrts_worker *w, size_t size, im_tag tag);
 CHEETAH_INTERNAL void cilk_internal_free(__cilkrts_worker *w, void *p,
-                                         size_t size, enum im_tag tag);
+                                         size_t size, im_tag tag);
 /* Release memory to the global pool after workers have stopped. */
-CHEETAH_INTERNAL void cilk_internal_free_global(struct global_state *, void *p,
-                                                size_t size, enum im_tag tag);
+CHEETAH_INTERNAL void cilk_internal_free_global(global_state *, void *p,
+                                                size_t size, im_tag tag);
 
 #endif // _INTERAL_MALLOC_H
