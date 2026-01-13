@@ -3,7 +3,8 @@
 
 #include "cilk-internal.h"
 #include "global.h"
-#include "local-hypertable.h"
+// #include "local-hypertable.h"
+#include "local-hyper-pagetable.h"
 
 static inline hyper_table *
 get_local_hyper_table(__cilkrts_worker *w) {

@@ -4,7 +4,8 @@
 #include "fiber.h"
 #include "internal-malloc-impl.h" /* for cilk_im_desc */
 #include "jmpbuf.h"
-#include "local-hypertable.h"
+// #include "local-hypertable.h"
+#include "local-hyper-pagetable.h"
 
 enum __cilkrts_worker_state : unsigned char {
     WORKER_IDLE = 10,

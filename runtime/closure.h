@@ -2,7 +2,8 @@
 #define _CLOSURE_TYPE_H
 
 #include "cilk-internal.h"
-#include "local-hypertable.h"
+// #include "local-hypertable.h"
+#include "local-hyper-pagetable.h"
 #include "rts-config.h"
 #include <atomic>
 

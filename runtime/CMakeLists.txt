@@ -13,7 +13,8 @@ set(CHEETAH_SOURCES
   global.cpp
   init.cpp
   internal-malloc.cpp
-  local-hypertable.cpp
+  # local-hypertable.cpp
+  local-hyper-pagetable.cpp
   local-reducer-api.cpp
   pedigree_globals.cpp
   personality.cpp

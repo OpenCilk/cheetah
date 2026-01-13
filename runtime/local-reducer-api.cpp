@@ -1,6 +1,7 @@
 #include "cilk-internal.h"
 #include "cilk2c_inlined.h"
-#include "local-hypertable.h"
+// #include "local-hypertable.h"
+#include "local-hyper-pagetable.h"
 #include "local-reducer-api.h"
 #include "rts-config.h"
 
@@ -63,7 +64,7 @@ __reducer_base *internal_reducer_lookup(__cilkrts_worker *w,
     struct hyper_table *table = get_local_hyper_table(w);
     bucket *b = find_hyperobject(table, (uintptr_t)key);
     if (__builtin_expect(!!b, true)) {
-        CILK_ASSERT_POINTER_EQUAL(key, (void *)b->key);
+        CILK_ASSERT_POINTER_EQUAL(key, (void *)getAddrFromKey(b->key));
         // Return the existing view.
         return std::get<__reducer_base *>(b->data.extra);
     }
