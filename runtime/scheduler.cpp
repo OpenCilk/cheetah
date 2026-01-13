@@ -377,43 +377,35 @@ static Closure *Closure_return(__cilkrts_worker *const w, worker_id self,
     /* If in the future the worker's map is not created lazily,
        assert it is not null here. */
 
-    /* need a loop as multiple siblings can return while we
-       are performing reductions */
+    // Multiple siblings can return while we are performing reductions.
+    // The following code used to be in a loop.  Now this function
+    // is called multiple times if necessary to finish reduction.
 
     // always lock from top to bottom
     parent->lock(self);
     child->lock(self);
 
-    // Deal with reducers.
-    while (true) {
-        // invariant: a closure cannot unlink itself w/out lock on parent
-        // so what this points to cannot change while we have lock on parent
+    // invariant: a closure cannot unlink itself w/out lock on parent
+    // so what this points to cannot change while we have lock on parent
 
-        hyper_table *rht = child->right_ht;
-        child->right_ht = nullptr;
+    hyper_table *rht = child->right_ht;
+    child->right_ht = nullptr;
 
-        // Get the "left" hypermap, which either belongs to a left sibling, if
-        // it exists, or the parent, otherwise.
-        hyper_table **lht_ptr;
-        Closure *const left_sib = child->left_sib;
-        if (left_sib != nullptr) {
-            lht_ptr = &left_sib->right_ht;
-        } else {
-            lht_ptr = &parent->child_ht;
-        }
-        hyper_table *lht = *lht_ptr;
-        *lht_ptr = nullptr;
+    // Get the "left" hypermap, which either belongs to a left sibling, if
+    // it exists, or the parent, otherwise.
+    hyper_table **lht_ptr;
+    Closure *const left_sib = child->left_sib;
+    if (left_sib != nullptr) {
+      lht_ptr = &left_sib->right_ht;
+    } else {
+      lht_ptr = &parent->child_ht;
+    }
+    hyper_table *lht = *lht_ptr;
+    *lht_ptr = nullptr;
 
-        // If we have no hypermaps on either the left or right, deposit the
-        // active hypermap and break from the loop.
-        if (lht == nullptr && rht == nullptr) {
-            // Deposit the current active hypermap
-            hyper_table *active_ht = w->hyper_table;
-            w->hyper_table = nullptr;
-            *lht_ptr = active_ht;
-            break;
-        }
-
+    // If we have hypermaps on either the left or right, arrange
+    // for them to be merged.
+    if (lht != nullptr || rht != nullptr) {
         child->set_status(CLOSURE_RUNNING);
 
         child->unlock(self);
@@ -429,6 +421,11 @@ static Closure *Closure_return(__cilkrts_worker *const w, worker_id self,
 
         return child;
     }
+
+    // Deposit the current active hypermap
+    hyper_table *active_ht = w->hyper_table;
+    w->hyper_table = nullptr;
+    *lht_ptr = active_ht;
 
     // Cilk_exception_handler ended up pushing a stack frame onto child, to do
     // reductions.  Because there are no reductions to do, pop that frame.
