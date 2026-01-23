@@ -2,7 +2,7 @@ set(cilk_header_files
   cilk/cilk.h
   cilk/cilk_api.h
   cilk/cilk_stub.h
-  cilk/holder.h
+  cilk/holder
   cilk/opadd_reducer.h
   cilk/ostream_reducer.h
   cilk/reducer)
