@@ -1,8 +1,6 @@
 #ifndef _OSTREAM_REDUCER_H
 #define _OSTREAM_REDUCER_H
 
-#ifdef __cplusplus
-
 #include <ostream>
 #include <sstream>
 
@@ -64,11 +62,9 @@ public:
 
 template<typename Char, typename Traits = std::char_traits<Char>>
   using ostream_reducer = ostream_view<Char, Traits>
-    _Hyperobject(&ostream_view<Char, std::char_traits<Char>>::identity,
-                 &ostream_view<Char, std::char_traits<Char>>::reduce);
+    cilk_reducer(&ostream_view<Char, Traits>::identity,
+                 &ostream_view<Char, Traits>::reduce);
 
 } // namespace cilk
-
-#endif // __cplusplus
 
 #endif // _OSTREAM_REDUCER_H
