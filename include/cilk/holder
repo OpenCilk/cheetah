@@ -1,8 +1,6 @@
 #ifndef _HOLDER_H
 #define _HOLDER_H
 
-#ifdef __cplusplus
-
 #include <type_traits>
 
 namespace cilk {
@@ -16,10 +14,8 @@ template <typename A> static void reduce(void *left, void *right) {
 }
 
 template <typename A>
-using holder = A _Hyperobject(init<A>, reduce<A>);
+using holder = A cilk_reducer(init<A>, reduce<A>);
 
 } // namespace cilk
-
-#endif // __cplusplus
 
 #endif // _HOLDER_H
