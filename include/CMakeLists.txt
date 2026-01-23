@@ -4,7 +4,7 @@ set(cilk_header_files
   cilk/cilk_stub.h
   cilk/holder
   cilk/opadd_reducer
-  cilk/ostream_reducer.h
+  cilk/ostream_reducer
   cilk/reducer)
 
 set(output_dir ${CHEETAH_OUTPUT_DIR}/include)
