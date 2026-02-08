@@ -18,7 +18,7 @@ __reducer_base::__reducer_base() {
 
 __reducer_base::~__reducer_base() {}
 
-static void reducer_register(bucket &b) __CILKRTS_NOTHROW {
+static void reducer_register(const bucket &b) __CILKRTS_NOTHROW {
     struct hyper_table *table =
         get_local_hyper_table(__cilkrts_get_tls_worker());
     [[maybe_unused]] bool success = insert_hyperobject(table, b);

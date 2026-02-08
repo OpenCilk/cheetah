@@ -5,6 +5,40 @@
 #include <cassert>
 
 ///////////////////////////////////////////////////////////////////////////
+// Implementations of methods from PageTableTy.
+
+template <typename V, size_t Bits>
+V *PageTableTy<V, Bits>::lookupInnerNode(uintptr_t Addr) {
+    if (auto *Page = (*std::get_if<InnerNodeTy *>(&Table))->lookup(Addr)) {
+        return (*Page)->lookup(Addr);
+    }
+    return nullptr;
+}
+
+template <typename V, size_t Bits>
+EntryTy<V> *PageTableTy<V, Bits>::findInnerNode(uintptr_t Addr) {
+    if (auto *Page = (*std::get_if<InnerNodeTy *>(&Table))->lookup(Addr)) {
+        return (*Page)->find(Addr);
+    }
+    return nullptr;
+}
+
+template <typename V, size_t Bits>
+bool PageTableTy<V, Bits>::removeInnerNode(uintptr_t Addr) {
+    if (std::holds_alternative<InnerNodeTy *>(Table)) {
+        InnerNodeTy *InnerNode = *std::get_if<InnerNodeTy *>(&Table);
+        if (auto *Page = InnerNode->lookup(Addr)) {
+            return (*Page)->remove(Addr);
+        }
+    }
+
+    return false;
+}
+
+// Ensure the PageTableTy is fully instantiated for hyper_table.
+template struct PageTableTy<reducer_data>;
+
+///////////////////////////////////////////////////////////////////////////
 // Query, insert, and delete methods for the hash table.
 
 hyper_table *__cilkrts_local_hyper_table_alloc(void) {
@@ -59,7 +93,7 @@ void *__cilkrts_insert_new_view_2(hyper_table *table, uintptr_t key,
 }
 
 void bucket_reduce(bucket *Left, bucket *Right) {
-    assert(Left->Data.extra.index() == Right->Data.extra.index());
+    assert(Left->data.extra.index() == Right->data.extra.index());
     void *LeftView = Left->data.view, *RightView = Right->data.view;
     if (std::holds_alternative<__reducer_base *>(Left->data.extra)) {
         __reducer_base *Leftmost = static_cast<__reducer_base *>(
