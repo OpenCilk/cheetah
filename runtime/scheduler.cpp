@@ -494,7 +494,6 @@ static Closure *Closure_return(__cilkrts_worker *const w, worker_id self,
         hyper_table *active_ht = parent->user_ht;
         parent->child_ht = nullptr;
         parent->user_ht = nullptr;
-        // w->hyper_table = merge_two_hts(child_ht, active_ht);
         CILK_ASSERT_NULL(l->lht);
         l->lht = child_ht;
         w->hyper_table = active_ht;

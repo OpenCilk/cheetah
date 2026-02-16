@@ -119,8 +119,7 @@ void bucket_reduce(bucket *Left, bucket *Right) {
 // deletes the other.
 hyper_table *merge_two_hts(hyper_table *__restrict Left,
                            hyper_table *__restrict Right) {
-    // fprintf(stderr, "merge_two_hts %p (%lld), %p (%lld)\n", Left,
-    // Left->size(),
+    // fprintf(stderr, "merge_two_hts %p (%zu), %p (%zu)\n", Left, Left->size(),
     //         Right, Right->size());
     // In the trivial case of an empty hyper_table, return the other
     // hyper_table.
@@ -157,7 +156,7 @@ hyper_table *merge_two_hts(hyper_table *__restrict Left,
         if (DstB == nullptr) {
             // fprintf(stderr, "merge_two_hts: inserting %lx -> %p into %p\n",
             //         Addr, B.Data.view, Dst);
-            Dst->insert(Addr, B.data);
+            Dst->insert(Addr, std::move(B.data));
         } else {
             if (LeftDst) {
                 // fprintf(stderr, "merge_two_hts: reduction (%d): %p -> %p and

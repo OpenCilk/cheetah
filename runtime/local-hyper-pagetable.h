@@ -6,9 +6,7 @@
 #include "rts-config.h"
 #include <cassert>
 #include <cstddef>
-#include <iostream>
 #include <iterator>
-#include <limits>
 #include <sys/mman.h>
 #include <type_traits>
 #include <variant>
@@ -26,9 +24,8 @@ template <typename V> struct EntryTy {
 
 template <typename V, ssize_t Capacity> struct SmallEntrySetTy {
     using EntryTy = EntryTy<V>;
-    using OccupiedTy = ssize_t;
 
-    OccupiedTy Occupied = 0;
+    ssize_t Occupied = 0;
     EntryTy Entries[Capacity];
 
     static_assert(Capacity <= 8 * sizeof(Occupied));
@@ -44,7 +41,7 @@ template <typename V, ssize_t Capacity> struct SmallEntrySetTy {
         return const_cast<decltype(*this)>(this).get(Key);
     }
 
-    bool insert(uintptr_t Key, const V &Value) {
+    bool insert(uintptr_t Key, V &&Value) {
         if (Occupied < Capacity) {
             Entries[Occupied++] = {Key, Value};
             return true;
@@ -57,7 +54,7 @@ template <typename V, ssize_t Capacity> struct SmallEntrySetTy {
             if (Entries[i].key == Key) {
                 Entries[i].reset();
                 if (i != Occupied - 1)
-                    Entries[i] = Entries[Occupied - 1];
+                    Entries[i] = std::move(Entries[Occupied - 1]);
                 --Occupied;
                 return true;
             }
@@ -97,8 +94,6 @@ template <typename V> struct SmallEntrySetTy<V, 1> {
             Entry.reset();
             return true;
         }
-        fprintf(stderr, "Failed to remove %lx from %p: Entry.Key %lx\n", Key,
-                this, Entry.key);
         return false;
     }
 };
@@ -124,17 +119,18 @@ static inline uintptr_t makeKey(uintptr_t Addr) {
 
 static inline uintptr_t getAddrFromKey(uintptr_t Key) { return ~Key; }
 
-template <typename V, size_t LgSz, size_t RShift, size_t EntryCapacity = 8,
+template <typename V, size_t LgSz, size_t RShift, size_t EntrySetCapacity,
           uintptr_t makeKey(uintptr_t) = makeKey<RShift>>
 struct TableTy : public TableSizeTy<LgSz, RShift> {
     using SizeTy = TableSizeTy<LgSz, RShift>;
     using EntryTy = EntryTy<V>;
 
-    SmallEntrySetTy<V, EntryCapacity> Entries[SizeTy::Size];
+    SmallEntrySetTy<V, EntrySetCapacity> Entries[SizeTy::Size];
 
     // Insert a value associated with an address.
-    bool insert(uintptr_t Addr, const V &Value) {
-        return Entries[SizeTy::toIndex(Addr)].insert(makeKey(Addr), Value);
+    bool insert(uintptr_t Addr, V &&Value) {
+        return Entries[SizeTy::toIndex(Addr)].insert(makeKey(Addr),
+                                                     std::move(Value));
     }
 
     // Remove the value associated with the given address.
@@ -155,12 +151,92 @@ struct TableTy : public TableSizeTy<LgSz, RShift> {
     }
 };
 
-// Leaf tables are indexed simply by the least significant 9 bits of an address.
-template <typename V> using LeafTableTy = TableTy<V, 9, 0>;
+// Leaf tables are indexed simply by the least significant 12 bits of an
+// address.
+static constexpr size_t LeafLgSz = 9;
+static constexpr size_t LeafLgSetCapacity = 3;
+static constexpr size_t LeafSetCapacity = 1 << LeafLgSetCapacity;
+template <typename V>
+struct LeafTableTy
+    : public TableTy<V, LeafLgSz, LeafLgSetCapacity, LeafSetCapacity> {
+    using TableTy = TableTy<V, LeafLgSz, LeafLgSetCapacity, LeafSetCapacity>;
+    using SizeTy = TableTy::SizeTy;
 
-// Pages are indexed by the 14 more significant bits of the address than the
+    // Bit set to track which sets in this table contain elements.
+    static constexpr size_t AccessedFieldSize = 8 * sizeof(uint64_t);
+    static constexpr size_t AccessedSize =
+        (1UL << LeafLgSz) / AccessedFieldSize;
+    uint64_t Accessed[AccessedSize] = {0UL};
+
+  private:
+    static size_t getAccessedIdx(size_t Idx) { return Idx / AccessedFieldSize; }
+    static uint64_t getAccessedMask(size_t Idx) {
+        return 1UL << (Idx % AccessedFieldSize);
+    }
+
+  public:
+    bool insert(uintptr_t Addr, V &&Value) {
+        if (TableTy::insert(Addr, std::move(Value))) {
+            const size_t Idx = SizeTy::toIndex(Addr);
+            if (this->Entries[Idx].Occupied == 1)
+                Accessed[getAccessedIdx(Idx)] |= getAccessedMask(Idx);
+            return true;
+        }
+        return false;
+    }
+
+    bool remove(uintptr_t Addr) {
+        if (TableTy::remove(Addr)) {
+            const size_t Idx = SizeTy::toIndex(Addr);
+            if (this->Entries[Idx].Occupied == 0)
+                Accessed[getAccessedIdx(Idx)] &= ~getAccessedMask(Idx);
+            return true;
+        }
+        return false;
+    }
+
+    // Constants and methods for iterating through the entries in this table.
+    static constexpr uintptr_t EndIteratorValue =
+        1UL << (LeafLgSz + LeafLgSetCapacity);
+
+    static ssize_t getSetIdx(uintptr_t It) {
+        return It & (LeafSetCapacity - 1);
+    }
+    static uintptr_t getEntryIdx(uintptr_t It) {
+        return It >> LeafLgSetCapacity;
+    }
+
+    uintptr_t advanceToNextEntry(uintptr_t It) {
+        if (this->Entries[getEntryIdx(It)].Occupied > getSetIdx(It))
+            return It;
+
+        uintptr_t NextEntryIdx = getEntryIdx(It) + 1;
+        size_t AccessedIdx = LeafTableTy::getAccessedIdx(NextEntryIdx);
+        uint64_t AccessedMask = LeafTableTy::getAccessedMask(NextEntryIdx);
+        for (; AccessedIdx < AccessedSize; ++AccessedIdx) {
+            uint64_t AccessedField =
+                Accessed[AccessedIdx] & ~(AccessedMask - 1);
+            if (AccessedField) {
+                It = ((AccessedIdx * AccessedFieldSize) +
+                      __builtin_ctzl(AccessedField))
+                     << LeafLgSetCapacity;
+                return It;
+            }
+            AccessedMask = 1;
+        }
+        // Return the end iterator
+        It = EndIteratorValue;
+        return It;
+    }
+
+    EntryTy<V> &getEntryAt(uintptr_t It) {
+        return this->Entries[getEntryIdx(It)].Entries[getSetIdx(It)];
+    }
+};
+
+// Pages are indexed by the 12 more significant bits of the address than the
 // `RShift` template parameter.
-template <size_t RShift> using PageSizeTy = TableSizeTy<14, RShift>;
+template <size_t RShift> using PageSizeTy = TableSizeTy<12, RShift>;
 
 template <typename V, size_t RShift>
 struct PageTy : public TableTy<V, PageSizeTy<RShift>::LgSize, RShift, 1,
@@ -213,7 +289,7 @@ template <typename V, size_t Bits = LeafTableTy<V>::Bits> struct PageTableTy {
   private:
     // Helper method to insert an address-value pair into an inner node.
     static void insertIntoInnerNode(InnerNodeTy *Node, uintptr_t Addr,
-                                    const V &Value) {
+                                    V &&Value) {
         // NOTE: This method is defined in the header in order to ensure it is
         // properly instantiated in all recursive PageTableTy instantiations.
 
@@ -223,11 +299,11 @@ template <typename V, size_t Bits = LeafTableTy<V>::Bits> struct PageTableTy {
             // Create and insert a new subtable.
             Page = new SubTableTy;
             Node->recordAccess(Addr);
-            [[maybe_unused]] bool Result = Node->insert(Addr, Page);
+            [[maybe_unused]] bool Result = Node->insert(Addr, std::move(Page));
             assert(Result && "Failed to add new subtable to node.");
         }
         // Insert into subtable.
-        [[maybe_unused]] bool Result = Page->insert(Addr, Value);
+        [[maybe_unused]] bool Result = Page->insert(Addr, std::move(Value));
         assert(Result && "Failed to add address to to subtable.");
     }
 
@@ -235,8 +311,7 @@ template <typename V, size_t Bits = LeafTableTy<V>::Bits> struct PageTableTy {
     // associated with the given address.
     [[clang::noinline]]
     static InnerNodeTy *promoteLeafNodeAndInsert(LeafTableTy &LeafTable,
-                                                 uintptr_t Addr,
-                                                 const V &Value) {
+                                                 uintptr_t Addr, V &&Value) {
         // NOTE: This method is defined in the header in order to ensure it is
         // properly instantiated in all recursive PageTableTy instantiations.
 
@@ -245,28 +320,28 @@ template <typename V, size_t Bits = LeafTableTy<V>::Bits> struct PageTableTy {
         InnerNodeTy *NewNode = new InnerNodeTy;
         // Insert all entries in the leaf table into the new inner node.
         for (auto EntrySet : LeafTable.Entries) {
-            for (ssize_t i = 0; i < EntrySet.Occupied; ++i) {
-                auto &Entry = EntrySet[i];
+            for (ssize_t Idx = 0; Idx < EntrySet.Occupied; ++Idx) {
+                auto &Entry = EntrySet[Idx];
                 insertIntoInnerNode(NewNode, getAddrFromKey(Entry.key),
-                                    Entry.data);
+                                    std::move(Entry.data));
             }
         }
 
         // Insert the new entry into the new inner node.
-        insertIntoInnerNode(NewNode, Addr, Value);
+        insertIntoInnerNode(NewNode, Addr, std::move(Value));
         return NewNode;
     }
 
     // Insert the given value associated with the given address into an inner
     // node.
     [[clang::noinline]]
-    bool insertInnerNode(uintptr_t Addr, const V &Value) {
+    bool insertInnerNode(uintptr_t Addr, V &&Value) {
         // NOTE: This method is defined in the header in order to ensure it is
         // properly instantiated in all recursive PageTableTy instantiations.
         if (std::holds_alternative<InnerNodeTy *>(Table)) {
-            InnerNodeTy *Node = *std::get_if<InnerNodeTy *>(&Table);
+            InnerNodeTy *Node = std::get<InnerNodeTy *>(Table);
             // Insert this entry into the inner node.
-            insertIntoInnerNode(Node, Addr, Value);
+            insertIntoInnerNode(Node, Addr, std::move(Value));
             return true;
         }
 
@@ -284,7 +359,7 @@ template <typename V, size_t Bits = LeafTableTy<V>::Bits> struct PageTableTy {
   public:
     ~PageTableTy() {
         if (std::holds_alternative<InnerNodeTy *>(Table)) {
-            InnerNodeTy *Node = *std::get_if<InnerNodeTy *>(&Table);
+            InnerNodeTy *Node = std::get<InnerNodeTy *>(Table);
             for (size_t Addr : Node->Accessed) {
                 delete (*Node)[Addr];
             }
@@ -295,7 +370,7 @@ template <typename V, size_t Bits = LeafTableTy<V>::Bits> struct PageTableTy {
     // Get the value at the given address.
     V *lookup(uintptr_t Addr) {
         if (std::holds_alternative<LeafTableTy>(Table)) {
-            return std::get_if<LeafTableTy>(&Table)->lookup(Addr);
+            return std::get<LeafTableTy>(Table).lookup(Addr);
         }
         return lookupInnerNode(Addr);
     }
@@ -303,38 +378,151 @@ template <typename V, size_t Bits = LeafTableTy<V>::Bits> struct PageTableTy {
     // Get the table entry at the given address.
     EntryTy<V> *find(uintptr_t Addr) {
         if (std::holds_alternative<LeafTableTy>(Table)) {
-            return std::get_if<LeafTableTy>(&Table)->find(Addr);
+            return std::get<LeafTableTy>(Table).find(Addr);
         }
         return findInnerNode(Addr);
     }
 
     // Insert the given value at the given address.
-    bool insert(uintptr_t Addr, const V &Value) {
+    bool insert(uintptr_t Addr, V &&Value) {
         if (std::holds_alternative<LeafTableTy>(Table)) {
             // Try to insert into this leaf table.
-            auto &LeafTable = *std::get_if<LeafTableTy>(&Table);
-            if (LeafTable.insert(Addr, Value))
+            auto &LeafTable = std::get<LeafTableTy>(Table);
+            if (LeafTable.insert(Addr, std::move(Value)))
                 return true;
 
             InnerNodeTy *NewNode =
-                promoteLeafNodeAndInsert(LeafTable, Addr, Value);
+                promoteLeafNodeAndInsert(LeafTable, Addr, std::move(Value));
             // Replace this table with new inner node.
             Table = NewNode;
             return true;
         }
 
-        return insertInnerNode(Addr, Value);
+        return insertInnerNode(Addr, std::move(Value));
     }
 
     // Remove the value at the given address.
     bool remove(uintptr_t Addr) {
         if (std::holds_alternative<LeafTableTy>(Table)) {
-            auto &LeafTable = *std::get_if<LeafTableTy>(&Table);
+            auto &LeafTable = std::get<LeafTableTy>(Table);
             return LeafTable.remove(Addr);
         }
 
         return removeInnerNode(Addr);
     }
+
+    // Iterator to traverse the elements in the table.  This iterator is used
+    // for merging two tables.
+    struct Iterator {
+        using value_type = EntryTy<V>;
+        using difference_type = ptrdiff_t;
+        using InnerIterator = std::vector<size_t>::iterator;
+
+        PageTableTy *PageTable = nullptr;
+        std::variant<uintptr_t, InnerIterator> It =
+            LeafTableTy::EndIteratorValue;
+        SubTableTy::Iterator SubIt;
+
+        Iterator() : SubIt() {}
+        Iterator(PageTableTy &PageTable, bool MakeEnd = false)
+            : PageTable(&PageTable) {
+            if (MakeEnd) {
+                // Create an end iterator for this table.
+                if (std::holds_alternative<LeafTableTy>(PageTable.Table)) {
+                    It = LeafTableTy::EndIteratorValue;
+                } else {
+                    InnerNodeTy *Node =
+                        std::get<InnerNodeTy *>(PageTable.Table);
+                    It = Node->Accessed.end();
+                }
+                return;
+            }
+            if (std::holds_alternative<LeafTableTy>(PageTable.Table)) {
+                // Get the first entry in this leaf table.
+                It = std::get<LeafTableTy>(PageTable.Table)
+                         .advanceToNextEntry(0);
+            } else {
+                // Get a pointer to the first value within this inner-node.
+                InnerNodeTy *Node = std::get<InnerNodeTy *>(PageTable.Table);
+                auto InnerIt = Node->Accessed.begin();
+                auto EndInnerIt = Node->Accessed.end();
+                // Because inner nodes are not depopulated when all elements
+                // within a page are removed, a scan is necessary to find the
+                // first element in any subtable in this inner node.
+                do {
+                    SubIt = (*Node)[*InnerIt]->begin();
+                } while (SubIt.atEnd() && ++InnerIt != EndInnerIt);
+                It = InnerIt;
+            }
+        }
+
+        value_type &operator*() {
+            if (std::holds_alternative<LeafTableTy>(PageTable->Table)) {
+                // Return the entry in this leaf table corresponding with the
+                // iterator value.
+                LeafTableTy &Leaf = std::get<LeafTableTy>(PageTable->Table);
+                return Leaf.getEntryAt(std::get<uintptr_t>(It));
+            }
+            // Dereference the subtable iterator to get the value.
+            return *SubIt;
+        }
+
+        Iterator &operator++() {
+            if (std::holds_alternative<LeafTableTy>(PageTable->Table)) {
+                // Advance the leaf iterator to the next entry.
+                LeafTableTy &Leaf = std::get<LeafTableTy>(PageTable->Table);
+                uintptr_t LeafIt = std::get<uintptr_t>(It);
+                It = Leaf.advanceToNextEntry(++LeafIt);
+                return *this;
+            }
+            // Advance the subtable iterator.
+            ++SubIt;
+            if (SubIt.atEnd()) {
+                // The subtable iterator reached the end of its subtable.  Find
+                // the next subtable with elements.
+                InnerNodeTy *Node = std::get<InnerNodeTy *>(PageTable->Table);
+                InnerIterator InnerIt = std::get<InnerIterator>(It);
+                InnerIterator EndInnerIt = Node->Accessed.end();
+                // Scan entries of this inner node until a valid entry is found.
+                while (SubIt.atEnd() && ++InnerIt != EndInnerIt) {
+                    SubIt = (*Node)[*InnerIt]->begin();
+                }
+                It = InnerIt;
+                if (InnerIt == EndInnerIt)
+                    // This inner node has no more entries.  Set the subtable
+                    // iterator to the end-iterator value.
+                    SubIt = typename SubTableTy::Iterator();
+            }
+            return *this;
+        }
+        Iterator operator++(int) {
+            auto Tmp = *this;
+            ++*this;
+            return Tmp;
+        }
+
+        bool atEnd() const {
+            if (std::holds_alternative<LeafTableTy>(PageTable->Table)) {
+                // Check if this leaf-table iterator has the end value of a leaf
+                // table.
+                uintptr_t LeafIt = std::get<uintptr_t>(It);
+                return LeafIt == LeafTableTy::EndIteratorValue;
+            }
+            // Check if this inner-node iterator is pointing to the end of the
+            // node's accessed list.
+            InnerNodeTy *Node = std::get<InnerNodeTy *>(PageTable->Table);
+            const InnerIterator &InnerIt = std::get<InnerIterator>(It);
+            return InnerIt == Node->Accessed.end();
+        }
+
+        bool operator==(const Iterator &Other) const {
+            return It == Other.It && SubIt == Other.SubIt;
+        }
+    };
+    static_assert(std::input_or_output_iterator<Iterator>);
+
+    Iterator begin() { return Iterator(*this); }
+    Iterator end() { return Iterator(*this, /*MakeEnd=*/true); }
 };
 
 // Template instantiation to prevent infinite recursion in template expansion.
@@ -351,258 +539,28 @@ template <typename V> struct PageTableTy<V, 48> {
     EntryTy<V> *find(uintptr_t Addr) { return Table.find(Addr); }
 
     // Insert the given value at the given address.
-    bool insert(uintptr_t Addr, const V &Value) {
-        return Table.insert(Addr, Value);
+    bool insert(uintptr_t Addr, V &&Value) {
+        return Table.insert(Addr, std::move(Value));
     }
 
     // Remove the value at the given address.
     bool remove(uintptr_t Addr) { return Table.remove(Addr); }
-};
 
-using bucket = EntryTy<reducer_data>;
-
-template <typename T> struct AccessedListTy {
-    static_assert(std::is_integral_v<T>, "T must be an integral type");
-
-    static T encode(T Value) { return Value * 2; }
-    static T decode(T Encoded) { return Encoded / 2; }
-    static bool isTombstone(T Value) { return Value & 1; }
-    static T makeTombstone(T Value) { return Value | 1; }
-    static T hideTombstone(T Value) { return Value & ~1; }
-
-    // std::vector<T>::size_type NumValid = 0;
-    // List of accessed locations, maintained in sorted order.
-    std::vector<T> Accessed;
-
-    using size_type = decltype(Accessed)::size_type;
-    using difference_type = decltype(Accessed)::difference_type;
-    using AccessedIterTy = decltype(Accessed)::iterator;
-    static constexpr difference_type ScanThreshold = 8;
-
-    AccessedListTy() : Accessed(ScanThreshold, std::numeric_limits<T>::max()) {}
-
-    size_type size() const { return Accessed.size(); }
-
-  private:
-    // Specialized version of std::upper_bound for use in insert() method.
-    AccessedIterTy upper_bound(T Value) {
-        auto Pos = Accessed.begin();
-        auto End = Accessed.end();
-        auto Len = std::distance(Pos, End);
-        while (Len > 0) {
-            if (Len <= ScanThreshold) {
-                for (; Pos != End; ++Pos)
-                    if (*Pos >= Value)
-                        break;
-                return Pos;
-            }
-
-            auto Half = Len >> 1;
-            auto Middle = Pos;
-            std::advance(Middle, Half);
-            auto Mid = *Middle;
-            if (Mid == hideTombstone(Value))
-                return Middle;
-            if (Value < Mid) {
-                Len = Half;
-            } else {
-                Pos = Middle;
-                ++Pos;
-                Len = Len - Half - 1;
-            }
-        }
-        return Pos;
-    }
-
-    // Specialized version of std::lower_bound for use in remove() method.
-    AccessedIterTy search(T Value) {
-        auto Pos = Accessed.begin();
-        auto End = Accessed.end();
-        auto Len = std::distance(Pos, End);
-        while (Len > 0) {
-            if (Len <= ScanThreshold) {
-                for (; Pos != End; ++Pos)
-                    if (*Pos == Value)
-                        break;
-                return Pos;
-            }
-
-            auto Half = Len >> 1;
-            auto Middle = Pos;
-            std::advance(Middle, Half);
-            auto Mid = *Middle;
-            if (Mid == Value)
-                return Middle;
-            if (Mid < Value) {
-                Pos = Middle;
-                ++Pos;
-                Len = Len - Half - 1;
-            } else {
-                Len = Half;
-            }
-        }
-        return Pos;
-    }
-
-  public:
-    // Insert value into accessed list.
-    void insert(T Value) {
-        T Encoded = encode(Value);
-        // auto Pos = std::upper_bound(Accessed.begin(), Accessed.end(), Encoded);
-        auto Pos = upper_bound(Encoded);
-        if (Pos == Accessed.end()) {
-            Accessed.emplace_back(Encoded);
-            return;
-        }
-
-        if (isTombstone(*Pos)) {
-            *Pos = Encoded;
-        } else if (Pos != Accessed.begin() && isTombstone(*(Pos - 1))) {
-            *(Pos - 1) = Encoded;
-        } else {
-            Accessed.insert(Pos, Encoded);
-        }
-        // ++NumValid;
-    }
-
-    // Remove value from accessed list.
-    void remove(T Value) {
-        T Encoded = encode(Value);
-        // auto Pos = std::lower_bound(Accessed.begin(), Accessed.end(), Encoded);
-        auto Pos = search(Encoded);
-        *Pos = makeTombstone(*Pos);
-        // --NumValid;
-
-        // TODO: Determine if this method for clearing elements from accessed
-        // list is worthwhile.
-
-        // if (Accessed.size() > ScanThreshold && NumValid < Accessed.size() / 4) {
-        //     std::vector<T> Resized;
-        //     Resized.reserve(NumValid * 2);
-        //     for (auto V : Accessed) {
-        //         if (!isTombstone(V)) {
-        //             Resized.emplace_back(V);
-        //             Resized.emplace_back(makeTombstone(V));
-        //         }
-        //     }
-        //     Accessed.clear();
-        //     size_type NumEntries =
-        //         (((NumValid * 2) + ScanThreshold - 1) / ScanThreshold) *
-        //         ScanThreshold;
-        //     size_type Idx = 0;
-        //     for (auto V : Resized) {
-        //         Accessed.emplace_back(V);
-        //         ++Idx;
-        //     }
-        //     for (; Idx < NumEntries; ++Idx)
-        //         Accessed.emplace_back(std::numeric_limits<T>::max());
-        // }
-    }
-
-    // Iterator structure to support traversal through non-tombstone elements in
-    // Accessed.
-    template <typename value_type> struct Iterator {
-        static_assert(std::is_integral_v<value_type>,
-                      "value_type must be an integral type");
-        using difference_type = decltype(Accessed)::difference_type;
-        using AccessedIterTy = decltype(Accessed)::const_iterator;
-
-        AccessedIterTy It;
-        AccessedIterTy End;
-
-        bool shouldSkip(AccessedIterTy &It) const {
-            return It != End && isTombstone(*It);
-        }
-
-        Iterator(AccessedListTy &List)
-            : It(List.Accessed.begin()), End(List.Accessed.end()) {
-            while (shouldSkip(It))
-                ++It;
-        }
-
-        value_type operator*() const { return decode(*It); }
-
-        Iterator &operator++() {
-            do {
-                ++It;
-            } while (shouldSkip(It));
-            return *this;
-        }
-        Iterator operator++(int) {
-            auto Tmp = *this;
-            ++*this;
-            return Tmp;
-        }
-
-        bool operator==(const Iterator &Other) const {
-            assert(End == Other.End);
-            return It == Other.It;
-        }
-    };
-    static_assert(std::input_or_output_iterator<Iterator<T>>);
-    static_assert(std::input_or_output_iterator<Iterator<const T>>);
-
-    using iterator = Iterator<T>;
-    using const_iterator = Iterator<const T>;
-
-    iterator begin() { return iterator(*this); }
-    iterator end() {
-        auto Iter = iterator(*this);
-        Iter.It = Accessed.end();
-        return Iter;
-    }
-
-    const_iterator begin() const { return const_iterator(*this); }
-    const_iterator end() const {
-        auto Iter = const_iterator(*this);
-        Iter.It = Accessed.end();
-        return Iter;
-    }
-
-    const_iterator cbegin() { return const_iterator(*this); }
-    const_iterator cend() {
-        auto Iter = const_iterator(*this);
-        Iter.It = Accessed.end();
-        return Iter;
-    }
-};
-
-struct hyper_table : public PageTableTy<reducer_data> {
-    using PageTableTy = PageTableTy<reducer_data>;
-    using V = reducer_data;
-
-    // Sorted list of addresses of reducers inserted into this table.
-    AccessedListTy<uintptr_t> Accessed;
-
-    uint64_t size() const { return Accessed.size(); }
-
-    bool insert(uintptr_t Addr, const V &Value) {
-        if (PageTableTy::insert(Addr, Value)) {
-            Accessed.insert(Addr);
-            return true;
-        }
-        return false;
-    }
-
-    bool remove(uintptr_t Addr) {
-        if (PageTableTy::remove(Addr)) {
-            Accessed.remove(Addr);
-            return true;
-        }
-        return false;
-    }
-
-    // Iterator structure to support traversing valid elements in the table.
-    // Used when merging two hyper_tables.
+    // Iterator type with the same methods as the general PageTableTy::Iterator,
+    // to support recursive template instantiation.
     struct Iterator {
-        using difference_type = decltype(Accessed)::difference_type;
+        // Because this particular instantiation of PageTableTy simply contains
+        // a leaf table, this iterator simply handles the leaf table.
         using value_type = EntryTy<V>;
+        using difference_type = ptrdiff_t;
+        LeafTableTy *Table = nullptr;
+        uintptr_t It = 0;
 
-        hyper_table &Table;
-        decltype(Accessed)::const_iterator It;
-
-        Iterator(hyper_table &Table)
-            : Table(Table), It(Table.Accessed.cbegin()) {}
+      public:
+        Iterator() = default;
+        Iterator(LeafTableTy &Table, bool MakeEnd = false)
+            : Table(&Table), It(MakeEnd ? LeafTableTy::EndIteratorValue
+                                        : Table.advanceToNextEntry(0)) {}
         Iterator(const Iterator &Other) : Table(Other.Table), It(Other.It) {}
         Iterator &operator=(const Iterator &Other) {
             Table = Other.Table;
@@ -610,10 +568,10 @@ struct hyper_table : public PageTableTy<reducer_data> {
             return *this;
         }
 
-        value_type &operator*() const { return *Table.find(*It); }
+        value_type &operator*() const { return Table->getEntryAt(It); }
 
         Iterator &operator++() {
-            ++It;
+            It = Table->advanceToNextEntry(++It);
             return *this;
         }
         Iterator operator++(int) {
@@ -622,18 +580,39 @@ struct hyper_table : public PageTableTy<reducer_data> {
             return Tmp;
         }
 
-        bool operator==(const Iterator &Other) const {
-            assert(&Table == &Other.Table);
-            return It == Other.It;
-        }
+        bool atEnd() const { return It == LeafTableTy::EndIteratorValue; }
+        bool operator==(const Iterator &Other) const { return It == Other.It; }
     };
     static_assert(std::input_or_output_iterator<Iterator>);
 
-    Iterator begin() { return Iterator(*this); }
-    Iterator end() {
-        auto Iter = Iterator(*this);
-        Iter.It = Accessed.cend();
-        return Iter;
+    Iterator begin() { return Iterator(Table); }
+    Iterator end() { return Iterator(Table, /*MakeEnd=*/true); }
+};
+
+using bucket = EntryTy<reducer_data>;
+
+struct hyper_table : public PageTableTy<reducer_data> {
+    using PageTableTy = PageTableTy<reducer_data>;
+    using V = reducer_data;
+
+    size_t NumEntries = 0;
+
+    size_t size() const { return NumEntries; }
+
+    bool insert(uintptr_t Addr, V &&Value) {
+        if (PageTableTy::insert(Addr, std::move(Value))) {
+            ++NumEntries;
+            return true;
+        }
+        return false;
+    }
+
+    bool remove(uintptr_t Addr) {
+        if (PageTableTy::remove(Addr)) {
+            --NumEntries;
+            return true;
+        }
+        return false;
     }
 };
 
@@ -642,10 +621,7 @@ hyper_table *__cilkrts_local_hyper_table_alloc(void);
 
 static inline bucket *find_hyperobject(hyper_table *table,
                                        uintptr_t key) noexcept {
-    // fprintf(stderr, "find_hyperobject: %p, %lx\n", table, key);
     auto *Tmp = table->find(key);
-    // fprintf(stderr, "find_hyperobject: %p (%lld), %lx -> %p\n", table,
-    //         table->size(), key, (Tmp ? Tmp->Data.view : Tmp));
     return Tmp;
 }
 
@@ -653,18 +629,13 @@ CHEETAH_INTERNAL
 static inline bool remove_hyperobject(hyper_table *table,
                                       uintptr_t key) noexcept {
     auto Tmp = table->remove(key);
-    // fprintf(stderr, "remove_hyperobject: %p (%lld), %lx\n", table,
-    //         table->size(), key);
     return Tmp;
 }
 
 CHEETAH_INTERNAL
-static inline bool insert_hyperobject(hyper_table *table,
-                                      const bucket &b) noexcept {
-    // fprintf(stderr, "insert_hyperobject %lx -> %p into %p\n", b.Key,
-    // b.Data.view,
-    //         table);
-    return table->insert(b.key, b.data);
+static inline bool insert_hyperobject(hyper_table *table, uintptr_t key,
+                                      reducer_data &&data) noexcept {
+    return table->insert(key, std::move(data));
 }
 
 CHEETAH_API
