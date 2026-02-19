@@ -27,7 +27,9 @@ typedef void *jmpbuf[JMPBUF_SIZE];
 
 #if defined __i386__ || defined __x86_64__
 // We use an otherwise unused entry in the jmpbuf to store MXCSR
-#define JMPBUF_MXCSR(ctx) (ctx)[3]
+// [0], [1], [2] hold fp, pc, sp.
+// When cf-protection is enabled, [3] holds the shadow stack.
+#define JMPBUF_MXCSR(ctx) (ctx)[4]
 /**
  * @brief Get MXCSR from jump buffer in__cilkrts_stack_frame.  X86 and X86_64
  * only.
