@@ -762,7 +762,7 @@ CHEETAH_INTERNAL CHEETAH_COLD void __cilkrts_shutdown(global_state *g) {
 
     // Deallocate the root closure and its fiber
     cilk_fiber_deallocate_global(g, g->root_closure->fiber);
-    if (USE_EXTENSION)
+    if (USE_EXTENSION && g->root_closure->ext_fiber != nullptr)
         cilk_fiber_deallocate_global(g, g->root_closure->ext_fiber);
     Closure::destroy(g->root_closure, g);
 
