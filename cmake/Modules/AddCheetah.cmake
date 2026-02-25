@@ -501,7 +501,6 @@ function(add_cheetah_bitcode name)
     else()
       set(COMPONENT_OPTION COMPONENT ${libname})
     endif()
-    set(output_file_${libname} ${output_name_${libname}}.bc)
     # Add compile command for bitcode file.
     add_library(${libname}_compile OBJECT ${LIB_SOURCES})
     target_include_directories(${libname}_compile PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../include)
