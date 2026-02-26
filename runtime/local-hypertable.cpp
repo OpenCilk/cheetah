@@ -90,7 +90,7 @@ void hyper_table::rebuild(int32_t new_capacity) {
     assert(occupancy == old_occupancy &&
            "Mismatched occupancy after resizing table.");
 
-    free(old_buckets);
+    delete [] old_buckets;
 }
 
 ///////////////////////////////////////////////////////////////////////////
