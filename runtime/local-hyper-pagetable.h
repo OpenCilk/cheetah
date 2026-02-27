@@ -54,7 +54,7 @@ template <typename V, ssize_t Capacity> struct SmallEntrySetTy {
             if (Entries[i].key == Key) {
                 Entries[i].reset();
                 if (i != Occupied - 1)
-                    Entries[i] = std::move(Entries[Occupied - 1]);
+                    Entries[i] = std::forward<EntryTy>((Entries[Occupied - 1]));
                 --Occupied;
                 return true;
             }
@@ -130,7 +130,7 @@ struct TableTy : public TableSizeTy<LgSz, RShift> {
     // Insert a value associated with an address.
     bool insert(uintptr_t Addr, V &&Value) {
         return Entries[SizeTy::toIndex(Addr)].insert(makeKey(Addr),
-                                                     std::move(Value));
+                                                     std::forward<V>(Value));
     }
 
     // Remove the value associated with the given address.
@@ -176,7 +176,7 @@ struct LeafTableTy
 
   public:
     bool insert(uintptr_t Addr, V &&Value) {
-        if (TableTy::insert(Addr, std::move(Value))) {
+        if (TableTy::insert(Addr, std::forward<V>(Value))) {
             const size_t Idx = SizeTy::toIndex(Addr);
             if (this->Entries[Idx].Occupied == 1)
                 Accessed[getAccessedIdx(Idx)] |= getAccessedMask(Idx);
@@ -299,11 +299,13 @@ template <typename V, size_t Bits = LeafTableTy<V>::Bits> struct PageTableTy {
             // Create and insert a new subtable.
             Page = new SubTableTy;
             Node->recordAccess(Addr);
-            [[maybe_unused]] bool Result = Node->insert(Addr, std::move(Page));
+            [[maybe_unused]] bool Result =
+                Node->insert(Addr, std::forward<SubTableTy *>(Page));
             assert(Result && "Failed to add new subtable to node.");
         }
         // Insert into subtable.
-        [[maybe_unused]] bool Result = Page->insert(Addr, std::move(Value));
+        [[maybe_unused]] bool Result =
+            Page->insert(Addr, std::forward<V>(Value));
         assert(Result && "Failed to add address to to subtable.");
     }
 
@@ -323,12 +325,12 @@ template <typename V, size_t Bits = LeafTableTy<V>::Bits> struct PageTableTy {
             for (ssize_t Idx = 0; Idx < EntrySet.Occupied; ++Idx) {
                 auto &Entry = EntrySet[Idx];
                 insertIntoInnerNode(NewNode, getAddrFromKey(Entry.key),
-                                    std::move(Entry.data));
+                                    std::forward<V>(Entry.data));
             }
         }
 
         // Insert the new entry into the new inner node.
-        insertIntoInnerNode(NewNode, Addr, std::move(Value));
+        insertIntoInnerNode(NewNode, Addr, std::forward<V>(Value));
         return NewNode;
     }
 
@@ -341,7 +343,7 @@ template <typename V, size_t Bits = LeafTableTy<V>::Bits> struct PageTableTy {
         if (std::holds_alternative<InnerNodeTy *>(Table)) {
             InnerNodeTy *Node = std::get<InnerNodeTy *>(Table);
             // Insert this entry into the inner node.
-            insertIntoInnerNode(Node, Addr, std::move(Value));
+            insertIntoInnerNode(Node, Addr, std::forward<V>(Value));
             return true;
         }
 
@@ -388,17 +390,17 @@ template <typename V, size_t Bits = LeafTableTy<V>::Bits> struct PageTableTy {
         if (std::holds_alternative<LeafTableTy>(Table)) {
             // Try to insert into this leaf table.
             auto &LeafTable = std::get<LeafTableTy>(Table);
-            if (LeafTable.insert(Addr, std::move(Value)))
+            if (LeafTable.insert(Addr, std::forward<V>(Value)))
                 return true;
 
-            InnerNodeTy *NewNode =
-                promoteLeafNodeAndInsert(LeafTable, Addr, std::move(Value));
+            InnerNodeTy *NewNode = promoteLeafNodeAndInsert(
+                LeafTable, Addr, std::forward<V>(Value));
             // Replace this table with new inner node.
             Table = NewNode;
             return true;
         }
 
-        return insertInnerNode(Addr, std::move(Value));
+        return insertInnerNode(Addr, std::forward<V>(Value));
     }
 
     // Remove the value at the given address.
@@ -540,7 +542,7 @@ template <typename V> struct PageTableTy<V, 48> {
 
     // Insert the given value at the given address.
     bool insert(uintptr_t Addr, V &&Value) {
-        return Table.insert(Addr, std::move(Value));
+        return Table.insert(Addr, std::forward<V>(Value));
     }
 
     // Remove the value at the given address.
@@ -600,7 +602,7 @@ struct hyper_table : public PageTableTy<reducer_data> {
     size_t size() const { return NumEntries; }
 
     bool insert(uintptr_t Addr, V &&Value) {
-        if (PageTableTy::insert(Addr, std::move(Value))) {
+        if (PageTableTy::insert(Addr, std::forward<V>(Value))) {
             ++NumEntries;
             return true;
         }
@@ -635,7 +637,7 @@ static inline bool remove_hyperobject(hyper_table *table,
 CHEETAH_INTERNAL
 static inline bool insert_hyperobject(hyper_table *table, uintptr_t key,
                                       reducer_data &&data) noexcept {
-    return table->insert(key, std::move(data));
+    return table->insert(key, std::forward<reducer_data>(data));
 }
 
 CHEETAH_API

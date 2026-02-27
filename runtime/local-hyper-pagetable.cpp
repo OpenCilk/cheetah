@@ -1,6 +1,7 @@
 #include "local-hyper-pagetable.h"
 #include "cilk/cilk_api.h"
 #include "cilk/reducer"
+#include "hyperobject_base.h"
 #include "internal-malloc.h"
 #include <cassert>
 
@@ -156,7 +157,7 @@ hyper_table *merge_two_hts(hyper_table *__restrict Left,
         if (DstB == nullptr) {
             // fprintf(stderr, "merge_two_hts: inserting %lx -> %p into %p\n",
             //         Addr, B.Data.view, Dst);
-            Dst->insert(Addr, std::move(B.data));
+            Dst->insert(Addr, std::forward<reducer_data>(B.data));
         } else {
             if (LeftDst) {
                 // fprintf(stderr, "merge_two_hts: reduction (%d): %p -> %p and
