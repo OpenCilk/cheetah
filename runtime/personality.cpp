@@ -14,6 +14,8 @@
 #include <functional>
 #include <unwind.h>
 
+using cilk::reducer_base;
+
 static struct closure_exception exception_reducer;
 
 typedef _Unwind_Reason_Code (*__personality_routine)(
@@ -48,12 +50,12 @@ bool exception_reducer_is_empty() noexcept {
 }
 
 // Identity method for the exception reducer.
-__reducer_base *closure_exception::identity(void *v) {
+reducer_base *closure_exception::identity(void *v) {
     return new (v) closure_exception;
 }
 
 // Reduce method for the exception reducer.
-void closure_exception::reduce(__reducer_base *l, __reducer_base *r) {
+void closure_exception::reduce(reducer_base *l, reducer_base *r) {
     closure_exception *lex = static_cast<closure_exception *>(l);
     closure_exception *rex = static_cast<closure_exception *>(r);
     if (lex->exn == nullptr) {
@@ -92,7 +94,7 @@ closure_exception *get_exception_reducer_or_null(__cilkrts_worker *w) noexcept {
     if (b) {
         CILK_ASSERT_POINTER_EQUAL(key, (void *)b->key);
         // Return the existing view.
-        __reducer_base *base = std::get<__reducer_base *>(b->data.extra);
+        reducer_base *base = std::get<reducer_base *>(b->data.extra);
         return static_cast<closure_exception *>(base);
     }
     // No view was found.  Don't create a new reducer view; just return NULL.

@@ -18,6 +18,14 @@
 #endif
 #endif
 
+namespace cilk {
+struct reducer_base;
+struct reducer_callbacks;
+}
+
+using cilk::reducer_base;
+using cilk::reducer_callbacks;
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -70,8 +78,8 @@ get_worker_from_stack(const __cilkrts_stack_frame *sf) {
 }
 
 CHEETAH_INTERNAL
-__reducer_base *
-internal_reducer_lookup(__cilkrts_worker *w, __reducer_base *key);
+reducer_base *
+internal_reducer_lookup(__cilkrts_worker *w, reducer_base *key);
 CHEETAH_INTERNAL
 void internal_reducer_remove(__cilkrts_worker *w, void *key);
 
@@ -99,7 +107,7 @@ __cilkrts_pop_ext_stack(__cilkrts_worker *w, size_t size) {
 /*
  * All the data needed to properly handle a thrown exception.
  */
-struct closure_exception final : public __reducer_base {
+struct closure_exception final : public reducer_base {
     char *exn = nullptr;
     /* Canonical frame address (CFA) of the call-stack frame from which an
        exception was rethrown.  Used to ensure that the rethrown exception
@@ -113,8 +121,8 @@ struct closure_exception final : public __reducer_base {
        currently running. */
     cilk_fiber *throwing_fiber = nullptr;
 
-    virtual __reducer_base *identity(void *) override;
-    virtual void reduce(__reducer_base *, __reducer_base *) override;
+    virtual reducer_base *identity(void *) override;
+    virtual void reduce(reducer_base *, reducer_base *) override;
     virtual std::size_t size() const override { return sizeof *this; }
 };
 

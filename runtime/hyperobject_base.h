@@ -21,13 +21,17 @@
 // - Problem: Need a way to keep track of whether the view in a
 //   reducer_data is storing a pointer to the view or the view itself.
 
+namespace cilk {
+
 struct reducer_data {
     void *view = nullptr;
     std::variant<
-        __reducer_base *,
-        const __cilk_reduce_fn *,
+        reducer_base *,
+        const reduce_fn *,
         __cilk_c_reduce_fn *
         > extra;
 };
+
+}
 
 #endif /* _HYPEROBJECT_BASE */

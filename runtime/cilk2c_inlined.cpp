@@ -22,6 +22,8 @@
 #include <atomic>
 #include <unwind.h>
 
+using cilk::reducer_base;
+using cilk::reducer_callbacks;
 
 // Suppress -Wmissing-variable-declarations for this variable.
 alignas(__cilkrts_stack_frame) extern size_t __cilkrts_stack_frame_align;
@@ -48,7 +50,7 @@ unsigned __cilkrts_get_worker_number(void) {
     return 0;
 }
 
-__reducer_base *__cilkrts_reducer_lookup_0(__reducer_base *key) {
+reducer_base *__cilkrts_reducer_lookup_0(reducer_base *key) {
     // If we're outside a cilkified region, then the key is the view.
     if (__cilkrts_status.need_to_cilkify)
         return key;
@@ -57,14 +59,14 @@ __reducer_base *__cilkrts_reducer_lookup_0(__reducer_base *key) {
     if (__builtin_expect(!!b, true)) {
         // Return the reducer_base subobject of the existing view.
         // get_if is used instead of get because no exceptions are allowed
-        return *std::get_if<__reducer_base *>(&b->data.extra);
+        return *std::get_if<reducer_base *>(&b->data.extra);
     }
 
     return __cilkrts_insert_new_view_0(table, key);
 }
 
 void *__cilkrts_reducer_lookup_1(void *key,
-                                 const __reducer_callbacks &callbacks) {
+                                 const reducer_callbacks &callbacks) {
     // If we're outside a cilkified region, then the key is the view.
     if (__cilkrts_status.need_to_cilkify)
         return key;
