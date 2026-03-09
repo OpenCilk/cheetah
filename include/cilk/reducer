@@ -24,7 +24,7 @@ struct __reducer_callbacks {
   __cilk_reduce_fn reduce;
 };
 
-extern "C" __reducer_base *__hyper_lookup_class(__reducer_base *)
+extern "C" __reducer_base *__hyper_lookup_class(const __reducer_base *)
   __attribute__((nonnull, returns_nonnull));
 
 extern "C" void *__hyper_lookup_internal_1(void *, const __reducer_callbacks &)
