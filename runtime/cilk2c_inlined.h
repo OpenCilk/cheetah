@@ -7,8 +7,13 @@
 
 struct __cilkrts_stack_frame;
 struct __cilkrts_worker;
-struct __reducer_base;
-struct __reducer_callbacks;
+namespace cilk {
+struct reducer_base;
+struct reducer_callbacks;
+}
+
+using cilk::reducer_base;
+using cilk::reducer_callbacks;
 
 #ifdef __cplusplus
 extern "C" {
@@ -83,18 +88,18 @@ void __cilk_sync(__cilkrts_stack_frame *sf);
 // exception that needs to be handled locally.
 void __cilk_sync_nothrow(__cilkrts_stack_frame *sf);
 
-__reducer_base *__cilkrts_reducer_lookup_0(__reducer_base *key)
+reducer_base *__cilkrts_reducer_lookup_0(reducer_base *key)
     __attribute__((nonnull, returns_nonnull));
-void *__cilkrts_reducer_lookup_1(void *key, const __reducer_callbacks &)
+void *__cilkrts_reducer_lookup_1(void *key, const reducer_callbacks &)
     __attribute__((nonnull, returns_nonnull));
 void *__cilkrts_reducer_lookup_2(void *key, size_t size,
                                  __cilk_c_identity_fn *id,
                                  __cilk_c_reduce_fn *reduce)
     __attribute__((nonnull, returns_nonnull));
 
-void __cilkrts_reducer_register_0(__reducer_base *key) __CILKRTS_NOTHROW;
+void __cilkrts_reducer_register_0(reducer_base *key) __CILKRTS_NOTHROW;
 void __cilkrts_reducer_register_1(void *key,
-                                  __reducer_callbacks *) __CILKRTS_NOTHROW;
+                                  reducer_callbacks *) __CILKRTS_NOTHROW;
 void __cilkrts_reducer_register_2(void *key,
                                   __cilk_c_reduce_fn *reduce) __CILKRTS_NOTHROW;
 

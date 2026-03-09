@@ -7,6 +7,10 @@
 #include <cstdint>
 #include <cstdlib>
 
+using cilk::reducer_base;
+using cilk::reducer_callbacks;
+using cilk::reduce_fn;
+
 static void make_tombstone(uintptr_t *key) { *key = KEY_DELETED; }
 
 // Constant used to determine the target maximum load factor.  The
@@ -335,12 +339,12 @@ bool insert_hyperobject(hyper_table *table, bucket b) noexcept {
     return false;
 }
 
-__reducer_base *__cilkrts_insert_new_view_0(hyper_table *table,
-                                            __reducer_base *key) {
+reducer_base *__cilkrts_insert_new_view_0(hyper_table *table,
+                                            reducer_base *key) {
     // Create a new view and initialize it with the identity function.
     size_t size = key->size();
     void *new_view = cilk_aligned_alloc(64, round_size_to_alignment(64, size));
-    __reducer_base *base = key->identity(new_view);
+    reducer_base *base = key->identity(new_view);
     // Insert the new view into the local hypertable.
     bucket new_bucket = {.key = (uintptr_t)key,
                          .data = {.view = new_view, .extra = base}};
@@ -351,7 +355,7 @@ __reducer_base *__cilkrts_insert_new_view_0(hyper_table *table,
 }
 
 void *__cilkrts_insert_new_view_1(hyper_table *table, uintptr_t key,
-                                  const __reducer_callbacks &callbacks) {
+                                  const reducer_callbacks &callbacks) {
     // Create a new view and initialize it with the identity function.
     void *new_view =
         cilk_aligned_alloc(64, round_size_to_alignment(64, callbacks.size));
@@ -441,7 +445,7 @@ hyper_table *merge_two_hts(hyper_table *__restrict left,
             } else {
                 bucket::reduce(&b, dst_bucket);
                 dst_bucket->data = b.data;
-                b.data.extra = (__reducer_base *)nullptr;
+                b.data.extra = (reducer_base *)nullptr;
                 b.data.view = nullptr;
             }
         }
@@ -456,21 +460,21 @@ hyper_table *merge_two_hts(hyper_table *__restrict left,
 void bucket::reduce(bucket *left, bucket *right) {
     assert(left->data.extra.index() == right->data.extra.index());
     void *left_view = left->data.view, *right_view = right->data.view;
-    if (std::holds_alternative<__reducer_base *>(left->data.extra)) {
-        __reducer_base *leftmost =
-            static_cast<__reducer_base *>(reinterpret_cast<void *>(left->key));
-        __reducer_base *left_r = std::get<__reducer_base *>(left->data.extra);
-        __reducer_base *right_r = std::get<__reducer_base *>(right->data.extra);
+    if (std::holds_alternative<reducer_base *>(left->data.extra)) {
+        reducer_base *leftmost =
+            static_cast<reducer_base *>(reinterpret_cast<void *>(left->key));
+        reducer_base *left_r = std::get<reducer_base *>(left->data.extra);
+        reducer_base *right_r = std::get<reducer_base *>(right->data.extra);
         leftmost->reduce(left_r, right_r);
-        right_r->~__reducer_base();
-    } else if (std::holds_alternative<const __cilk_reduce_fn *>(
+        right_r->~reducer_base();
+    } else if (std::holds_alternative<const reduce_fn *>(
                    left->data.extra)) {
-        (*std::get<const __cilk_reduce_fn *>(left->data.extra))(left_view,
+        (*std::get<const reduce_fn *>(left->data.extra))(left_view,
                                                                 right_view);
     } else {
         std::get<__cilk_c_reduce_fn *>(left->data.extra)(left_view, right_view);
     }
-    right->data.extra = (__reducer_base *)nullptr;
+    right->data.extra = (reducer_base *)nullptr;
     right->data.view = nullptr;
     free(right_view);
 }

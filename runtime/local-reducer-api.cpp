@@ -4,10 +4,13 @@
 #include "local-reducer-api.h"
 #include "rts-config.h"
 
+using cilk::reducer_base;
+using cilk::reducer_callbacks;
+
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
 
-__reducer_base::__reducer_base() {
+reducer_base::reducer_base() {
     // This would be a great place to register the reducer,
     // but doing so would break the equivalence between
     // leftmost view and dynamic views.  The derived class
@@ -15,7 +18,7 @@ __reducer_base::__reducer_base() {
     // constructor to suppress registration.
 }
 
-__reducer_base::~__reducer_base() {}
+reducer_base::~reducer_base() {}
 
 static void reducer_register(bucket &b) __CILKRTS_NOTHROW {
     struct hyper_table *table =
@@ -24,13 +27,13 @@ static void reducer_register(bucket &b) __CILKRTS_NOTHROW {
     CILK_ASSERT(success && "Failed to register reducer.");
 }
 
-void __cilkrts_reducer_register_0(__reducer_base *key) __CILKRTS_NOTHROW {
+void __cilkrts_reducer_register_0(reducer_base *key) __CILKRTS_NOTHROW {
     bucket b{.key = (uintptr_t)key, .data = {.view = nullptr, .extra = key}};
     reducer_register(b);
 }
 
 void __cilkrts_reducer_register_1(void *key,
-                                  __reducer_callbacks *cb) __CILKRTS_NOTHROW {
+                                  reducer_callbacks *cb) __CILKRTS_NOTHROW {
     bucket b{
         .key = (uintptr_t)key,
         .data = {.view = key, .extra = &cb->reduce},
@@ -58,14 +61,14 @@ void __cilkrts_reducer_unregister(void *key) noexcept {
 #pragma clang diagnostic pop
 
 CHEETAH_INTERNAL
-__reducer_base *internal_reducer_lookup(__cilkrts_worker *w,
-                                        __reducer_base *key) {
+reducer_base *internal_reducer_lookup(__cilkrts_worker *w,
+                                        reducer_base *key) {
     struct hyper_table *table = get_local_hyper_table(w);
     bucket *b = find_hyperobject(table, (uintptr_t)key);
     if (__builtin_expect(!!b, true)) {
         CILK_ASSERT_POINTER_EQUAL(key, (void *)b->key);
         // Return the existing view.
-        return std::get<__reducer_base *>(b->data.extra);
+        return std::get<reducer_base *>(b->data.extra);
     }
 
     return __cilkrts_insert_new_view_0(table, key);

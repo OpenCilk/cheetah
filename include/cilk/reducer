@@ -4,30 +4,34 @@
 #include <cstddef>
 #include <functional>
 
-typedef std::function<void(void *)> __cilk_identity_fn;
-typedef std::function<void(void *, void *)> __cilk_reduce_fn;
+namespace cilk {
 
-struct __reducer_base {
-  __reducer_base();
-  virtual ~__reducer_base();
+typedef std::function<void(void *)> identity_fn;
+typedef std::function<void(void *, void *)> reduce_fn;
+
+struct reducer_base {
+  reducer_base();
+  virtual ~reducer_base();
   // All of the following methods may be called concurrently.
   virtual std::size_t size() const = 0;
-  // Return the __reducer_base subobject of a newly constructed object.
-  virtual __reducer_base *identity(void *view) = 0;
+  // Return the reducer_base subobject of a newly constructed object.
+  virtual reducer_base *identity(void *view) = 0;
   // Merge r into l.  The destructor for r will be called after reduce.
-  virtual void reduce(__reducer_base *l, __reducer_base *r) = 0;
+  virtual void reduce(reducer_base *l, reducer_base *r) = 0;
 };
 
-struct __reducer_callbacks {
+struct reducer_callbacks {
   std::size_t size;
-  __cilk_identity_fn identity;
-  __cilk_reduce_fn reduce;
+  identity_fn identity;
+  reduce_fn reduce;
 };
 
-extern "C" __reducer_base *__hyper_lookup_class(const __reducer_base *)
+}
+
+extern "C" cilk::reducer_base *__hyper_lookup_class(const cilk::reducer_base *)
   __attribute__((nonnull, returns_nonnull));
 
-extern "C" void *__hyper_lookup_internal_1(void *, const __reducer_callbacks &)
+extern "C" void *__hyper_lookup_internal_1(void *, const cilk::reducer_callbacks &)
   __attribute__((nonnull, returns_nonnull));
 
 #endif // _CILK_REDUCER_

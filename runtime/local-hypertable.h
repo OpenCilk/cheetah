@@ -8,6 +8,10 @@
 #include <cstdint>
 #include <cstdlib>
 
+using cilk::reducer_base;
+using cilk::reducer_callbacks;
+using cilk::reducer_data;
+
 typedef uint32_t index_t;
 
 // Helper methods for testing and setting keys.
@@ -233,13 +237,13 @@ static inline bucket *find_hyperobject(hyper_table *table, uintptr_t key) {
 }
 
 CHEETAH_API
-__reducer_base *__cilkrts_insert_new_view_0(hyper_table *table,
-                                            __reducer_base *key)
+reducer_base *__cilkrts_insert_new_view_0(hyper_table *table,
+                                          reducer_base *key)
     __attribute__((nonnull, returns_nonnull));
 
 CHEETAH_API
 void *__cilkrts_insert_new_view_1(hyper_table *table, uintptr_t key,
-                                  const __reducer_callbacks &callbacks)
+                                  const reducer_callbacks &callbacks)
     __attribute__((nonnull, returns_nonnull));
 
 CHEETAH_API
