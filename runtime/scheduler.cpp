@@ -25,7 +25,8 @@
 #include "frame.h"
 #include "global.h"
 #include "jmpbuf.h"
-#include "local-hypertable.h"
+// #include "local-hypertable.h"
+#include "local-hyper-pagetable.h"
 #include "local.h"
 #include "scheduler.h"
 #include "worker.h"
@@ -395,9 +396,9 @@ static Closure *Closure_return(__cilkrts_worker *const w, worker_id self,
     hyper_table **lht_ptr;
     Closure *const left_sib = child->left_sib;
     if (left_sib != nullptr) {
-      lht_ptr = &left_sib->right_ht;
+        lht_ptr = &left_sib->right_ht;
     } else {
-      lht_ptr = &parent->child_ht;
+        lht_ptr = &parent->child_ht;
     }
     hyper_table *lht = *lht_ptr;
     *lht_ptr = nullptr;
@@ -416,8 +417,10 @@ static Closure *Closure_return(__cilkrts_worker *const w, worker_id self,
         l->lht = lht;
 
         setup_for_execution(w, child);
-        l->provably_good_steal = true;  // Use the existing SP in the frame
+        l->provably_good_steal = true; // Use the existing SP in the frame
 
+        // Return this closure, so it will be scheduled again to perform the
+        // reduction.
         return child;
     }
 
@@ -491,7 +494,6 @@ static Closure *Closure_return(__cilkrts_worker *const w, worker_id self,
         hyper_table *active_ht = parent->user_ht;
         parent->child_ht = nullptr;
         parent->user_ht = nullptr;
-        // w->hyper_table = merge_two_hts(child_ht, active_ht);
         CILK_ASSERT_NULL(l->lht);
         l->lht = child_ht;
         w->hyper_table = active_ht;

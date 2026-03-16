@@ -1,6 +1,7 @@
 #include "cilk-internal.h"
 #include "cilk2c_inlined.h"
-#include "local-hypertable.h"
+// #include "local-hypertable.h"
+#include "local-hyper-pagetable.h"
 #include "local-reducer-api.h"
 #include "rts-config.h"
 
@@ -17,34 +18,26 @@ __reducer_base::__reducer_base() {
 
 __reducer_base::~__reducer_base() {}
 
-static void reducer_register(bucket &b) __CILKRTS_NOTHROW {
+__attribute__((always_inline))
+static void reducer_register(uintptr_t key, reducer_data &&data) __CILKRTS_NOTHROW {
     struct hyper_table *table =
         get_local_hyper_table(__cilkrts_get_tls_worker());
-    [[maybe_unused]] bool success = insert_hyperobject(table, b);
+    [[maybe_unused]] bool success = insert_hyperobject(table, key, std::move(data));
     CILK_ASSERT(success && "Failed to register reducer.");
 }
 
 void __cilkrts_reducer_register_0(__reducer_base *key) __CILKRTS_NOTHROW {
-    bucket b{.key = (uintptr_t)key, .data = {.view = nullptr, .extra = key}};
-    reducer_register(b);
+    reducer_register((uintptr_t)key, {.view = nullptr, .extra = key});
 }
 
 void __cilkrts_reducer_register_1(void *key,
                                   __reducer_callbacks *cb) __CILKRTS_NOTHROW {
-    bucket b{
-        .key = (uintptr_t)key,
-        .data = {.view = key, .extra = &cb->reduce},
-    };
-    reducer_register(b);
+    reducer_register((uintptr_t)key, {.view = key, .extra = &cb->reduce});
 }
 
 void __cilkrts_reducer_register_2(void *key, __cilk_c_reduce_fn *reduce)
     __CILKRTS_NOTHROW {
-    bucket b{
-        .key = (uintptr_t)key,
-        .data = {.view = key, .extra = reduce},
-    };
-    reducer_register(b);
+    reducer_register((uintptr_t)key, {.view = key, .extra = reduce});
 }
 
 void __cilkrts_reducer_unregister(void *key) noexcept {
@@ -63,7 +56,7 @@ __reducer_base *internal_reducer_lookup(__cilkrts_worker *w,
     struct hyper_table *table = get_local_hyper_table(w);
     bucket *b = find_hyperobject(table, (uintptr_t)key);
     if (__builtin_expect(!!b, true)) {
-        CILK_ASSERT_POINTER_EQUAL(key, (void *)b->key);
+        CILK_ASSERT_POINTER_EQUAL(key, (void *)getAddrFromKey(b->key));
         // Return the existing view.
         return std::get<__reducer_base *>(b->data.extra);
     }

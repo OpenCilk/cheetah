@@ -697,7 +697,8 @@ static void worker_terminate(__cilkrts_worker *w, [[maybe_unused]] void *data) {
     cilk_fiber_pool_per_worker_terminate(w);
     hyper_table *ht = w->hyper_table;
     if (ht) {
-        local_hyper_table_free(ht);
+        // local_hyper_table_free(ht);
+        delete ht;
         w->hyper_table = nullptr;
     }
     worker_local_destroy(w->l, w->g);
