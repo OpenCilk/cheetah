@@ -342,7 +342,7 @@ bool insert_hyperobject(hyper_table *table, bucket b) noexcept {
 reducer_base *__cilkrts_insert_new_view_0(hyper_table *table,
                                             reducer_base *key) {
     // Create a new view and initialize it with the identity function.
-    size_t size = key->size();
+    size_t size = key->view_size();
     void *new_view = cilk_aligned_alloc(64, round_size_to_alignment(64, size));
     reducer_base *base = key->identity(new_view);
     // Insert the new view into the local hypertable.
