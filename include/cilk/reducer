@@ -10,10 +10,12 @@ typedef std::function<void(void *)> identity_fn;
 typedef std::function<void(void *, void *)> reduce_fn;
 
 struct reducer_base {
+protected:
   reducer_base();
+public:
   virtual ~reducer_base();
   // All of the following methods may be called concurrently.
-  virtual std::size_t size() const = 0;
+  virtual std::size_t view_size() const = 0;
   // Return the reducer_base subobject of a newly constructed object.
   virtual reducer_base *identity(void *view) = 0;
   // Merge r into l.  The destructor for r will be called after reduce.
