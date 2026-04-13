@@ -15,38 +15,18 @@ INCLUDES = -I../include/
 DEFINES = $(REDUCER_DEF) $(ABI_DEF) $(ALERT_DEF)
 OPTIONS = $(OPT) $(DBG) $(ARCH) -Werror -Wall -fpic $(DEFINES) $(INCLUDES) -gdwarf-4
 
-PERSON_C = $(RTS_LIBDIR)/$(RTS_C_PERSONALITY_LIB)
-PERSON_CPP = $(RTS_LIBDIR)/$(RTS_CXX_PERSONALITY_LIB)
-PERSON_C_SRC = personality-c
-PERSON_CPP_SRC = personality-cpp
 PEDIGREE_LIB = $(RTS_LIBDIR)/$(RTS_PEDIGREE_LIB)
 PEDIGREE_LIB_SRC = pedigree_lib
 
 .PHONY: all clean build
 
-all: build $(RTS_LIBDIR) $(MAIN).a $(MAIN).so $(PERSON_C).a $(PERSON_C).so $(PERSON_CPP).a $(PERSON_CPP).so $(BITCODE_ABI)
+all: build $(RTS_LIBDIR) $(MAIN).a $(MAIN).so $(BITCODE_ABI)
 
 $(MAIN).a: $(OBJS)
 	$(AR) rcs $@ $^
 
 $(MAIN).so: $(OBJS)
 	$(CXX) -shared -o $@ $^
-
-$(PERSON_C).a: build/$(PERSON_C_SRC).o
-	$(AR) rcs $@ $^
-
-$(PERSON_C).so: $(RTS_LIBDIR)/libopencilk.so
-
-$(PERSON_C).so: build/$(PERSON_C_SRC).o
-	$(CC) -shared -o $@ $^ -L$(RTS_LIBDIR) -lopencilk
-
-$(PERSON_CPP).a: build/$(PERSON_CPP_SRC).o
-	$(AR) rcs $@ $^
-
-$(PERSON_CPP).so: $(RTS_LIBDIR)/libopencilk.so
-
-$(PERSON_CPP).so: ./build/$(PERSON_CPP_SRC).o
-	$(CXX) -shared -o $@ $^ -L$(RTS_LIBDIR) -lopencilk
 
 $(PEDIGREE_LIB).a: build/$(PEDIGREE_LIB_SRC).o
 	$(AR) rcs $@ $^
@@ -73,5 +53,5 @@ $(BITCODE_ABI) : build/cilk2c_inlined.bc
 	cp $< $@
 
 clean:
-	rm -f $(OBJS) build/$(PERSON_C_SRC).o build/$(PERSON_CPP_SRC).o $(RTS_LIBDIR)/*.a $(RTS_LIBDIR)/*.so $(RTS_LIBDIR)/*.bc *~
+	rm -f $(OBJS) $(RTS_LIBDIR)/*.a $(RTS_LIBDIR)/*.so $(RTS_LIBDIR)/*.bc *~
 	rm -f build/cilk2c_inlined.bc

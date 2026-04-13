@@ -30,14 +30,6 @@ set(CHEETAH_PEDIGREE_LIB_SOURCES
   pedigree_lib.cpp
 )
 
-set(CHEETAH_PERSONALITY_C_SOURCES
-  personality-c.c
-)
-
-set(CHEETAH_PERSONALITY_CPP_SOURCES
-  personality-cpp.cpp
-)
-
 #set_source_files_properties(file.cpp PROPERTIES COMPILE_OPTIONS -...)
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
@@ -81,9 +73,6 @@ set(CHEETAH_BITCODE_ABI_COMPILE_DEFS ${CHEETAH_COMPILE_DEFS}
   "CHEETAH_API_CONSUMER=1"
   "CILK_DEBUG=0")
 
-set(CHEETAH_PERSONALITY_COMPILE_DEFS ${CHEETAH_COMPILE_DEFS}
-  "CHEETAH_API_CONSUMER=1")
-
 # Set compile flags, compile defs, and link flags for ASan build
 set(CHEETAH_ASAN_COMPILE_FLAGS ${CHEETAH_COMPILE_FLAGS})
 set(CHEETAH_ASAN_COMPILE_DEFS ${CHEETAH_COMPILE_DEFS} "CILK_ENABLE_ASAN_HOOKS=1")
@@ -112,9 +101,9 @@ set(CHEETAH_BITCODES "opencilk-abi")
 set(CHEETAH_ASAN_BITCODES "opencilk-asan-abi")
 set(CHEETAH_BITCODE_SOURCES "CHEETAH_ABI_SOURCE")
 # List of libraries and corresponding sources
-set(CHEETAH_LIBRARIES "opencilk" "opencilk-personality-c" "opencilk-personality-cpp" "opencilk-pedigrees")
-set(CHEETAH_ASAN_LIBRARIES "opencilk-asan" "opencilk-asan-personality-c" "opencilk-asan-personality-cpp" "opencilk-pedigrees-asan")
-set(CHEETAH_LIBRARY_SOURCES "CHEETAH_SOURCES" "CHEETAH_PERSONALITY_C_SOURCES" "CHEETAH_PERSONALITY_CPP_SOURCES" "CHEETAH_PEDIGREE_LIB_SOURCES")
+set(CHEETAH_LIBRARIES "opencilk" "opencilk-pedigrees")
+set(CHEETAH_ASAN_LIBRARIES "opencilk-asan" "opencilk-pedigrees-asan")
+set(CHEETAH_LIBRARY_SOURCES "CHEETAH_SOURCES" "CHEETAH_PEDIGREE_LIB_SOURCES")
 
 # Add all bitcode and library variants
 if (APPLE)
