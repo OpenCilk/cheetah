@@ -165,6 +165,7 @@ sync_in_personality(__cilkrts_worker *w, __cilkrts_stack_frame *sf,
         __cilkrts_sync(sf);
     } else {
         sanitizer_finish_switch_fiber();
+        __cilkrts_do_reductions(sf);
     }
 }
 
