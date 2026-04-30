@@ -61,13 +61,17 @@ bool exception_reducer_is_empty() noexcept {
     return exception_reducer.exn == nullptr;
 }
 
+std::size_t closure_exception::view_size() const noexcept {
+  return sizeof *this;
+}
+
 // Identity method for the exception reducer.
-reducer_base *closure_exception::identity(void *v) {
+reducer_base *closure_exception::identity(void *v) noexcept {
     return new (v) closure_exception;
 }
 
 // Reduce method for the exception reducer.
-void closure_exception::reduce(reducer_base *l, reducer_base *r) {
+void closure_exception::reduce(reducer_base *l, reducer_base *r) noexcept {
     closure_exception *lex = static_cast<closure_exception *>(l);
     closure_exception *rex = static_cast<closure_exception *>(r);
     if (lex->exn == nullptr) {

@@ -15,11 +15,11 @@ protected:
 public:
   virtual ~reducer_base();
   // All of the following methods may be called concurrently.
-  virtual std::size_t view_size() const = 0;
+  virtual std::size_t view_size() const noexcept = 0;
   // Return the reducer_base subobject of a newly constructed object.
-  virtual reducer_base *identity(void *view) = 0;
+  virtual reducer_base *identity(void *view) noexcept = 0;
   // Merge r into l.  The destructor for r will be called after reduce.
-  virtual void reduce(reducer_base *l, reducer_base *r) = 0;
+  virtual void reduce(reducer_base *l, reducer_base *r) noexcept = 0;
 };
 
 struct reducer_callbacks {
