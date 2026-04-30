@@ -121,9 +121,9 @@ struct closure_exception final : public reducer_base {
        currently running. */
     cilk_fiber *throwing_fiber = nullptr;
 
-    virtual reducer_base *identity(void *) override;
-    virtual void reduce(reducer_base *, reducer_base *) override;
-    virtual std::size_t view_size() const override { return sizeof *this; }
+    virtual reducer_base *identity(void *) noexcept override;
+    virtual void reduce(reducer_base *, reducer_base *) noexcept override;
+    virtual std::size_t view_size() const noexcept override;
 };
 
 // Reducer structure for handling exceptions thrown in parallel.
