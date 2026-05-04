@@ -11,7 +11,7 @@ typedef std::function<void(void *, void *)> reduce_fn;
 
 struct reducer_base {
 protected:
-  reducer_base();
+  reducer_base() = default;
 public:
   virtual ~reducer_base();
   // All of the following methods may be called concurrently.
