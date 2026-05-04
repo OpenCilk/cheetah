@@ -10,14 +10,6 @@ using cilk::reducer_callbacks;
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
 
-reducer_base::reducer_base() {
-    // This would be a great place to register the reducer,
-    // but doing so would break the equivalence between
-    // leftmost view and dynamic views.  The derived class
-    // identity operation would need to pass a flag to this
-    // constructor to suppress registration.
-}
-
 reducer_base::~reducer_base() {}
 
 static void reducer_register(bucket &b) __CILKRTS_NOTHROW {
