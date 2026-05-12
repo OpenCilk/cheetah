@@ -43,6 +43,7 @@ static local_state *worker_local_init(local_state *l, global_state *g) {
     l->returning = false;
     l->rand_next = 0; /* will be reset in scheduler loop */
     l->wake_val = 0;
+    l->abandoned = nullptr;
     l->lht = nullptr;
     l->rht = nullptr;
     cilk_sched_stats_init(&(l->stats));
@@ -52,7 +53,10 @@ static local_state *worker_local_init(local_state *l, global_state *g) {
 
 static void worker_local_destroy([[maybe_unused]] local_state *l,
                                  [[maybe_unused]] global_state *g) {
-    /* currently nothing to do here */
+    if (l->abandoned) {
+        cilk_fiber_deallocate_global(g, l->abandoned);
+        l->abandoned = nullptr;
+    }
 }
 
 static void busy_init(global_state *g) {
