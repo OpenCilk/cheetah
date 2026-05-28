@@ -121,6 +121,7 @@ closure_exception *get_exception_reducer_or_null(__cilkrts_worker *w) noexcept {
 void clear_exception_reducer(__cilkrts_worker *w,
                              closure_exception *exn_r) noexcept {
     CILK_ASSERT_NULL(exn_r->throwing_fiber);
+    exn_r->~closure_exception();
     free(exn_r);
     internal_reducer_remove(w, &exception_reducer);
 }
