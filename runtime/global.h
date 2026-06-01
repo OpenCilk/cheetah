@@ -213,11 +213,11 @@ CHEETAH_INTERNAL void for_each_worker_rev(global_state *,
                                           void *data);
 
 // util functions used by both init.c and global.c
-inline static long env_get_int(char const *var) {
+inline static long env_get_int(char const *var, int unset = 0) {
     const char *envstr = getenv(var);
     if (envstr)
         return strtol(envstr, NULL, 0);
-    return 0;
+    return unset;
 }
 
 inline static bool worker_is_valid(const __cilkrts_worker *w,
