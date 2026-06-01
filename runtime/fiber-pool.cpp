@@ -179,6 +179,9 @@ static void fiber_pool_decrease_capacity(worker_id self, cilk_fiber_pool *pool,
 static void fiber_pool_allocate_batch(worker_id self, cilk_fiber_pool *pool,
                                       const unsigned int batch_size) {
 
+    if (batch_size == 0)
+        return;
+
     fiber_pool_assert_ownership(self, pool);
     fiber_pool_increase_capacity(self, pool, batch_size + pool->size);
 
@@ -302,7 +305,9 @@ void cilk_fiber_pool_per_worker_init(__cilkrts_worker *w) {
     cilk_fiber_pool *pool = &(w->l->fiber_pool);
     fiber_pool_init(pool, g->options.stacksize, bufsize, &(g->fiber_pool),
                     0 /* private */);
-    CILK_ASSERT(nullptr != pool->fibers);
+    if (bufsize > 0) {
+        CILK_ASSERT(nullptr != pool->fibers);
+    }
     CILK_ASSERT(g->fiber_pool.stack_size == pool->stack_size);
 
     fiber_pool_stat_init(pool);
@@ -335,6 +340,9 @@ void cilk_fiber_pool_per_worker_destroy(__cilkrts_worker *w) {
  */
 cilk_fiber *cilk_fiber_allocate_from_pool(__cilkrts_worker *w) {
     cilk_fiber_pool *pool = &(w->l->fiber_pool);
+    if (pool->capacity == 0) {
+        return cilk_fiber_allocate(pool->stack_size);
+    }
     if (pool->size == 0) {
         fiber_pool_allocate_batch(w->self, pool,
                                   pool->capacity / BATCH_FRACTION);
@@ -358,7 +366,15 @@ void cilk_fiber_deallocate_to_pool(__cilkrts_worker *w,
                                    cilk_fiber *fiber_to_return) {
     if (fiber_to_return)
         sanitizer_poison_fiber(fiber_to_return);
+
     cilk_fiber_pool *pool = &(w->l->fiber_pool);
+    if (pool->capacity == 0) {
+        if (fiber_to_return) {
+            fiber_to_return->clear();
+            cilk_fiber_deallocate(fiber_to_return);
+        }
+        return;
+    }
     if (pool->size == pool->capacity) {
         fiber_pool_free_batch(w->self, pool, pool->capacity / BATCH_FRACTION);
         CILK_ASSERT((pool->capacity - pool->size) >=
