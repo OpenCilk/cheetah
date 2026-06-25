@@ -22,6 +22,7 @@ struct __attribute__((visibility("hidden"))) local_state {
     bool returning;
     unsigned int rand_next;
     uint32_t wake_val;
+    cilk_fiber *abandoned;
 
     jmpbuf rts_ctx;
     hyper_table *lht;

@@ -1147,7 +1147,11 @@ int Cilk_sync(__cilkrts_worker *const w, __cilkrts_stack_frame *frame) {
         cilkrts_alert(SYNC, "(Cilk_sync) Closure %p has outstanding children",
                       (void *)t);
         if (t->fiber) {
-            cilk_fiber_deallocate_to_pool(w, t->fiber);
+            // This fiber may still be in use by the runtime even though
+            // user code is done with it.
+            if (cilk_fiber *abandoned = w->l->abandoned)
+                cilk_fiber_deallocate_to_pool(w, abandoned);
+            w->l->abandoned = t->fiber;
         }
         if (USE_EXTENSION && t->ext_fiber) {
             cilk_fiber_deallocate_to_pool(w, t->ext_fiber);

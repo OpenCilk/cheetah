@@ -234,7 +234,7 @@ extern "C" _Unwind_Reason_Code __cilk_personality_internal(
         return std_lib_personality(version, actions, exception_class, ue_header,
                                    context);
     } else if (actions & _UA_CLEANUP_PHASE) {
-        cilkrts_alert(EXCEPT, "cilk_personality called %p  CFA %p\n",
+        cilkrts_alert(EXCEPT, "cilk_personality called %p  CFA %p",
                       (void *)sf, (void *)get_cfa(context));
 
         if (sf->flags & CILK_FRAME_UNSYNCHED) {
