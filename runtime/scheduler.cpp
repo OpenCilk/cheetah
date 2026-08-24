@@ -201,12 +201,19 @@ static void setup_for_sync(__cilkrts_worker *w, worker_id self, Closure *t) {
 
     SP(t->frame) = (void *)t->orig_rsp;
     if (USE_EXTENSION) {
+        void *ext_frame = t->frame->extension;
         // Set the worker's extension (analogous to updating the worker's stack
         // pointer).
-        w->extension = t->frame->extension;
-        // Set the worker's extension stack pointer to the current extension
-        // frame, at the bottom of that stack.
-        w->ext_stack = t->frame->extension;
+        w->extension = ext_frame;
+        // Set the worker's extension stack pointer to the bottom of its view of
+        // the extension cactus stack.  If the current extension frame is on the
+        // worker's extension fiber, then it's at the bottom of that fiber, and
+        // the extension stack pointer should point to it.  Otherwise, there are
+        // no frames on that extension fiber, and the extension stack pointer
+        // should point to the start of that fiber.
+        w->ext_stack = t->ext_fiber->in_fiber(ext_frame)
+                           ? ext_frame
+                           : t->ext_fiber->get_stack_start();
     }
     t->orig_rsp = nullptr; // unset once we have sync-ed
 }
