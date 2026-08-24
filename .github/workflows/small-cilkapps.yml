@@ -70,3 +70,18 @@ jobs:
           CXX=$opencilkdir/bin/clang++ \
           EXTRA_CFLAGS="--opencilk-resource-dir=$cheetahdir" \
           EXTRA_LDFLAGS="--opencilk-resource-dir=$cheetahdir"
+    - name: make check pedigrees
+      shell: bash
+      run: |
+        cheetahdir="$(pwd)"/build
+        opencilkdir='${{ steps.build-opencilk.outputs.opencilk-builddir }}'
+        make_prefix=""
+        if [ "${{ runner.os }}" == "macOS" ]; then
+          # Use xcrun to build benchmarks on macOS.
+          make_prefix="xcrun"
+        fi
+        $make_prefix make -C smallapps check \
+          CC=$opencilkdir/bin/clang \
+          CXX=$opencilkdir/bin/clang++ \
+          EXTRA_CFLAGS="--opencilk-resource-dir=$cheetahdir -fopencilk-enable-pedigrees" \
+          EXTRA_LDFLAGS="--opencilk-resource-dir=$cheetahdir -fopencilk-enable-pedigrees"
